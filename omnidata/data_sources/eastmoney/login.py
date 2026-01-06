@@ -8,7 +8,7 @@ from omnidata.core import BaseQRLogin, QRLoginState, QRCode
 logger = logging.getLogger(__name__)
 
 
-class BilibiliQRLogin(BaseQRLogin):
+class EastmoneyQRLogin(BaseQRLogin):
     """Bilibili 二维码登录"""
 
     name = "bilibili"
@@ -49,10 +49,10 @@ class BilibiliQRLogin(BaseQRLogin):
         base_url = "https://www.bilibili.com/"
 
         try:
-            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
+            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             # 点击登录按钮
             await self._qr_page.locator(".header-login-entry").get_by_text("登录").click()
 
@@ -73,10 +73,10 @@ class BilibiliQRLogin(BaseQRLogin):
         self._qr_page = await self._qr_context.new_page()
         base_url = "https://www.bilibili.com/"
         try:
-            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
+            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             # 点击登录按钮
             await self._qr_page.locator(".header-login-entry").get_by_text("登录").click()
             # 点击微信登录按钮
@@ -171,10 +171,10 @@ class BilibiliQRLogin(BaseQRLogin):
         context = await self.get_context_simple("bilibili")
         page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
             await self.filter_file_load(page, "media")
             await page.goto("https://www.bilibili.com/")
             await page.wait_for_load_state("domcontentloaded", timeout=2000)
+            await self.apply_anti_detection_scripts(page, "advanced")
             # 检查是否登录
             flag_text = await page.locator(".right-entry li").first.inner_text()
             if "登录" in flag_text:
