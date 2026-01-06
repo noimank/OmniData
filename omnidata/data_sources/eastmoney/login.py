@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 class EastmoneyQRLogin(BaseQRLogin):
-    """Bilibili 二维码登录"""
+    """Eastmoney 二维码登录"""
 
-    name = "bilibili"
-    description = "Bilibili 二维码登录"
+    name = "eastmoney"
+    description = "东方财富 二维码登录"
     version = "1.0.0"
     author = "noimank"
-    platform = "哔哩哔哩"
+    platform = "东方财富"
 
     async def refresh_login_state(self) -> None:
         """
@@ -30,10 +30,10 @@ class EastmoneyQRLogin(BaseQRLogin):
             if login_state.status == "success":
                 await self.filter_file_load(page)
                 await self.apply_anti_detection_scripts(page, "advanced")
-                await page.goto("https://www.bilibili.com/")
+                await page.goto("https://passport2.eastmoney.com/pub/basicinfo")
                 await page.wait_for_load_state("domcontentloaded", timeout=2000)
                 # 保存登录状态实现刷新
-                await self.save_context_state(context, "bilibili")
+                await self.save_context_state(context, "eastmoney")
         except Exception as e:
             logger.error(f"Failed to refresh login state: {e}")
         finally:
@@ -41,51 +41,51 @@ class EastmoneyQRLogin(BaseQRLogin):
             await context.close()
 
     async def get_qrcode_types(self) -> list:
-        return ["微信", "哔哩哔哩官方"]
+        return ["微信", "东方财富官方"]
 
-    async def get_bilibili_qr_code(self) -> QRCode:
+    async def get_eastmoney_qr_code(self) -> QRCode:
         self._qr_context = await self.get_context_simple()
         self._qr_page = await self._qr_context.new_page()
-        base_url = "https://www.bilibili.com/"
+        base_url = "https://passport2.eastmoney.com/pub/login"
 
         try:
             await self.filter_file_load(self._qr_page, "media")
+            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
-            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
-            # 点击登录按钮
-            await self._qr_page.locator(".header-login-entry").get_by_text("登录").click()
+            # 点击同意
+            await self._qr_page.locator("#frame_login").content_frame.locator("#mobile_login_content img").first.click()
 
-            qr_img = self._qr_page.locator(".login-scan-box img")
-            # 等待出现二维码
-            await qr_img.wait_for(timeout=2000)
-            qr_code_src = await qr_img.first.get_attribute('src')
+            #  获取二维码图片URL
+            qr_code_src = await self._qr_page.locator("#frame_login").content_frame.locator("#qrcode").get_attribute(
+                "src")
+            if qr_code_src.startswith("//"):
+                qr_code_src = "https:" + qr_code_src
 
-            return QRCode(url=qr_code_src, qr_type="哔哩哔哩官方", success=True, message="获取哔哩哔哩官方二维码成功")
+            return QRCode(url=qr_code_src, qr_type="东方财富官方", success=True, message="东方财富官方二维码成功")
         except Exception as e:
             logger.error(f"Failed to get Bilibili qrcode: {e}")
             # 出错就关闭，防止资源泄露
             await self.close()
-            return QRCode(url="", qr_type="哔哩哔哩官方", success=False, message=f"获取哔哩哔哩官方二维码失败: {e}")
+            return QRCode(url="", qr_type="东方财富官方", success=False, message=f"东方财富官方二维码失败: {e}")
 
     async def get_weixin_qr_code(self) -> QRCode:
         self._qr_context = await self.get_context_simple()
         self._qr_page = await self._qr_context.new_page()
-        base_url = "https://www.bilibili.com/"
+        base_url = "https://passport2.eastmoney.com/pub/login"
         try:
+            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
             await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
-            await self.apply_anti_detection_scripts(self._qr_page, "advanced")
-            # 点击登录按钮
-            await self._qr_page.locator(".header-login-entry").get_by_text("登录").click()
+            # 点击同意
+            await self._qr_page.locator("#frame_login").content_frame.locator("#mobile_login_content img").first.click()
             # 点击微信登录按钮
-            weixin_btn = self._qr_page.locator(".login-sns-content").get_by_text("微信登录")
+            weixin_btn = self._qr_page.locator("#frame_login").content_frame.locator("#btn_wx")
             # 等待出现微信登录按钮
             await weixin_btn.wait_for(timeout=2000)
             await weixin_btn.click()
             # 等待页面加载完成
-
             weixin_qr_img = self._qr_page.locator(".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp")
             # 等待出现二维码
             await weixin_qr_img.wait_for(timeout=2000)
@@ -119,8 +119,8 @@ class EastmoneyQRLogin(BaseQRLogin):
             if qr_type == "微信":
                 qr_code = await self.get_weixin_qr_code()
                 return qr_code
-            elif qr_type == "哔哩哔哩官方":
-                qr_code = await self.get_bilibili_qr_code()
+            elif qr_type == "东方财富官方":
+                qr_code = await self.get_eastmoney_qr_code()
                 return qr_code
 
             else:
@@ -144,20 +144,19 @@ class EastmoneyQRLogin(BaseQRLogin):
             return QRLoginState(status="failed", message="QR code page not initialized, please call get_qrcode first")
 
         try:
-
-            flag_text = await self._qr_page.locator(".right-entry li").first.inner_text()
-            if "登录" in flag_text:
+            current_url = self._qr_page.url
+            #登录完成后会跳转到：https://passport2.eastmoney.com/pub/BasicInfo
+            if "BasicInfo" not in current_url:
                 return QRLoginState(status="waiting", message="正在登录中..........")
             # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
-
             # 保存登录状态
-            await self.save_context_state(self._qr_context, "bilibili")
+            await self.save_context_state(self._qr_context, "eastmoney")
             await self.close()
             return QRLoginState(status="success", message="登录成功,且保存登录状态")
 
         except Exception as e:
-            logger.error(f"Failed to verify Bilibili login state: {e}")
-            return QRLoginState(status="waiting", message=f"等待验证登录状态中: {e}")
+            logger.error(f"Failed to verify eastmoney login state: {e}")
+            return QRLoginState(status="waiting", message="等待验证登录状态中.......")
 
     async def is_login(self) -> QRLoginState:
         """
@@ -168,16 +167,17 @@ class EastmoneyQRLogin(BaseQRLogin):
         Returns:
             是否已登录
         """
-        context = await self.get_context_simple("bilibili")
+        context = await self.get_context_simple("eastmoney")
         page = await context.new_page()
         try:
-            await self.filter_file_load(page, "media")
-            await page.goto("https://www.bilibili.com/")
-            await page.wait_for_load_state("domcontentloaded", timeout=2000)
             await self.apply_anti_detection_scripts(page, "advanced")
+            await self.filter_file_load(page, "media")
+            await page.goto("https://passport2.eastmoney.com/pub/BasicInfo")
+            await page.wait_for_load_state("domcontentloaded", timeout=1200)
             # 检查是否登录
-            flag_text = await page.locator(".right-entry li").first.inner_text()
-            if "登录" in flag_text:
+
+            flag_text = await page.locator("#pass_tab").inner_text()
+            if "基本资料" not in flag_text:
                 return QRLoginState(status="not_logged_in", message="未登录")
 
             return QRLoginState(status="success", message="已登录")

@@ -44,3 +44,14 @@ class TestLogin:
 
 
         print(res)
+    async def test_eastmoney(self, browser_pool):
+        login_name = "eastmoney"
+        register = login_register()
+        instance = register.get_login_instance(login_name)
+        # res = await instance.get_qrcode("东方财富官方")
+        # res = await instance.get_qrcode("微信")
+        res = await instance.is_login()
+
+        print(res)
+
+
