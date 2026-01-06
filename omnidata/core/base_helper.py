@@ -74,6 +74,31 @@ class BaseHelper(ABC):
                 except Exception as e:
                     logger.warning(f"Failed to apply anti-detection script {script.name}: {e}")
 
+    async def filter_file_load(self, page: Page, file_types: list[str] | None | str = None) -> None:
+        """
+        过滤特定文件类型的加载，提高爬取性能
+
+        Args:
+            page: Playwright Page 实例
+            file_types: 要过滤的文件类型列表
+                可选值: document, stylesheet, image, media, font, websocket, manifest
+                如果为 None，默认过滤 ['image', 'stylesheet', 'font', 'media']
+        """
+        if file_types is None:
+            file_types = ["image", "stylesheet", "font", "media"]
+
+        if isinstance(file_types, str):
+            file_types = [file_types]
+
+        async def route_handler(route):
+            if route.request.resource_type in file_types:
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await page.route("**/*", route_handler)
+        logger.debug(f"File types filtered: {file_types}")
+
     async def save_context_state(self, context: BrowserContext, namespace: str) -> None:
         """
         保存 context 状态到 Redis
