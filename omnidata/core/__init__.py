@@ -17,5 +17,8 @@ __all__ = [
     "get_spider_register",
     "BaseQRLogin",
     "get_login_register",
-    "login_register"
+    "login_register",
+    "QRLoginState",
+    "QRCode"
+
 ]
