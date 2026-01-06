@@ -3,6 +3,7 @@
     <el-card class="login-card">
       <template #header>
         <div class="card-header">
+          <img src="/logo.svg" alt="OmniData" class="logo-img" />
           <h2>OmniData 管理平台</h2>
         </div>
       </template>
@@ -124,6 +125,15 @@ const handleEnter = () => {
 
     .card-header {
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+
+      .logo-img {
+        width: 64px;
+        height: 64px;
+      }
 
       h2 {
         margin: 0;

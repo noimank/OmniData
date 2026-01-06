@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- 背景圆形渐变 -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#409EFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#67C23A;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="dataGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#e0f0ff;stop-opacity:0.7" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 主圆形背景 -->
+  <circle cx="100" cy="100" r="95" fill="url(#bgGradient)" />
+
+  <!-- 数据流线条 - 象征全方位数据采集 -->
+  <g filter="url(#glow)">
+    <!-- 中心向外扩散的线条 -->
+    <path d="M100 100 L100 35" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L156 130" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L156 70" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L44 130" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L44 70" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L100 165" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L175 100" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M100 100 L25 100" stroke="url(#dataGradient)" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  </g>
+
+  <!-- 中心数据节点 -->
+  <circle cx="100" cy="100" r="18" fill="#ffffff" opacity="0.95">
+    <animate attributeName="r" values="18;20;18" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- 外围数据点 - 象征多样化数据源 -->
+  <g fill="#ffffff" opacity="0.9">
+    <circle cx="100" cy="35" r="6"/>
+    <circle cx="156" cy="130" r="6"/>
+    <circle cx="156" cy="70" r="6"/>
+    <circle cx="44" cy="130" r="6"/>
+    <circle cx="44" cy="70" r="6"/>
+    <circle cx="100" cy="165" r="6"/>
+    <circle cx="175" cy="100" r="6"/>
+    <circle cx="25" cy="100" r="6"/>
+  </g>
+
+  <!-- 数据字节符号 - 象征结构化数据 -->
+  <g fill="#409EFF" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle">
+    <text x="100" y="102" fill="#409EFF">OD</text>
+  </g>
+</svg>

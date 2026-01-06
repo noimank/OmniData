@@ -1,6 +1,7 @@
 <template>
   <el-aside width="200px" class="app-aside">
     <div class="logo">
+      <img src="/logo-icon.svg" alt="OmniData" class="logo-icon" />
       <h2>OmniData</h2>
     </div>
     <el-menu
@@ -47,12 +48,20 @@ const activeMenu = computed(() => route.path)
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 10px;
     background-color: #2b3a4a;
+    padding: 0 10px;
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+    }
 
     h2 {
       color: #fff;
-      font-size: 20px;
+      font-size: 18px;
       margin: 0;
+      font-weight: 600;
     }
   }
 

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="iconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#409EFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#67C23A;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 圆形背景 -->
+  <circle cx="24" cy="24" r="22" fill="url(#iconBg)"/>
+
+  <!-- 中心点 -->
+  <circle cx="24" cy="24" r="5" fill="#ffffff" opacity="0.95"/>
+
+  <!-- 8方向数据点和连线 -->
+  <g>
+    <!-- 右 -->
+    <circle cx="42" cy="24" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="42" y2="24" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 右上 -->
+    <circle cx="36" cy="12" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="36" y2="12" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 上 -->
+    <circle cx="24" cy="6" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="24" y2="6" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 左上 -->
+    <circle cx="12" cy="12" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="12" y2="12" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 左 -->
+    <circle cx="6" cy="24" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="6" y2="24" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 左下 -->
+    <circle cx="12" cy="36" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="12" y2="36" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 下 -->
+    <circle cx="24" cy="42" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="24" y2="42" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 右下 -->
+    <circle cx="36" cy="36" r="2" fill="#ffffff" opacity="0.9"/>
+    <line x1="24" y1="24" x2="36" y2="36" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  </g>
+</svg>
