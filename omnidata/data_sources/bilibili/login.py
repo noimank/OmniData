@@ -1,11 +1,9 @@
 """
 Bilibili 二维码登录模块
 """
-import asyncio
 import logging
-from typing import Any
-import time
-from omnidata.core import BaseQRLogin, QRLoginState ,QRCode
+
+from omnidata.core import BaseQRLogin, QRLoginState, QRCode
 
 logger = logging.getLogger(__name__)
 
@@ -25,32 +23,37 @@ class BilibiliQRLogin(BaseQRLogin):
 
         该方法会定期被调用以刷新登录状态。
         """
-        login_state = await self.is_login()
-        if login_state.status == "success":
-            context = await self.get_context_simple()
-            page = await context.new_page()
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await page.goto("https://www.bilibili.com/")
-            await page.wait_for_load_state("domcontentloaded", timeout=2000)
-            # 保存登录状态实现刷新
-            await self.save_context_state( context,"bilibili")
-
+        context = await self.get_context_simple()
+        page = await context.new_page()
+        try:
+            login_state = await self.is_login()
+            if login_state.status == "success":
+                await self.filter_file_load(page)
+                await self.apply_anti_detection_scripts(page, "advanced")
+                await page.goto("https://www.bilibili.com/")
+                await page.wait_for_load_state("domcontentloaded", timeout=2000)
+                # 保存登录状态实现刷新
+                await self.save_context_state(context, "bilibili")
+        except Exception as e:
+            logger.error(f"Failed to refresh login state: {e}")
+        finally:
+            await page.close()
+            await context.close()
 
     async def get_qrcode_types(self) -> list:
         return ["微信", "哔哩哔哩官方"]
 
-
-
-    async def get_bilibili_qr_code(self)-> QRCode:
+    async def get_bilibili_qr_code(self) -> QRCode:
         self._qr_context = await self.get_context_simple()
         self._qr_page = await self._qr_context.new_page()
         base_url = "https://www.bilibili.com/"
 
         try:
+            await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
             await self.apply_anti_detection_scripts(self._qr_page, "advanced")
-            #点击登录按钮
+            # 点击登录按钮
             await self._qr_page.locator(".header-login-entry").get_by_text("登录").click()
 
             qr_img = self._qr_page.locator(".login-scan-box img")
@@ -65,11 +68,12 @@ class BilibiliQRLogin(BaseQRLogin):
             await self.close()
             return QRCode(url="", qr_type="哔哩哔哩官方", success=False, message=f"获取哔哩哔哩官方二维码失败: {e}")
 
-    async def get_weixin_qr_code(self)-> QRCode:
+    async def get_weixin_qr_code(self) -> QRCode:
         self._qr_context = await self.get_context_simple()
         self._qr_page = await self._qr_context.new_page()
         base_url = "https://www.bilibili.com/"
         try:
+            await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
             await self.apply_anti_detection_scripts(self._qr_page, "advanced")
@@ -80,7 +84,7 @@ class BilibiliQRLogin(BaseQRLogin):
             # 等待出现微信登录按钮
             await weixin_btn.wait_for(timeout=2000)
             await weixin_btn.click()
-            #等待页面加载完成
+            # 等待页面加载完成
 
             weixin_qr_img = self._qr_page.locator(".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp")
             # 等待出现二维码
@@ -117,7 +121,7 @@ class BilibiliQRLogin(BaseQRLogin):
                 return qr_code
             elif qr_type == "哔哩哔哩官方":
                 qr_code = await self.get_bilibili_qr_code()
-                return  qr_code
+                return qr_code
 
             else:
                 return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{self.get_qrcode_types()}")
@@ -141,12 +145,12 @@ class BilibiliQRLogin(BaseQRLogin):
 
         try:
 
-            flag_text  = await self._qr_page.locator(".right-entry li").first.inner_text()
+            flag_text = await self._qr_page.locator(".right-entry li").first.inner_text()
             if "登录" in flag_text:
                 return QRLoginState(status="waiting", message="正在登录中..........")
             # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
 
-            #保存登录状态
+            # 保存登录状态
             await self.save_context_state(self._qr_context, "bilibili")
             await self.close()
             return QRLoginState(status="success", message="登录成功,且保存登录状态")
@@ -167,6 +171,7 @@ class BilibiliQRLogin(BaseQRLogin):
         context = await self.get_context_simple("bilibili")
         page = await context.new_page()
         try:
+            await self.filter_file_load(page, "media")
             await page.goto("https://www.bilibili.com/")
             await page.wait_for_load_state("domcontentloaded", timeout=2000)
             await self.apply_anti_detection_scripts(page, "advanced")
@@ -182,6 +187,5 @@ class BilibiliQRLogin(BaseQRLogin):
             return QRLoginState(status="not_logged_in", message=f"未登录: {e}")
 
         finally:
-            await context.close()
             await page.close()
-
+            await context.close()
