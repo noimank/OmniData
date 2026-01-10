@@ -186,15 +186,16 @@ class MCPManager:
                         timeout=3.0
                     )
                     logger.debug(f"Cleaned up lifespan for service '{service_name}'")
+                except asyncio.CancelledError:
+                    # 在关闭过程中 CancelledError 是预期的，静默处理
+                    logger.debug(
+                        f"Lifespan cleanup cancelled for '{service_name}' "
+                        "during shutdown"
+                    )
                 except asyncio.TimeoutError:
                     logger.warning(
                         f"Lifespan cleanup timeout for '{service_name}', "
                         "accepting minor leak"
-                    )
-                except asyncio.CancelledError:
-                    logger.debug(
-                        f"Lifespan cleanup cancelled for '{service_name}' "
-                        "during shutdown"
                     )
                 except RuntimeError as e:
                     # 检查是否为 ContextVar 跨上下文错误
@@ -206,9 +207,8 @@ class MCPManager:
                             f"Accepting minor leak until process exit."
                         )
                     else:
-                        # 重新抛出其他 RuntimeError
-                        logger.error(f"RuntimeError during lifespan cleanup for {service_name}: {e}")
-                        raise
+                        # 只记录警告，不重新抛出 RuntimeError（避免中断关闭流程）
+                        logger.warning(f"RuntimeError during lifespan cleanup for {service_name}: {e}")
                 except Exception as e:
                     logger.error(f"Error cleaning up lifespan for {service_name}: {e}")
 
@@ -252,17 +252,20 @@ class MCPManager:
                     self.unmount_service(service_name),
                     timeout=timeout
                 )
-            except asyncio.TimeoutError:
-                logger.warning(
-                    f"Timeout cleaning up service '{service_name}' after {timeout}s"
-                )
             except asyncio.CancelledError:
                 # 捕获取消错误，记录但不中断清理流程
                 logger.debug(
                     f"Cleanup for service '{service_name}' cancelled during shutdown"
                 )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Timeout cleaning up service '{service_name}' after {timeout}s"
+                )
             except Exception as e:
                 logger.error(f"Error cleaning up service '{service_name}': {e}")
+
+        # 额外保护：确保服务字典被清空
+        self._services.clear()
 
     def is_service_mounted(self, service_name: str) -> bool:
         """检查服务是否已挂载"""

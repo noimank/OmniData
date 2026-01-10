@@ -5,6 +5,7 @@
 import asyncio
 import logging
 from abc import abstractmethod
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from playwright.async_api import Page
@@ -76,6 +77,10 @@ class BaseQRLogin(BaseHelper):
     _qr_context: Any = None
     _qr_page: Page | None = None
     _refresh_task: asyncio.Task | None = None
+    _running: bool = False
+    _last_refresh_time: datetime | None = None
+    _refresh_interval: timedelta = timedelta(hours=1)
+    _stop_event: asyncio.Event | None = None
 
     def __init__(self, browser_pool: BrowserPool | None = None, config: Any | None = None):
         super().__init__(browser_pool, config)
@@ -83,17 +88,32 @@ class BaseQRLogin(BaseHelper):
 
     def _start_refresh_task(self) -> None:
         """启动后台刷新任务"""
+        if self._running:
+            return
+
+        self._running = True
+        self._stop_event = asyncio.Event()
+        self._last_refresh_time = datetime.now()
 
         async def refresh_loop():
             """每小时刷新一次登录状态"""
-            while True:
-                try:
-                    await asyncio.sleep(3600)  # 1 小时
-                    await self.refresh_login_state()
-                except asyncio.CancelledError:
+            while self._running:
+                await asyncio.sleep(1)
+
+                # 收到停止信号，退出循环
+                if self._stop_event.is_set():
                     break
-                except Exception as e:
-                    logger.error(f"Error in refresh task: {e}")
+
+                if self._running:
+                    now = datetime.now()
+                    elapsed = now - self._last_refresh_time
+
+                    if elapsed >= self._refresh_interval:
+                        try:
+                            await self.refresh_login_state()
+                            self._last_refresh_time = now
+                        except Exception as e:
+                            logger.error(f"Error in refresh task: {e}")
 
         self._refresh_task = asyncio.create_task(refresh_loop())
 
@@ -171,6 +191,33 @@ class BaseQRLogin(BaseHelper):
 
         self._qr_context = None
         self._qr_page = None
+
+    async def destroy(self) -> None:
+        """销毁实例，停止后台刷新任务并清理资源"""
+        # 1. 停止后台刷新任务
+        self._running = False
+        if self._stop_event:
+            self._stop_event.set()
+
+        # 2. 等待任务完成
+        if self._refresh_task and not self._refresh_task.done():
+            try:
+                await asyncio.wait_for(self._refresh_task, timeout=5.0)
+            except (TimeoutError, asyncio.CancelledError):
+                # 如果任务没有正常退出，取消它
+                if not self._refresh_task.done():
+                    self._refresh_task.cancel()
+                    try:
+                        await self._refresh_task
+                    except asyncio.CancelledError:
+                        pass
+
+        # 3. 清理浏览器资源
+        await self.close()
+
+        # 4. 清理引用
+        self._refresh_task = None
+        self._stop_event = None
 
     @classmethod
     def get_info(cls) -> dict[str, Any]:

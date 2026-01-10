@@ -109,7 +109,13 @@ class BrowserPool:
 
         # 关闭 playwright
         if self._playwright:
-            await self._playwright.stop()
+            try:
+                await self._playwright.stop()
+            except asyncio.CancelledError:
+                # 在关闭过程中 CancelledError 是预期的，静默处理
+                logger.debug("Playwright stop cancelled during shutdown")
+            except Exception as e:
+                logger.warning(f"Error stopping playwright: {e}")
 
         self._is_initialized = False
         logger.info("Browser pool shut down")
@@ -160,6 +166,9 @@ class BrowserPool:
         try:
             await browser_wrapper.browser.close()
             logger.debug(f"Browser closed: index={browser_wrapper.index}")
+        except asyncio.CancelledError:
+            # 在关闭过程中 CancelledError 是预期的，静默处理
+            logger.debug(f"Browser close cancelled: index={browser_wrapper.index}")
         except Exception as e:
             logger.error(f"Error closing browser: {e}")
 

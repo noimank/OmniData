@@ -2,6 +2,7 @@
 数据库会话管理
 """
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -73,3 +74,25 @@ async def get_db_session():
         except Exception:
             await session.rollback()
             raise
+
+
+async def close_db() -> None:
+    """关闭数据库引擎，释放所有连接"""
+    import asyncio
+
+    global _engine, async_session_maker
+
+    if _engine is not None:
+        logger = logging.getLogger(__name__)
+        try:
+            await asyncio.wait_for(_engine.dispose(), timeout=3.0)
+            logger.info("Database engine closed")
+        except asyncio.TimeoutError:
+            logger.warning("Database close timeout, proceeding with cleanup")
+        except asyncio.CancelledError:
+            logger.debug("Database close cancelled during shutdown")
+        except Exception as e:
+            logger.error(f"Error closing database engine: {e}")
+        finally:
+            _engine = None
+            async_session_maker = None

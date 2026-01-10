@@ -42,12 +42,22 @@ class LoginRegister:
         logger.info(f"LoginRegister initialized with {len(self._logins)} login classes")
 
     async def shutdown(self) -> None:
-        for instance in self._instances.values():
-            await instance.close()
+        """关闭所有登录实例，取消后台登录保持任务"""
+        logger.info(f"Shutting down LoginRegister with {len(self._instances)} instances")
+
+        # 使用 destroy 方法销毁所有登录实例（串行执行，避免异常传播）
+        for name, instance in list(self._instances.items()):
+            try:
+                await instance.destroy()
+                logger.debug(f"Destroyed login instance: {name}")
+            except Exception as e:
+                logger.error(f"Error destroying login instance {name}: {e}")
 
         self._logins.clear()
         self._instances.clear()
         self._is_initialized = False
+
+        logger.info("LoginRegister shutdown complete")
 
     async def _discover_logins(self) -> None:
         if not self._data_sources_dir.exists():

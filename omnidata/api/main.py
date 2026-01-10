@@ -116,22 +116,22 @@ async def lifespan(app: FastAPI):
         logger.info("OmniData application started successfully")
 
         yield
+        # 应用关闭时清理
+        logger.info("Shutting down OmniData application...")
 
     except Exception as e:
         logger.error(f"Error during application startup: {e}")
         raise
 
     finally:
-        # 关闭时清理
+        # 关闭时清理（各关闭函数内部有超时保护）
         logger.info("Shutting down OmniData application...")
 
-        # 清理所有 MCP 服务（捕获所有错误，包括 CancelledError）
+        # 阶段 1: 清理所有 MCP 服务
         try:
             mcp_manager = await get_mcp_manager()
             await mcp_manager.cleanup_all_services()
             logger.info("All MCP services cleaned up")
-        except asyncio.CancelledError:
-            logger.warning("MCP service cleanup cancelled during shutdown")
         except Exception as e:
             logger.error(f"Error cleaning up MCP services: {e}")
 
@@ -139,10 +139,35 @@ async def lifespan(app: FastAPI):
         from omnidata.core.login_register import close_login_register
         from omnidata.core.spider_register import close_spider_register
 
-        await close_login_register()
-        await close_spider_register()
-        await close_browser_pool()
-        await close_redis()
+        # 阶段 2: 关闭数据库（在其他组件清理前关闭，避免连接泄漏）
+        from omnidata.database import close_db
+        try:
+            await close_db()
+        except Exception as e:
+            logger.error(f"Error closing database: {e}")
+
+        # 阶段 3: 关闭登录器和爬虫注册器（串行执行，避免 CancelledError 传播）
+        try:
+            await close_login_register()
+        except Exception as e:
+            logger.error(f"Error closing login register: {e}")
+
+        try:
+            await close_spider_register()
+        except Exception as e:
+            logger.error(f"Error closing spider register: {e}")
+
+        # 阶段 4: 关闭浏览器池
+        try:
+            await close_browser_pool()
+        except Exception as e:
+            logger.error(f"Error closing browser pool: {e}")
+
+        # 阶段 5: 关闭 Redis
+        try:
+            await close_redis()
+        except Exception as e:
+            logger.error(f"Error closing Redis: {e}")
 
         logger.info("OmniData application shut down")
 
