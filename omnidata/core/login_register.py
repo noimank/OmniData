@@ -210,27 +210,7 @@ class LoginRegister:
 
         return info
 
-    async def clear_login_state(self, login_name: str) -> bool:
-        """
-        清除 Redis 中的登录状态
-
-        Args:
-            login_name: 登录器名称
-
-        Returns:
-            是否成功清除
-        """
-        try:
-            from omnidata.utils import get_redis
-
-            redis = await get_redis()
-            key = f"omnidata:context_state:{login_name}"
-            await redis.delete(key)
-            logger.info(f"Cleared login state for: {login_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Error clearing login state for {login_name}: {e}")
-            return False
+ 
 
     @property
     def login_count(self) -> int:
