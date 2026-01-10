@@ -128,7 +128,7 @@ class EastmoneyQRLogin(BaseQRLogin):
 
         except Exception as e:
             logger.error(f"Failed to get eastmoney qrcode: {e}")
-            raise
+            return QRCode(success=False, message=f"获取二维码失败: {e}")
 
     async def verify_login_state(self) -> QRLoginState:
         """
@@ -185,7 +185,7 @@ class EastmoneyQRLogin(BaseQRLogin):
 
         except Exception as e:
             # logger.info(f"Failed to check eastmoney login status: {e}")
-            return QRLoginState(status="not_logged_in", message=f"未登录: {e}")
+            return QRLoginState(status="not_logged_in", message=f"未登录东方财富")
 
         finally:
             await page.close()
