@@ -42,16 +42,24 @@ class LoginRegister:
         logger.info(f"LoginRegister initialized with {len(self._logins)} login classes")
 
     async def shutdown(self) -> None:
-        """关闭所有登录实例，取消后台登录保持任务"""
+        """关闭所有登录实例，取消后台登录保持任务（并发优化版本）"""
         logger.info(f"Shutting down LoginRegister with {len(self._instances)} instances")
 
-        # 使用 destroy 方法销毁所有登录实例（串行执行，避免异常传播）
-        for name, instance in list(self._instances.items()):
+        async def destroy_single(name: str, instance: BaseQRLogin) -> None:
+            """销毁单个登录实例"""
             try:
                 await instance.destroy()
                 logger.debug(f"Destroyed login instance: {name}")
             except Exception as e:
                 logger.error(f"Error destroying login instance {name}: {e}")
+
+        # 并发销毁所有登录实例
+        if self._instances:
+            tasks = [
+                destroy_single(name, instance)
+                for name, instance in list(self._instances.items())
+            ]
+            await asyncio.gather(*tasks)
 
         self._logins.clear()
         self._instances.clear()
