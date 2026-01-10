@@ -1,7 +1,7 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 
-const baseURL = 'http://localhost:8380/api'
+const baseURL = '/api'
 
 // 创建 axios 实例
 const instance = axios.create({
