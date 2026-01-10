@@ -156,7 +156,7 @@ class BilibiliQRLogin(BaseQRLogin):
             return QRLoginState(status="success", message="登录成功,且保存登录状态")
 
         except Exception as e:
-            logger.error(f"Failed to verify Bilibili login state: {e}")
+            # logger.error(f"Failed to verify Bilibili login state: {e}")
             return QRLoginState(status="waiting", message=f"等待验证登录状态中: {e}")
 
     async def is_login(self) -> QRLoginState:
@@ -176,6 +176,7 @@ class BilibiliQRLogin(BaseQRLogin):
             await page.goto("https://www.bilibili.com/")
             await page.wait_for_load_state("domcontentloaded", timeout=2000)
             # 检查是否登录
+            await page.locator(".right-entry li").wait_for(timeout=250)
             flag_text = await page.locator(".right-entry li").first.inner_text()
             if "登录" in flag_text:
                 return QRLoginState(status="not_logged_in", message="未登录")
@@ -183,7 +184,7 @@ class BilibiliQRLogin(BaseQRLogin):
             return QRLoginState(status="success", message="已登录")
 
         except Exception as e:
-            logger.error(f"Failed to check Bilibili login status: {e}")
+            # logger.error(f"Failed to check Bilibili login status: {e}")
             return QRLoginState(status="not_logged_in", message=f"未登录: {e}")
 
         finally:

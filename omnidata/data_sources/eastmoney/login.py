@@ -127,7 +127,7 @@ class EastmoneyQRLogin(BaseQRLogin):
                 return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{self.get_qrcode_types()}")
 
         except Exception as e:
-            logger.error(f"Failed to get Bilibili qrcode: {e}")
+            logger.error(f"Failed to get eastmoney qrcode: {e}")
             raise
 
     async def verify_login_state(self) -> QRLoginState:
@@ -155,7 +155,7 @@ class EastmoneyQRLogin(BaseQRLogin):
             return QRLoginState(status="success", message="登录成功,且保存登录状态")
 
         except Exception as e:
-            logger.error(f"Failed to verify eastmoney login state: {e}")
+            # logger.error(f"Failed to verify eastmoney login state: {e}")
             return QRLoginState(status="waiting", message="等待验证登录状态中.......")
 
     async def is_login(self) -> QRLoginState:
@@ -175,6 +175,7 @@ class EastmoneyQRLogin(BaseQRLogin):
             await page.goto("https://passport2.eastmoney.com/pub/BasicInfo")
             await page.wait_for_load_state("domcontentloaded", timeout=1200)
             # 检查是否登录
+            await page.locator("#pass_tab").wait_for(timeout=250)
 
             flag_text = await page.locator("#pass_tab").inner_text()
             if "基本资料" not in flag_text:
@@ -183,7 +184,7 @@ class EastmoneyQRLogin(BaseQRLogin):
             return QRLoginState(status="success", message="已登录")
 
         except Exception as e:
-            logger.error(f"Failed to check Bilibili login status: {e}")
+            # logger.info(f"Failed to check eastmoney login status: {e}")
             return QRLoginState(status="not_logged_in", message=f"未登录: {e}")
 
         finally:
