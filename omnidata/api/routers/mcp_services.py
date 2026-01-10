@@ -2,6 +2,7 @@
 MCP 服务管理路由
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -55,6 +56,7 @@ class MCPServiceUpdate(BaseModel):
     display_name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None)
     transport: str | None = Field(None, pattern="^(http|streamable-http|sse)$")
+    tools: list[MCPToolCreate] | None = Field(None, description="工具列表（完整替换）")
 
 
 class MCPServiceResponse(BaseModel):
@@ -289,29 +291,97 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
         if request.transport is not None:
             service.transport = request.transport
 
+        # 处理工具列表更新（如果提供）
+        if request.tools is not None:
+            # 验证所有 Spider 存在
+            spider_reg = await get_spider_register()
+            requested_spider_names = {t.spider_name for t in request.tools}
+
+            for spider_name in requested_spider_names:
+                spider = spider_reg.get_spider_instance(spider_name)
+                if spider is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Spider '{spider_name}' not found",
+                    )
+
+            # 当前工具列表
+            current_spider_names = {t.spider_name for t in service.tools}
+
+            # 计算需要添加和删除的 spiders
+            spiders_to_add = requested_spider_names - current_spider_names
+            spiders_to_remove = current_spider_names - requested_spider_names
+
+            # 删除不再需要的工具
+            if spiders_to_remove:
+                await session.execute(
+                    delete(MCPTool).where(
+                        MCPTool.service_id == service_id,
+                        MCPTool.spider_name.in_(spiders_to_remove)
+                    )
+                )
+
+            # 添加新工具
+            for spider_name in spiders_to_add:
+                spider = spider_reg.get_spider_instance(spider_name)
+                tool_name = spider.name  # 使用 Spider 名称作为工具名称
+
+                # 确保有默认提示词
+                await _ensure_default_spider_prompt(session, spider_name, spider)
+
+                # 创建工具（使用默认提示词版本）
+                tool = MCPTool(
+                    service_id=service_id,
+                    spider_name=spider_name,
+                    tool_name=tool_name,
+                    enabled=True,
+                    selected_prompt_version=None,
+                )
+                session.add(tool)
+
+            # 刷新服务以获取更新后的工具列表
+            await session.flush()
+            await session.refresh(service, ["tools"])
+
         await session.commit()
         await session.refresh(service)
 
         # 重新挂载服务
         mcp_manager = await get_mcp_manager()
-        await mcp_manager.unmount_service(service.name)
 
-        spider_names = [t.spider_name for t in service.tools if t.enabled]
-        tool_configs = {}
-        for t in service.tools:
-            if t.enabled:
-                prompt = await _get_active_tool_prompt(session, t)
-                desc = prompt.description if prompt else ""
-                tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
+        try:
+            await mcp_manager.unmount_service(service.name)
 
-        await mcp_manager.mount_service(
-            service_name=service.name,
-            display_name=service.display_name,
-            description=service.description or "",
-            transport=service.transport,
-            spider_names=spider_names,
-            tool_configs=tool_configs,
-        )
+            spider_names = [t.spider_name for t in service.tools if t.enabled]
+            tool_configs = {}
+            for t in service.tools:
+                if t.enabled:
+                    prompt = await _get_active_tool_prompt(session, t)
+                    desc = prompt.description if prompt else ""
+                    tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
+
+            await mcp_manager.mount_service(
+                service_name=service.name,
+                display_name=service.display_name,
+                description=service.description or "",
+                transport=service.transport,
+                spider_names=spider_names,
+                tool_configs=tool_configs,
+            )
+        except Exception as e:
+            # 挂载失败，自动停用服务并返回错误
+            logging.error(f"Failed to remount service {service.name}: {e}, deactivating...")
+            async with get_db_session() as rollback_session:
+                await rollback_session.execute(
+                    update(MCPService)
+                    .where(MCPService.id == service_id)
+                    .values(is_active=False)
+                )
+                await rollback_session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to mount service: {str(e)}. Service has been deactivated.",
+            )
 
         return MCPServiceResponse(
             id=service.id,
@@ -430,6 +500,9 @@ async def deactivate_service(service_id: int):
         mcp_manager = await get_mcp_manager()
         try:
             await mcp_manager.unmount_service(service.name)
+        except asyncio.CancelledError:
+            # CancelledError 在停用服务时是预期的，因为 lifespan 清理会中断正在进行的请求
+            logger.debug(f"Service '{service.name}' deactivation caused request cancellation (expected)")
         except Exception as e:
             logger.warning(f"Error unmounting service '{service.name}' during deactivation: {e}")
 

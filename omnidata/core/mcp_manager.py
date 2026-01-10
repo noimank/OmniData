@@ -32,6 +32,7 @@ class MCPServiceInfo:
         transport: str,
         lifespan_context: Any | None = None,
         creation_task: asyncio.Task | None = None,
+        cleanup_task: asyncio.Task | None = None,
     ):
         self.name = name
         self.mcp_server = mcp_server
@@ -39,6 +40,7 @@ class MCPServiceInfo:
         self.transport = transport
         self.lifespan_context = lifespan_context
         self.creation_task = creation_task
+        self.cleanup_task = cleanup_task
 
 
 class MCPManager:
@@ -68,6 +70,9 @@ class MCPManager:
         self._mount_lock = asyncio.Lock()
         # 存储 app 引用，用于 lifespan
         self._fastapi_app = app
+        # 存储待清理的服务（lifespan exit 必须在相同上下文中执行）
+        # HTTP 请求上下文无法执行 lifespan exit，需要延迟到 shutdown 时执行
+        self._pending_cleanup: list[MCPServiceInfo] = []
 
     async def mount_service(
         self,
@@ -165,64 +170,50 @@ class MCPManager:
                 transport=transport,
                 lifespan_context=lifespan_context,
                 creation_task=creation_task,
+                cleanup_task=None,
             )
             logger.info(f"MCP service '{service_name}' mounted at {mount_path} (transport={transport})")
 
-    async def _unmount_service_internal(self, service_name: str) -> None:
+    async def _unmount_service_internal(self, service_name: str, in_shutdown_context: bool = False) -> None:
         """
         内部方法：卸载 MCP 服务（假设已持有锁）
 
         清理 lifespan 上下文并从 FastAPI 中移除路由
+
+        Args:
+            service_name: 服务名称
+            in_shutdown_context: 是否在 shutdown 上下文中调用（True 可以执行 lifespan exit）
         """
         if service_name in self._services:
             service_info = self._services[service_name]
 
-            # 清理 lifespan 上下文（对于 http 和 streamable-http）
+            # 处理 lifespan 上下文清理（对于 http 和 streamable-http）
             if service_info.lifespan_context is not None:
-                try:
-                    # 使用 wait_for 添加超时保护
-                    await asyncio.wait_for(
-                        service_info.lifespan_context.__aexit__(None, None, None),
-                        timeout=3.0
-                    )
-                    logger.debug(f"Cleaned up lifespan for service '{service_name}'")
-                except asyncio.CancelledError:
-                    # 在关闭过程中 CancelledError 是预期的，静默处理
-                    logger.debug(
-                        f"Lifespan cleanup cancelled for '{service_name}' "
-                        "during shutdown"
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        f"Lifespan cleanup timeout for '{service_name}', "
-                        "accepting minor leak"
-                    )
-                except RuntimeError as e:
-                    # 检查是否为 ContextVar 跨上下文错误
-                    # 使用大小写不敏感匹配和灵活的关键字检测
-                    error_msg = str(e).lower()
-                    if "context" in error_msg and ("was created" in error_msg or "different" in error_msg):
-                        logger.warning(
-                            f"ContextVar cleanup error for {service_name}: {e}. "
-                            f"Accepting minor leak until process exit."
-                        )
-                    else:
-                        # 只记录警告，不重新抛出 RuntimeError（避免中断关闭流程）
-                        logger.warning(f"RuntimeError during lifespan cleanup for {service_name}: {e}")
-                except Exception as e:
-                    # 记录错误但不中断关闭流程
-                    logger.debug(f"Error cleaning up lifespan for {service_name}: {e}")
+                if in_shutdown_context:
+                    # 在 shutdown 上下文中，可以直接执行 lifespan exit
+                    try:
+                        await service_info.lifespan_context.__aexit__(None, None, None)
+                        logger.debug(f"Lifespan cleanup completed for '{service_name}'")
+                    except Exception as e:
+                        logger.warning(f"Lifespan cleanup error for '{service_name}': {e}")
+                else:
+                    # 在 HTTP 请求上下文中，将服务添加到待清理列表
+                    # lifespan exit 必须在相同上下文（shutdown）中执行
+                    self._pending_cleanup.append(service_info)
+                    logger.debug(f"Service '{service_name}' marked for pending lifespan cleanup")
 
-            # 从 FastAPI 中移除路由
+            # 从 FastAPI 中移除路由（所有 transport 都需要）
             mount_path = f"/mcp/{service_name}"
             self._app.router.routes = [
                 r for r in self._app.router.routes
                 if not getattr(r, "path", "").startswith(mount_path)
             ]
 
-            # 删除缓存
-            del self._services[service_name]
+            # 删除缓存（使用 pop 避免 KeyError，使方法幂等）
+            self._services.pop(service_name, None)
             logger.info(f"MCP service '{service_name}' unmounted")
+        else:
+            logger.debug(f"MCP service '{service_name}' not mounted, skipping unmount")
 
     async def unmount_service(self, service_name: str) -> None:
         """
@@ -238,35 +229,50 @@ class MCPManager:
         """
         清理所有挂载的服务
 
-        在应用关闭时调用
+        在应用关闭时调用，会等待所有清理任务完成。
+        首先清理待清理列表中的服务（之前通过 HTTP 请求卸载的），
+        然后卸载当前挂载的服务。
 
         Args:
             timeout: 每个服务清理的超时时间（秒）
         """
-        # 复制列表以避免在迭代时修改
+        # 阶段 1: 清理待清理列表中的服务（lifespan exit 必须在 shutdown 上下文中执行）
+        for service_info in self._pending_cleanup:
+            if service_info.lifespan_context is not None:
+                try:
+                    await asyncio.wait_for(
+                        service_info.lifespan_context.__aexit__(None, None, None),
+                        timeout=timeout
+                    )
+                    logger.debug(f"Pending lifespan cleanup completed for '{service_info.name}'")
+                except asyncio.CancelledError:
+                    logger.debug(f"Pending cleanup for '{service_info.name}' cancelled during shutdown")
+                except asyncio.TimeoutError:
+                    logger.warning(f"Pending cleanup timeout for '{service_info.name}' after {timeout}s")
+                except Exception as e:
+                    logger.warning(f"Pending cleanup error for '{service_info.name}': {e}")
+        self._pending_cleanup.clear()
+
+        # 阶段 2: 卸载当前挂载的服务
         service_names = list(self._services.keys())
 
-        for service_name in service_names:
-            try:
-                # 使用 asyncio.wait_for 为每个服务清理添加超时
-                await asyncio.wait_for(
-                    self.unmount_service(service_name),
-                    timeout=timeout
-                )
-            except asyncio.CancelledError:
-                # 捕获取消错误，记录但不中断清理流程
-                logger.debug(
-                    f"Cleanup for service '{service_name}' cancelled during shutdown"
-                )
-            except asyncio.TimeoutError:
-                logger.warning(
-                    f"Timeout cleaning up service '{service_name}' after {timeout}s"
-                )
-            except Exception as e:
-                logger.error(f"Error cleaning up service '{service_name}': {e}")
+        async with self._mount_lock:
+            for service_name in service_names:
+                try:
+                    # 直接调用内部方法，传递 in_shutdown_context=True 以执行 lifespan exit
+                    await asyncio.wait_for(
+                        self._unmount_service_internal(service_name, in_shutdown_context=True),
+                        timeout=timeout
+                    )
+                except asyncio.CancelledError:
+                    logger.debug(f"Cleanup for service '{service_name}' cancelled during shutdown")
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout cleaning up service '{service_name}' after {timeout}s")
+                except Exception as e:
+                    logger.error(f"Error cleaning up service '{service_name}': {e}")
 
-        # 额外保护：确保服务字典被清空
-        self._services.clear()
+            # 额外保护：确保服务字典被清空
+            self._services.clear()
 
     def is_service_mounted(self, service_name: str) -> bool:
         """检查服务是否已挂载"""
@@ -293,19 +299,28 @@ class MCPManager:
 
         async def wrapper(**kwargs: Any) -> dict[str, Any]:
             """执行 Spider 并返回结果"""
-            # 验证参数
-            if params_model:
-                params = params_model(**kwargs)
-            else:
-                params = kwargs
+            try:
+                # 验证参数
+                if params_model:
+                    params = params_model(**kwargs)
+                else:
+                    params = kwargs
 
-            # 执行爬取
-            result = await spider.crawl(params)
+                # 执行爬取
+                result = await spider.crawl(params)
 
-            # 转换结果为 JSON 可序列化格式
-            if isinstance(result, list):
-                return {"results": result}
-            return result
+                # 转换结果为 JSON 可序列化格式
+                if isinstance(result, list):
+                    return {"results": result}
+                return result
+            except asyncio.CancelledError:
+                # 请求被取消（例如服务停用时的 lifespan 清理）
+                logger.debug(f"Spider '{spider.name}' execution cancelled")
+                raise
+            except Exception as e:
+                # 捕获所有其他异常，包括 Playwright 相关的错误
+                logger.error(f"Error executing spider '{spider.name}': {e}")
+                raise
 
         # 构建参数签名
         parameters: list[Parameter] = []

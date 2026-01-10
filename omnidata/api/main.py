@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
         # 恢复已激活的 MCP 服务
         from omnidata.database import get_db_session
         from omnidata.database.models import MCPService, SpiderPrompt
-        from sqlalchemy import select
+        from sqlalchemy import select, update
         from sqlalchemy.orm import selectinload
 
         async with get_db_session() as session:
@@ -111,7 +111,14 @@ async def lifespan(app: FastAPI):
                         )
                         logger.info(f"Restored MCP service: {service.name}")
                     except Exception as e:
-                        logger.error(f"Failed to restore MCP service {service.name}: {e}")
+                        logger.error(f"Failed to restore MCP service {service.name}: {e}, deactivating...")
+                        # 自动停用服务以避免数据库与内存状态不一致
+                        await session.execute(
+                            update(MCPService)
+                            .where(MCPService.id == service.id)
+                            .values(is_active=False)
+                        )
+                        await session.commit()
 
         logger.info("OmniData application started successfully")
 

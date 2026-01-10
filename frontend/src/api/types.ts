@@ -218,6 +218,7 @@ export interface McpServiceUpdate {
   display_name?: string
   description?: string
   transport?: McpTransport
+  tools?: McpToolCreate[]
 }
 
 export interface McpService {
