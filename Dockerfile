@@ -44,7 +44,6 @@ RUN uv run playwright install-deps chromium
 
 # 复制项目代码
 COPY omnidata/ ./omnidata/
-COPY main.py ./
 
 # 从前端构建阶段复制构建产物到 Nginx 目录
 COPY --from=frontend-builder /frontend/dist /var/www/html/
