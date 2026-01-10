@@ -55,7 +55,7 @@ class LoginConfig:
 class DatabaseConfig:
     """数据库配置"""
 
-    db_path: str = "omnidata.db"  # SQLite 数据库文件路径
+    db_path: str = "data/omnidata.db"  # SQLite 数据库文件路径
 
 
 class Settings(BaseSettings):
