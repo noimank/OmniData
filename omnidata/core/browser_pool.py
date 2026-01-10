@@ -56,6 +56,11 @@ class BrowserPool:
             config: 浏览器配置
         """
         self._config = config or settings.browser
+        self.launch_options = {
+            "headless": self._config.headless,
+            "args": self._config.args,
+            "ignore_default_args": self._config.ignore_default_args,
+        }
         self._playwright = None
         self._browsers: list[BrowserWrapper] = []
         self._browser_cycle: cycle | None = None
@@ -141,15 +146,9 @@ class BrowserPool:
 
     async def _create_browser(self, index: int) -> None:
         """创建浏览器实例"""
-        launch_options = {
-            "headless": self._config.headless,
-            "args": self._config.args,
-            "ignore_default_args": self._config.ignore_default_args,
-        }
-
         try:
             browser = await asyncio.wait_for(
-                self._playwright.chromium.launch(**launch_options),
+                self._playwright.chromium.launch(**self.launch_options),
                 timeout=self._config.launch_timeout,
             )
         except TimeoutError:
@@ -181,15 +180,9 @@ class BrowserPool:
         index = browser_wrapper.index
         await self._close_browser(browser_wrapper)
 
-        launch_options = {
-            "headless": self._config.headless,
-            "args": self._config.args,
-            "ignore_default_args": self._config.ignore_default_args,
-        }
-
         try:
             browser = await asyncio.wait_for(
-                self._playwright.chromium.launch(**launch_options),
+                self._playwright.chromium.launch(**self.launch_options),
                 timeout=self._config.launch_timeout,
             )
         except TimeoutError:
