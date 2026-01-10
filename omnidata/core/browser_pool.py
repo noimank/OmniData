@@ -170,7 +170,11 @@ class BrowserPool:
             # 在关闭过程中 CancelledError 是预期的，静默处理
             logger.debug(f"Browser close cancelled: index={browser_wrapper.index}")
         except Exception as e:
-            logger.error(f"Error closing browser: {e}")
+            # 程序退出时的连接中断是预期的，记录为 DEBUG 级别
+            if "Connection closed" in str(e) or "Browser has been closed" in str(e):
+                logger.debug(f"Browser close: {e}")
+            else:
+                logger.error(f"Error closing browser: {e}")
 
     async def _restart_browser(self, browser_wrapper: BrowserWrapper) -> BrowserWrapper:
         """重启浏览器实例"""
