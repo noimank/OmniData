@@ -12,20 +12,6 @@ const instance = axios.create({
   }
 })
 
-// 请求拦截器
-instance.interceptors.request.use(
-  (config) => {
-    const apiKey = localStorage.getItem('x-api-key')
-    if (apiKey) {
-      config.headers.set('X-API-Key', apiKey)
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
-
 // 响应拦截器
 instance.interceptors.response.use(
   (response) => {
@@ -34,20 +20,6 @@ instance.interceptors.response.use(
   (error: AxiosError<any>) => {
     const message = error.response?.data?.detail || error.message || '请求失败'
     ElMessage.error(message)
-
-    if (error.response?.status === 401) {
-      // 清除认证信息
-      localStorage.removeItem('x-api-key')
-
-      // 避免重复跳转
-      if (window.location.pathname !== '/login' && !window.location.pathname.startsWith('/login')) {
-        // 延迟跳转，让错误消息先显示
-        setTimeout(() => {
-          window.location.href = '/login'
-        }, 100)
-      }
-    }
-
     return Promise.reject(error)
   }
 )

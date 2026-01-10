@@ -44,13 +44,6 @@ class RedisConfig:
 
 
 @dataclass
-class AuthConfig:
-    """认证配置"""
-
-    api_key: str | None = None  # API KEY，可选配置
-
-
-@dataclass
 class LoginConfig:
     """登录器配置"""
 
@@ -76,7 +69,6 @@ class Settings(BaseSettings):
     # 模块配置
     browser: BrowserConfig = field(default_factory=BrowserConfig)
     redis: RedisConfig = field(default_factory=RedisConfig)
-    auth: AuthConfig = field(default_factory=AuthConfig)
     login: LoginConfig = field(default_factory=LoginConfig)
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
 

@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from omnidata.core.mcp_manager import get_mcp_manager
 
-from omnidata.api.middleware import ApiKeyMiddleware
-from omnidata.api.routers import auth, health, logins, mcp_services, monitor, spiders
+from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
 from omnidata.core import get_browser_pool, get_login_register, get_spider_register
 from omnidata.database import init_db
@@ -47,7 +47,6 @@ async def lifespan(app: FastAPI):
         logger.info(f"Login register initialized with {login_reg.login_count} logins")
 
         # 恢复已激活的 MCP 服务
-        from omnidata.core.mcp_manager import get_mcp_manager
         from omnidata.database import get_db_session
         from omnidata.database.models import MCPService, SpiderPrompt
         from sqlalchemy import select
@@ -163,18 +162,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-API-Key"],
+    expose_headers=[],
 )
-
-# 添加 API KEY 验证中间件
-app.add_middleware(ApiKeyMiddleware)
 
 # 注册路由
 app.include_router(health.router)
 app.include_router(spiders.router)
 app.include_router(monitor.router)
 app.include_router(logins.router)
-app.include_router(auth.router)
 app.include_router(mcp_services.router)
 app.include_router(spider_prompt_router)
 

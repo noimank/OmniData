@@ -1,21 +1,5 @@
 // API 类型定义
 
-// ============== 认证相关 ==============
-export interface VerifyApiKeyRequest {
-  api_key: string
-}
-
-export interface VerifyApiKeyResponse {
-  valid: boolean
-  message: string
-  required: boolean
-}
-
-export interface AuthConfig {
-  required: boolean
-  configured: boolean
-}
-
 // ============== 监控相关 ==============
 export interface BrowserInfo {
   index: number

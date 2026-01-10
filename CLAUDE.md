@@ -107,10 +107,7 @@ omnidata/
 │   │   ├── logins.py        # Login endpoints
 │   │   ├── mcp_services.py  # MCP service management endpoints
 │   │   ├── monitor.py       # Browser pool monitoring
-│   │   ├── auth.py          # Authentication endpoints
 │   │   └── health.py        # Health check
-│   └── middleware/          # Custom middleware
-│       └── auth.py          # API key authentication
 └── frontend/                # Vue 3 frontend
     └── src/
         ├── views/           # Page components
@@ -342,9 +339,6 @@ OMNIDATA_REDIS__DB=0
 OMNIDATA_REDIS__PASSWORD=
 OMNIDATA_REDIS__CONTEXT_STATE_TTL=604800  # 7 days
 
-# Auth
-OMNIDATA_AUTH__API_KEY=your_api_key_here
-
 # Login
 OMNIDATA_LOGIN__CHECK_CONCURRENCY=5
 OMNIDATA_LOGIN__CHECK_TIMEOUT=30
@@ -405,9 +399,6 @@ OMNIDATA_DB__PATH=omnidata.db
 
 ### Monitor
 - `GET /monitor/browser-pool` - Get browser pool statistics
-
-### Auth
-- `POST /auth/set-api-key` - Set API key for authentication
 
 ## Tech Stack
 
