@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.playwright/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+openspec/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+CLAUDE.md
+openspec/AGENTS.md
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.local
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite3
+data/
+
+# Tests
+tests/
+
+# CI/CD
+.github/
