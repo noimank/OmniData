@@ -238,7 +238,7 @@ import {
   Select
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { LoginInfo } from '@/api/types'
+import type { LoginInfo, LoginStatus } from '@/api/types'
 
 const loginStore = useLoginStore()
 
@@ -254,7 +254,7 @@ const loading = computed(() => loginStore.loading)
 const qrcodeLoading = ref(false)
 
 const selectedQrType = ref('')
-const statusCache = ref<Record<string, any>>({})
+const statusCache = ref<Record<string, LoginStatus>>({})
 const countdown = ref(0)
 const qrcodeExpired = ref(false)
 let countdownTimer: number | null = null
@@ -431,7 +431,7 @@ const handleClearSession = async () => {
     if (success) {
       ElMessage.success('登录状态已清除')
       // 直接设置为未登录状态
-      const notLoggedInStatus = { status: 'not_logged_in', message: '未登录' }
+      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
       statusCache.value[currentLogin.value.name] = notLoggedInStatus
       loginStore.loginStatus = notLoggedInStatus
       loginStore.qrcode = null

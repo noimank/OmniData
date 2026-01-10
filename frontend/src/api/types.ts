@@ -148,3 +148,121 @@ export interface ValidateParamsResponse {
   errors: string[]
   warnings: string[]
 }
+
+// ============== MCP 服务相关 ==============
+export type McpTransport = 'http' | 'streamable-http' | 'sse'
+
+// Spider 提示词相关类型
+export interface SpiderPrompt {
+  id: number
+  spider_name: string
+  version_name: string
+  description: string
+  is_default: boolean
+  usage_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SpiderPromptCreate {
+  spider_name: string
+  version_name: string
+  description: string
+  is_default?: boolean
+}
+
+export interface SpiderPromptUpdate {
+  version_name?: string
+  description?: string
+}
+
+export interface PromptUsageInfo {
+  prompt_id: number
+  spider_name: string
+  version_name: string
+  usage_count: number
+  tools: Array<{
+    tool_id: number
+    tool_name: string
+    service_id: number
+    service_name: string
+    service_display_name: string
+  }>
+}
+
+// 工具提示词版本相关类型
+export interface ToolPromptVersionResponse {
+  tool_id: number
+  spider_name: string
+  current_version: string | null
+  current_description: string | null
+  available_versions: Array<{
+    version_name: string
+    description: string
+    is_default: boolean
+  }>
+}
+
+export interface ToolPromptVersionUpdate {
+  version_name: string
+}
+
+// Spider 信息相关类型
+export interface SpiderInfoForMcp {
+  name: string
+  description: string
+  platform: string
+  version: string
+  has_params_model: boolean
+  parameter_info: SpiderParameterInfo[]
+}
+
+export interface McpToolCreate {
+  spider_name: string
+  tool_name?: string
+}
+
+export interface McpServiceCreate {
+  name: string
+  display_name: string
+  description: string
+  transport: McpTransport
+  tools: McpToolCreate[]
+}
+
+export interface McpServiceUpdate {
+  display_name?: string
+  description?: string
+  transport?: McpTransport
+}
+
+export interface McpService {
+  id: number
+  name: string
+  display_name: string
+  description: string
+  transport: McpTransport
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  tool_count: number
+}
+
+export interface McpTool {
+  id: number
+  service_id: number
+  spider_name: string
+  tool_name: string
+  enabled: boolean
+  selected_prompt_version?: string | null
+  current_prompt_description?: string | null
+}
+
+export interface SpiderParameterInfo {
+  name: string
+  type: string
+  required: boolean
+  description: string
+  default?: any
+  enum?: any[]
+}

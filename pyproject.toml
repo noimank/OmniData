@@ -19,6 +19,8 @@ dependencies = [
     "playwright-stealth>=2.0.0",
     "psutil>=6.0.0",
     "fake-useragent>=2.2.0",
+    "sqlalchemy>=2.0.45",
+    "aiosqlite>=0.20.0",
 ]
 
 [build-system]

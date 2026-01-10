@@ -31,6 +31,12 @@ const routes: RouteRecordRaw[] = [
         name: 'SpiderTest',
         component: () => import('@/views/SpiderTest.vue'),
         meta: { title: '爬虫测试', icon: 'Setting' }
+      },
+      {
+        path: 'mcp-manage',
+        name: 'McpManage',
+        component: () => import('@/views/McpManage.vue'),
+        meta: { title: 'MCP 管理', icon: 'Connection' }
       }
     ]
   }

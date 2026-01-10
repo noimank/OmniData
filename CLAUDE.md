@@ -1,3 +1,22 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -67,6 +86,9 @@ omnidata/
 │   ├── spider_register.py   # Auto-discovery and registration for spiders
 │   ├── login_register.py    # Auto-discovery and registration for logins
 │   ├── config.py            # Configuration management
+│   ├── mcp/                 # MCP (Model Context Protocol) module
+│   │   ├── schema.py        # Schema generation for MCP tools
+│   │   └── manager.py       # MCP server manager
 │   └── exceptions.py        # Custom exceptions
 ├── data_sources/            # Spider and login implementations (auto-discovered)
 │   ├── example/             # Example spiders
@@ -75,11 +97,15 @@ omnidata/
 ├── utils/                   # Utilities
 │   ├── redis_client.py      # Redis client wrapper
 │   └── anti_detection_scripts.py  # Playwright anti-detection scripts
+├── database/                # Database layer (SQLAlchemy)
+│   ├── models.py            # SQLAlchemy ORM models
+│   └── session.py           # Async session management
 ├── api/                     # FastAPI application
 │   ├── main.py              # FastAPI app with lifespan management
 │   ├── routers/             # API route handlers
 │   │   ├── spiders.py       # Spider endpoints
 │   │   ├── logins.py        # Login endpoints
+│   │   ├── mcp_services.py  # MCP service management endpoints
 │   │   ├── monitor.py       # Browser pool monitoring
 │   │   ├── auth.py          # Authentication endpoints
 │   │   └── health.py        # Health check
@@ -88,9 +114,13 @@ omnidata/
 └── frontend/                # Vue 3 frontend
     └── src/
         ├── views/           # Page components
+        │   └── McpManage.vue # MCP service management UI
         ├── components/      # Reusable components
+        │   └── mcp/          # MCP-specific components
         ├── stores/          # Pinia state management
+        │   └── mcp.ts        # MCP store
         ├── api/             # API client and types
+        │   └── mcp.ts        # MCP API client
         └── router/          # Vue Router configuration
 ```
 
@@ -133,6 +163,85 @@ omnidata/
 **6. Lifecycle Management**
 - FastAPI `lifespan` context manager handles all initialization/shutdown
 - Proper cleanup order: logins → spiders → browser pool → Redis
+- Database initialization on startup (SQLite via SQLAlchemy)
+
+**7. MCP (Model Context Protocol) Integration**
+- Dynamic MCP server creation from spider selection
+- Spiders exposed as MCP tools with Google-style function calling format
+- Multiple transport protocols: http, streamable-http, sse
+- MCP services mount at `/mcp/{service_name}`
+- Tool descriptions customizable via web UI
+
+## MCP Service Management
+
+OmniData supports exposing spiders as MCP (Model Context Protocol) tools for integration with AI assistants like Claude Desktop, Cursor, and other MCP clients.
+
+### Creating an MCP Service
+
+Use the web UI at `/mcp-manage` or the API:
+
+```bash
+# Create a new MCP service
+curl -X POST http://localhost:8380/api/v1/mcp-services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-scrapers",
+    "display_name": "My Web Scrapers",
+    "description": "Collection of web scraping tools",
+    "transport": "http",
+    "tools": [
+      {"spider_name": "bilibili_video_info"},
+      {"spider_name": "eastmoney_stock_query"}
+    ]
+  }'
+```
+
+The service will be available at `/mcp/my-scrapers` with MCP protocol.
+
+### Transport Protocols
+
+- **http**: Standard HTTP requests/responses
+- **streamable-http**: Streaming responses for long-running operations
+- **sse**: Server-Sent Events for real-time updates
+
+### MCP Endpoints
+
+**Service Management:**
+- `GET /api/v1/mcp-services` - List all services
+- `POST /api/v1/mcp-services` - Create new service
+- `GET /api/v1/mcp-services/{id}` - Get service details
+- `PUT /api/v1/mcp-services/{id}` - Update service
+- `DELETE /api/v1/mcp-services/{id}` - Delete service
+- `PATCH /api/v1/mcp-services/{id}/activate` - Activate service
+- `PATCH /api/v1/mcp-services/{id}/deactivate` - Deactivate service
+
+**Tool Management:**
+- `GET /api/v1/mcp-services/{id}/tools` - List service tools
+- `POST /api/v1/mcp-services/{id}/tools` - Add tool to service
+- `DELETE /api/v1/mcp-services/{id}/tools/{tool_id}` - Remove tool
+
+**Prompt Management:**
+- `GET /api/v1/mcp-services/{id}/prompts` - Get all tool prompts
+- `GET /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Get tool prompt
+- `PUT /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Update tool description
+- `DELETE /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Reset to default
+
+### Using MCP with Claude Desktop
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "omnidata": {
+      "url": "http://localhost:8380/mcp/my-scrapers",
+      "transport": "http"
+    }
+  }
+}
+```
+
+The spiders will be available as tools in Claude Desktop.
 
 ## Spider Creation Template
 
@@ -239,6 +348,9 @@ OMNIDATA_AUTH__API_KEY=your_api_key_here
 # Login
 OMNIDATA_LOGIN__CHECK_CONCURRENCY=5
 OMNIDATA_LOGIN__CHECK_TIMEOUT=30
+
+# Database (SQLite for MCP service configuration)
+OMNIDATA_DB__PATH=omnidata.db
 ```
 
 ## Code Style
@@ -274,6 +386,23 @@ OMNIDATA_LOGIN__CHECK_TIMEOUT=30
 - `GET /logins/{login_name}/status` - Check current login status
 - `DELETE /logins/{login_name}/state` - Clear saved login state
 
+### MCP Services
+- `GET /api/v1/mcp-services` - List all MCP services
+- `POST /api/v1/mcp-services` - Create new MCP service
+- `GET /api/v1/mcp-services/{id}` - Get service details
+- `PUT /api/v1/mcp-services/{id}` - Update service
+- `DELETE /api/v1/mcp-services/{id}` - Delete service
+- `PATCH /api/v1/mcp-services/{id}/activate` - Activate service
+- `PATCH /api/v1/mcp-services/{id}/deactivate` - Deactivate service
+- `GET /api/v1/mcp-services/{id}/tools` - List service tools
+- `POST /api/v1/mcp-services/{id}/tools` - Add tool to service
+- `DELETE /api/v1/mcp-services/{id}/tools/{tool_id}` - Remove tool
+- `GET /api/v1/mcp-services/{id}/prompts` - Get all tool prompts
+- `GET /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Get tool prompt
+- `PUT /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Update tool description
+- `DELETE /api/v1/mcp-services/{id}/tools/{tool_id}/prompt` - Reset to default
+- `GET /api/v1/mcp-services/spiders/available` - List available spiders for MCP
+
 ### Monitor
 - `GET /monitor/browser-pool` - Get browser pool statistics
 
@@ -289,6 +418,9 @@ OMNIDATA_LOGIN__CHECK_TIMEOUT=30
 - Redis 5.0.0+
 - Pydantic 2.0+
 - Pydantic-Settings 2.0+
+- SQLAlchemy 2.0+ (for MCP service persistence)
+- aiosqlite 0.20+ (async SQLite driver)
+- FastMCP 2.14+ (MCP server implementation)
 
 **Frontend:**
 - Vue 3.5
