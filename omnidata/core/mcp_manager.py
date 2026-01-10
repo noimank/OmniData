@@ -210,7 +210,8 @@ class MCPManager:
                         # 只记录警告，不重新抛出 RuntimeError（避免中断关闭流程）
                         logger.warning(f"RuntimeError during lifespan cleanup for {service_name}: {e}")
                 except Exception as e:
-                    logger.error(f"Error cleaning up lifespan for {service_name}: {e}")
+                    # 记录错误但不中断关闭流程
+                    logger.debug(f"Error cleaning up lifespan for {service_name}: {e}")
 
             # 从 FastAPI 中移除路由
             mount_path = f"/mcp/{service_name}"
