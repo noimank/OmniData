@@ -93,16 +93,16 @@ async def list_spider_prompts(
             usage_count = usage_count_result.scalar() or 0
 
             responses.append(
-                SpiderPromptResponse(
-                    id=prompt.id,
-                    spider_name=prompt.spider_name,
-                    version_name=prompt.version_name,
-                    description=prompt.description,
-                    is_default=prompt.is_default,
-                    usage_count=usage_count,
-                    created_at=prompt.created_at,
-                    updated_at=prompt.updated_at,
-                )
+                {
+                    "id": prompt.id,
+                    "spider_name": prompt.spider_name,
+                    "version_name": prompt.version_name,
+                    "description": prompt.description,
+                    "is_default": prompt.is_default,
+                    "usage_count": usage_count,
+                    "created_at": prompt.created_at,
+                    "updated_at": prompt.updated_at,
+                }
             )
 
         return success_response(data=responses)
@@ -118,7 +118,6 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         if not spider:
             return error_response(
                 message=f"Spider '{request.spider_name}' not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 检查同名版本是否已存在
@@ -131,7 +130,6 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         if existing.scalar_one_or_none():
             return error_response(
                 message=f"Prompt version '{request.version_name}' already exists for spider '{request.spider_name}'",
-                status_code=status.HTTP_409_CONFLICT,
             )
 
         # 如果设置为默认版本，需要先取消该 Spider 的其他默认版本
@@ -155,16 +153,16 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         await session.commit()
         await session.refresh(prompt)
 
-        response_data = SpiderPromptResponse(
-            id=prompt.id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            description=prompt.description,
-            is_default=prompt.is_default,
-            usage_count=0,
-            created_at=prompt.created_at,
-            updated_at=prompt.updated_at,
-        )
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": 0,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
         return success_response(
             data=response_data,
             message="Spider prompt created successfully",
@@ -181,7 +179,6 @@ async def get_spider_prompt(prompt_id: int):
         if not prompt:
             return error_response(
                 message="Spider prompt not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 获取使用次数
@@ -201,16 +198,16 @@ async def get_spider_prompt(prompt_id: int):
             )
         usage_count = usage_count_result.scalar() or 0
 
-        response_data = SpiderPromptResponse(
-            id=prompt.id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            description=prompt.description,
-            is_default=prompt.is_default,
-            usage_count=usage_count,
-            created_at=prompt.created_at,
-            updated_at=prompt.updated_at,
-        )
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": usage_count,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
         return success_response(data=response_data)
 
 
@@ -224,7 +221,6 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
         if not prompt:
             return error_response(
                 message="Spider prompt not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 如果修改版本名称，检查是否冲突
@@ -239,7 +235,6 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
             if existing.scalar_one_or_none():
                 return error_response(
                     message=f"Prompt version '{request.version_name}' already exists for spider '{prompt.spider_name}'",
-                    status_code=status.HTTP_409_CONFLICT,
                 )
 
         # 更新字段
@@ -294,14 +289,12 @@ async def delete_spider_prompt(prompt_id: int):
         if not prompt:
             return error_response(
                 message="Spider prompt not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 默认版本不可删除
         if prompt.is_default:
             return error_response(
                 message="Cannot delete default prompt version",
-                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         # 检查是否被工具使用
@@ -315,7 +308,6 @@ async def delete_spider_prompt(prompt_id: int):
         if usage_count > 0:
             return error_response(
                 message=f"Prompt version is used by {usage_count} tool(s). Remove associations first.",
-                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         await session.execute(delete(SpiderPrompt).where(SpiderPrompt.id == prompt_id))
@@ -336,7 +328,6 @@ async def get_prompt_usage(prompt_id: int):
         if not prompt:
             return error_response(
                 message="Spider prompt not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 查找使用此提示词版本的工具
@@ -371,13 +362,13 @@ async def get_prompt_usage(prompt_id: int):
                 "service_display_name": service.display_name,
             })
 
-        response_data = PromptUsageInfo(
-            prompt_id=prompt_id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            usage_count=len(tools),
-            tools=tools,
-        )
+        response_data = {
+            "prompt_id": prompt_id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "usage_count": len(tools),
+            "tools": tools,
+        }
         return success_response(data=response_data)
 
 
@@ -394,7 +385,6 @@ async def list_spider_prompts_by_name(spider_name: str):
         if not spider:
             return error_response(
                 message=f"Spider '{spider_name}' not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         result = await session.execute(
@@ -423,16 +413,16 @@ async def list_spider_prompts_by_name(spider_name: str):
             usage_count = usage_count_result.scalar() or 0
 
             responses.append(
-                SpiderPromptResponse(
-                    id=prompt.id,
-                    spider_name=prompt.spider_name,
-                    version_name=prompt.version_name,
-                    description=prompt.description,
-                    is_default=prompt.is_default,
-                    usage_count=usage_count,
-                    created_at=prompt.created_at,
-                    updated_at=prompt.updated_at,
-                )
+                {
+                    "id": prompt.id,
+                    "spider_name": prompt.spider_name,
+                    "version_name": prompt.version_name,
+                    "description": prompt.description,
+                    "is_default": prompt.is_default,
+                    "usage_count": usage_count,
+                    "created_at": prompt.created_at,
+                    "updated_at": prompt.updated_at,
+                }
             )
 
         return success_response(data=responses)
@@ -448,7 +438,6 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         if not spider:
             return error_response(
                 message=f"Spider '{spider_name}' not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # 检查同名版本是否已存在
@@ -485,16 +474,16 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         await session.commit()
         await session.refresh(prompt)
 
-        response_data = SpiderPromptResponse(
-            id=prompt.id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            description=prompt.description,
-            is_default=prompt.is_default,
-            usage_count=0,
-            created_at=prompt.created_at,
-            updated_at=prompt.updated_at,
-        )
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": 0,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
         return success_response(
             data=response_data,
             message="Spider prompt created successfully",
@@ -511,7 +500,6 @@ async def get_spider_default_prompt(spider_name: str):
         if not spider:
             return error_response(
                 message=f"Spider '{spider_name}' not found",
-                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         result = await session.execute(
@@ -543,16 +531,16 @@ async def get_spider_default_prompt(spider_name: str):
         )
         usage_count = usage_count_result.scalar() or 0
 
-        response_data = SpiderPromptResponse(
-            id=prompt.id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            description=prompt.description,
-            is_default=prompt.is_default,
-            usage_count=usage_count,
-            created_at=prompt.created_at,
-            updated_at=prompt.updated_at,
-        )
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": usage_count,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
         return success_response(data=response_data)
 
 
@@ -576,14 +564,14 @@ async def list_available_spiders():
             parameter_info = extract_parameter_info(spider.params_model)
 
         responses.append(
-            SpiderInfoResponse(
-                name=info["name"],
-                description=info.get("description", ""),
-                platform=info.get("platform", ""),
-                version=info.get("version", ""),
-                has_params_model=has_params_model,
-                parameter_info=parameter_info,
-            )
+            {
+                "name": info["name"],
+                "description": info.get("description", ""),
+                "platform": info.get("platform", ""),
+                "version": info.get("version", ""),
+                "has_params_model": has_params_model,
+                "parameter_info": parameter_info,
+            }
         )
 
     return success_response(data=responses)
