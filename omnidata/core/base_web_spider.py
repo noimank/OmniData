@@ -23,14 +23,15 @@ logger = logging.getLogger(__name__)
 class SpiderResult:
     """爬虫执行结果"""
 
-    spider_name: str
-    success: bool
-    data: dict[str, Any] | list[dict[str, Any]] | None = None
-    error: str | None = None
+    success: bool = True
+    data: Any | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    message: str | None = None
+    # 以下字段设置了也没有用，会自动在run方法中覆盖，开发者无需关注，专注于上方的字段设置即可
+    spider_name: str | None = None
     started_at: datetime = field(default_factory=datetime.now)
     completed_at: datetime | None = None
     duration_seconds: float = 0
-    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
@@ -38,11 +39,11 @@ class SpiderResult:
             "spider_name": self.spider_name,
             "success": self.success,
             "data": self.data,
-            "error": self.error,
+            "message": self.message,
             "started_at": self.started_at.isoformat(),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "duration_seconds": self.duration_seconds,
-            "metadata": self.metadata,
+            "metadata": self.metadata
         }
 
 
@@ -51,13 +52,13 @@ class BaseWebSpider(BaseHelper):
     爬虫基类
 
     子类需要实现以下方法:
-        - crawl: 具体的爬取逻辑（必需）
-        - postprocess: 结果后处理（可选）
+        - crawl: 具体的爬取逻辑（必需），返回 SpiderResult
+        - postprocess: 结果后处理（可选），接收并返回 SpiderResult
 
     使用示例:
         ```python
         from pydantic import BaseModel, Field
-        from omnidata.core.base_web_spider import BaseWebSpider
+        from omnidata.core.base_web_spider import BaseWebSpider, SpiderResult
 
         class MyParams(BaseModel):
             url: str = Field(..., description="目标URL")
@@ -71,15 +72,19 @@ class BaseWebSpider(BaseHelper):
             version = "1.0.0"
             author = "我"
 
-
-            async def crawl(self, params: MyParams) -> dict:
+            async def crawl(self, params: MyParams) -> SpiderResult:
                 # 通过 browser_pool.get_context() 获取上下文
                 async with self.browser_pool.get_context() as context:
                     page = await context.new_page()
                     try:
                         await page.goto(params.url)
                         title = await page.title()
-                        return {"title": title, "url": params.url}
+
+                        # 直接返回 SpiderResult，spider_name 和时间字段由 run 方法自动设置
+                        return SpiderResult(
+                            success=True,
+                            data={"title": title, "url": params.url},
+                        )
                     finally:
                         await page.close()
         ```
@@ -119,7 +124,7 @@ class BaseWebSpider(BaseHelper):
         super().__init__(browser_pool, config)
 
     @abstractmethod
-    async def crawl(self, params: Any) -> dict[str, Any] | list[dict[str, Any]]:
+    async def crawl(self, params: Any) -> SpiderResult:
         """
         爬虫核心逻辑
 
@@ -129,20 +134,20 @@ class BaseWebSpider(BaseHelper):
             params: 验证后的参数对象（Pydantic 模型或字典）
 
         Returns:
-            爬取结果数据
+            SpiderResult: 执行结果
         """
         raise NotImplementedError
 
     async def postprocess(
         self,
-        result: dict[str, Any] | list[dict[str, Any]],
+        result: SpiderResult,
         params: Any,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    ) -> SpiderResult:
         """
         结果后处理
 
         Args:
-            result: 原始结果
+            result: 爬虫执行结果
             params: 使用的参数
 
         Returns:
@@ -167,32 +172,28 @@ class BaseWebSpider(BaseHelper):
 
         try:
             # 1. 参数验证
+            validated_params: Any
             if self.params_model is not None:
                 validated_params = self.params_model.model_validate(params)
             else:
                 validated_params = params
 
-            # 2. 执行爬取
+            # 2. 执行爬取（crawl 返回 SpiderResult）
             result = await self.crawl(validated_params)
 
-            # 3. 结果后处理
+            # 3. 结果后处理（postprocess 处理 SpiderResult）
             final_result = await self.postprocess(result, validated_params)
 
+            # 4. 设置 spider_name 和时间字段（包含 crawl + postprocess 的总时间）
             completed_at = datetime.now()
-            duration = (completed_at - started_at).total_seconds()
+            final_result.spider_name = spider_name
+            final_result.started_at = started_at
+            final_result.completed_at = completed_at
+            final_result.duration_seconds = (completed_at - started_at).total_seconds()
 
-            spider_result = SpiderResult(
-                spider_name=spider_name,
-                success=True,
-                data=final_result,
-                started_at=started_at,
-                completed_at=completed_at,
-                duration_seconds=duration,
-            )
+            logger.info(f"Spider {spider_name} completed successfully in {final_result.duration_seconds:.2f}s")
 
-            logger.info(f"Spider {spider_name} completed successfully in {duration:.2f}s")
-
-            return spider_result
+            return final_result
 
         except SpiderValidationError as e:
             logger.error(f"Spider {spider_name} validation failed: {e}")
@@ -214,15 +215,13 @@ class BaseWebSpider(BaseHelper):
     ) -> SpiderResult:
         """创建错误结果"""
         completed_at = datetime.now()
-        duration = (completed_at - started_at).total_seconds()
-
         return SpiderResult(
             spider_name=spider_name,
             success=False,
-            error=error,
+            message=error,
             started_at=started_at,
             completed_at=completed_at,
-            duration_seconds=duration,
+            duration_seconds=(completed_at - started_at).total_seconds(),
         )
 
     async def run_batch(

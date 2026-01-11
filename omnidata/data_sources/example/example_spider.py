@@ -3,9 +3,10 @@
 演示如何使用 BaseWebSpider 创建爬虫
 """
 
+from datetime import datetime
 from pydantic import BaseModel, Field, HttpUrl
 
-from omnidata.core.base_web_spider import BaseWebSpider
+from omnidata.core.base_web_spider import BaseWebSpider, SpiderResult
 
 
 class ExampleParams(BaseModel):
@@ -29,24 +30,18 @@ class ExampleSpider(BaseWebSpider):
     author = "noimank"
     platform = "测试平台"
 
-
     # 定义参数模型
     params_model = ExampleParams
 
-    async def crawl(self, params: ExampleParams) -> dict[str, object]:
+    async def crawl(self, params: ExampleParams) -> SpiderResult:
         """
         爬虫核心逻辑
 
         Args:
             params: 验证后的参数对象（ExampleParams 类型）
 
-        可用方法:
-            - await self.get_page(): 获取新的页面实例
-            - async with self.get_page_context(): 获取页面（自动管理）
-            - await self.get_context(): 获取浏览器上下文
-
         Returns:
-            爬取结果字典
+            SpiderResult: 执行结果
         """
         # 使用上下文管理器获取页面（推荐）
         async with self.get_context() as context:
@@ -69,12 +64,15 @@ class ExampleSpider(BaseWebSpider):
 
                 screenshot_data = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-            return {
-                "title": title,
-                "url": url,
-                "screenshot": screenshot_data,
-                "timestamp": self._get_timestamp(),
-            }
+            return SpiderResult(
+                success=True,
+                data={
+                    "title": title,
+                    "url": url,
+                    "screenshot": screenshot_data,
+                    "timestamp": self._get_timestamp(),
+                },
+            )
 
     def _get_timestamp(self) -> str:
         """获取当前时间戳"""
@@ -106,7 +104,7 @@ class NewsSpider(BaseWebSpider):
     # 定义参数模型
     params_model = NewsSpiderParams
 
-    async def crawl(self, params: NewsSpiderParams) -> list[dict]:
+    async def crawl(self, params: NewsSpiderParams) -> SpiderResult:
         """
         爬取新闻列表
 
@@ -114,7 +112,7 @@ class NewsSpider(BaseWebSpider):
             params: 验证后的参数对象（NewsSpiderParams 类型）
 
         Returns:
-            新闻列表
+            SpiderResult: 执行结果
         """
         # 这里是示例实现，实际需要根据目标网站结构调整
         # async with self.get_page_context() as page:
@@ -132,13 +130,17 @@ class NewsSpider(BaseWebSpider):
                 }
             )
 
-        return news_list
+        return SpiderResult(
+            success=True,
+            data=news_list,
+        )
 
-    async def postprocess(self, result: list[dict], params: NewsSpiderParams) -> list[dict]:
+    async def postprocess(self, result: SpiderResult, params: NewsSpiderParams) -> SpiderResult:
         """后处理：添加额外信息"""
-        for item in result:
-            item["processed_at"] = self._get_timestamp()
-            item["spider_version"] = self.version
+        if result.data and isinstance(result.data, list):
+            for item in result.data:
+                item["processed_at"] = self._get_timestamp()
+                item["spider_version"] = self.version
         return result
 
     def _get_timestamp(self) -> str:

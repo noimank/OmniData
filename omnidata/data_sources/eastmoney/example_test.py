@@ -1,7 +1,8 @@
 
+from datetime import datetime
 from pydantic import BaseModel, Field
 
-from omnidata.core.base_web_spider import BaseWebSpider
+from omnidata.core.base_web_spider import BaseWebSpider, SpiderResult
 
 
 class NewsSpiderParams(BaseModel):
@@ -27,7 +28,7 @@ class NewsSpider(BaseWebSpider):
     # 定义参数模型
     params_model = NewsSpiderParams
 
-    async def crawl(self, params: NewsSpiderParams) -> list[dict]:
+    async def crawl(self, params: NewsSpiderParams) -> SpiderResult:
         """
         爬取新闻列表
 
@@ -35,7 +36,7 @@ class NewsSpider(BaseWebSpider):
             params: 验证后的参数对象（NewsSpiderParams 类型）
 
         Returns:
-            新闻列表
+            SpiderResult: 执行结果
         """
         # 这里是示例实现，实际需要根据目标网站结构调整
         # async with self.get_page_context() as page:
@@ -52,12 +53,14 @@ class NewsSpider(BaseWebSpider):
                 }
             )
 
-        context = await  self.get_context_simple()
+        context = await self.get_context_simple()
         page = await context.new_page()
-        await  page.goto("https://www.baidu.com/")
+        await page.goto("https://www.baidu.com/")
 
         await page.close()
         await context.close()
 
-
-        return news_list
+        return SpiderResult(
+            success=True,
+            data=news_list,
+        )
