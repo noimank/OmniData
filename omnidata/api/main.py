@@ -7,8 +7,18 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from omnidata.core.mcp_manager import get_mcp_manager
+
+from omnidata.api.exception_handler import (
+    general_exception_handler,
+    http_exception_handler,
+    omnidata_exception_handler,
+    validation_exception_handler,
+)
+from omnidata.core.exceptions import OmniDataError
 
 from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
@@ -186,6 +196,12 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# 注册全局异常处理器
+app.add_exception_handler(OmniDataError, omnidata_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 
 # 配置 CORS
 app.add_middleware(

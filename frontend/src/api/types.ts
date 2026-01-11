@@ -1,5 +1,20 @@
 // API 类型定义
 
+// ============== 统一响应格式 ==============
+
+export interface ApiResponse<T = any> {
+  success: boolean
+  message: string
+  data: T | null
+}
+
+export interface PaginatedResponse<T = any> {
+  success: boolean
+  message: string
+  data: T[] | null
+  count: number
+}
+
 // ============== 监控相关 ==============
 export interface BrowserInfo {
   index: number

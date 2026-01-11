@@ -15,10 +15,21 @@ const instance = axios.create({
 // 响应拦截器
 instance.interceptors.response.use(
   (response) => {
-    return response.data
+    // 处理统一响应格式
+    const { success, message, data } = response.data
+
+    // 如果 success 为 false，抛出错误
+    if (!success) {
+      ElMessage.error(message || '请求失败')
+      return Promise.reject(new Error(message))
+    }
+
+    // 返回 data 部分
+    return data
   },
   (error: AxiosError<any>) => {
-    const message = error.response?.data?.detail || error.message || '请求失败'
+    // 处理错误响应
+    const message = error.response?.data?.message || error.response?.data?.detail || error.message || '请求失败'
     ElMessage.error(message)
     return Promise.reject(error)
   }

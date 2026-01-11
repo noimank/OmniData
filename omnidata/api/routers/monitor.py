@@ -10,6 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter
 from psutil import Process, virtual_memory
 
+from omnidata.api.responses import success_response, error_response
 from omnidata.core import get_browser_pool, spider_register
 from omnidata.utils import get_redis
 
@@ -42,10 +43,10 @@ async def get_browser_pool_stats():
             "headless": settings.browser.headless,
         }
 
-        return stats
+        return success_response(stats, "获取浏览器池状态成功")
     except Exception as e:
         logger.error(f"Error getting browser pool stats: {e}")
-        return {"browser_count": 0, "browsers": [], "config": {}}
+        return error_response(f"获取浏览器池状态失败: {str(e)}")
 
 
 @router.get("/spiders")
@@ -62,14 +63,13 @@ async def get_spider_stats():
 
         enabled_count = sum(1 for s in spiders if s.get("enabled", True))
 
-        return {
-            "total_count": len(spiders),
-            "enabled_count": enabled_count,
-            "spiders": spiders,
-        }
+        return success_response(
+            {"total_count": len(spiders), "enabled_count": enabled_count, "spiders": spiders},
+            "获取爬虫统计成功",
+        )
     except Exception as e:
         logger.error(f"Error getting spider stats: {e}")
-        return {"total_count": 0, "enabled_count": 0, "spiders": []}
+        return error_response(f"获取爬虫统计失败: {str(e)}")
 
 
 @router.get("/system")
@@ -97,21 +97,21 @@ async def get_system_stats():
         # 运行时间
         uptime = time.time() - _start_time
 
-        return {
-            "status": "healthy",
-            "uptime_seconds": round(uptime, 2),
-            "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
-            "memory_percent": round(process.memory_percent(), 2),
-            "cpu_percent": round(process.cpu_percent(), 2),
-            "redis_connected": redis_connected,
-            "timestamp": datetime.now().isoformat(),
-        }
+        return success_response(
+            {
+                "status": "healthy",
+                "uptime_seconds": round(uptime, 2),
+                "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
+                "memory_percent": round(process.memory_percent(), 2),
+                "cpu_percent": round(process.cpu_percent(), 2),
+                "redis_connected": redis_connected,
+                "timestamp": datetime.now().isoformat(),
+            },
+            "获取系统状态成功",
+        )
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-        }
+        return error_response(f"获取系统状态失败: {str(e)}")
 
 
 @router.get("/stats")
@@ -140,24 +140,27 @@ async def get_all_stats():
         except Exception:
             pass
 
-        return {
-            "browser_pool": {
-                "browser_count": pool.browser_count,
-                "browsers": pool.get_stats()["browsers"],
+        return success_response(
+            {
+                "browser_pool": {
+                    "browser_count": pool.browser_count,
+                    "browsers": pool.get_stats()["browsers"],
+                },
+                "spiders": {
+                    "total_count": register.spider_count,
+                    "spiders": register.list_spider_info(),
+                },
+                "system": {
+                    "status": "healthy",
+                    "uptime_seconds": round(uptime, 2),
+                    "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
+                    "cpu_percent": round(process.cpu_percent(), 2),
+                    "redis_connected": redis_connected,
+                    "timestamp": datetime.now().isoformat(),
+                },
             },
-            "spiders": {
-                "total_count": register.spider_count,
-                "spiders": register.list_spider_info(),
-            },
-            "system": {
-                "status": "healthy",
-                "uptime_seconds": round(uptime, 2),
-                "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
-                "cpu_percent": round(process.cpu_percent(), 2),
-                "redis_connected": redis_connected,
-                "timestamp": datetime.now().isoformat(),
-            },
-        }
+            "获取综合统计成功",
+        )
     except Exception as e:
         logger.error(f"Error getting all stats: {e}")
-        return {"error": str(e)}
+        return error_response(f"获取综合统计失败: {str(e)}")

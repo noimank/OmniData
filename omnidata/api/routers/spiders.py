@@ -5,9 +5,14 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from omnidata.api.responses import (
+    error_response,
+    paginated_success_response,
+    success_response,
+)
 from omnidata.core import spider_register
 from omnidata.core.exceptions import SpiderNotFoundError
 
@@ -41,7 +46,7 @@ async def list_spiders():
     """
     register = spider_register()
     spiders = register.list_spider_info()
-    return {"count": len(spiders), "spiders": spiders}
+    return success_response({"spiders": spiders, "count": len(spiders)}, "获取爬虫列表成功")
 
 
 @router.get("/{spider_name}")
@@ -58,9 +63,9 @@ async def get_spider_info(spider_name: str):
     try:
         register = spider_register()
         info = register.get_spider_info(spider_name)
-        return info
+        return success_response(info, "获取爬虫信息成功")
     except SpiderNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return error_response(f"爬虫不存在: {str(e)}")
 
 
 @router.post("/run")
@@ -77,12 +82,12 @@ async def run_spider(request: SpiderRunRequest):
     try:
         register = spider_register()
         result = await register.run_spider(request.spider_name, request.params)
-        return result.to_dict()
+        return success_response(result.to_dict(), "爬虫执行成功")
     except SpiderNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:
         logger.error(f"Error running spider {request.spider_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return error_response(f"爬虫执行失败: {str(e)}")
 
 
 @router.post("/run-batch")
@@ -103,12 +108,15 @@ async def run_spider_batch(request: SpiderRunBatchRequest):
             request.params_list,
             request.max_concurrency,
         )
-        return {"count": len(results), "results": [r.to_dict() for r in results]}
+        return success_response(
+            {"count": len(results), "results": [r.to_dict() for r in results]},
+            f"批量执行成功，共 {len(results)} 个任务",
+        )
     except SpiderNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:
         logger.error(f"Error running spider batch {request.spider_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return error_response(f"批量执行失败: {str(e)}")
 
 
 class SpiderValidateRequest(BaseModel):
@@ -146,12 +154,12 @@ async def get_spider_schema(spider_name: str):
             result["params_schema"] = _simplify_schema(schema.get("properties", {}))
             result["required"] = schema.get("required", [])
 
-        return result
+        return success_response(result, "获取参数 schema 成功")
     except SpiderNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:
         logger.error(f"Error getting spider schema {spider_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return error_response(f"获取参数 schema 失败: {str(e)}")
 
 
 @router.post("/{spider_name}/validate")
@@ -180,16 +188,15 @@ async def validate_spider_params(spider_name: str, request: SpiderValidateReques
             except Exception as e:
                 errors.append(str(e))
 
-        return {
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "warnings": warnings,
-        }
+        return success_response(
+            {"valid": len(errors) == 0, "errors": errors, "warnings": warnings},
+            "参数验证完成",
+        )
     except SpiderNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:
         logger.error(f"Error validating spider params {spider_name}: {e}")
-        return {"valid": False, "errors": [str(e)], "warnings": []}
+        return error_response(f"参数验证失败: {str(e)}")
 
 
 def _simplify_schema(properties: dict) -> dict:

@@ -6,13 +6,13 @@ Spider 提示词管理路由
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 
+from omnidata.api.responses import error_response, success_response
 from omnidata.core.spider_register import get_spider_register
 from omnidata.database import get_db_session
 from omnidata.database.models import MCPService, MCPTool, SpiderPrompt
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/spider-prompts", tags=["spider-prompts"])
 
 
-# ========== Request/Response Models ==========
+# ========== Request Models ==========
 
 
 class SpiderPromptCreate(BaseModel):
@@ -42,60 +42,16 @@ class SpiderPromptUpdate(BaseModel):
     description: str | None = Field(None, min_length=1, max_length=5000)
 
 
-class SpiderPromptResponse(BaseModel):
-    """Spider 提示词响应"""
-
-    id: int
-    spider_name: str
-    version_name: str
-    description: str
-    is_default: bool
-    usage_count: int = Field(default=0, description="使用此版本的工具数量")
-    created_at: datetime
-    updated_at: datetime
-
-
-class PromptUsageInfo(BaseModel):
-    """提示词使用情况响应"""
-
-    prompt_id: int
-    spider_name: str
-    version_name: str
-    usage_count: int
-    tools: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class SpiderInfoResponse(BaseModel):
-    """Spider 信息响应"""
-
-    name: str
-    description: str
-    platform: str
-    version: str
-    has_params_model: bool
-    parameter_info: list[dict[str, Any]] = Field(default_factory=list)
-
-
 class ToolPromptVersionUpdate(BaseModel):
     """设置工具提示词版本请求"""
 
     version_name: str = Field(..., description="要使用的提示词版本名称")
 
 
-class ToolPromptVersionResponse(BaseModel):
-    """工具提示词版本响应"""
-
-    tool_id: int
-    spider_name: str
-    current_version: str | None
-    current_description: str | None
-    available_versions: list[dict[str, Any]] = Field(default_factory=list)
-
-
 # ========== Spider Prompt CRUD Endpoints ==========
 
 
-@router.get("", response_model=list[SpiderPromptResponse])
+@router.get("")
 async def list_spider_prompts(
     spider_name: str | None = None,
     is_default: bool | None = None,
@@ -149,10 +105,10 @@ async def list_spider_prompts(
                 )
             )
 
-        return responses
+        return success_response(data=responses)
 
 
-@router.post("", response_model=SpiderPromptResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_spider_prompt(request: SpiderPromptCreate):
     """创建新的 Spider 提示词版本"""
     async with get_db_session() as session:
@@ -160,9 +116,9 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         spider_reg = await get_spider_register()
         spider = spider_reg.get_spider_instance(request.spider_name)
         if not spider:
-            raise HTTPException(
+            return error_response(
+                message=f"Spider '{request.spider_name}' not found",
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Spider '{request.spider_name}' not found",
             )
 
         # 检查同名版本是否已存在
@@ -173,9 +129,9 @@ async def create_spider_prompt(request: SpiderPromptCreate):
             )
         )
         if existing.scalar_one_or_none():
-            raise HTTPException(
+            return error_response(
+                message=f"Prompt version '{request.version_name}' already exists for spider '{request.spider_name}'",
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Prompt version '{request.version_name}' already exists for spider '{request.spider_name}'",
             )
 
         # 如果设置为默认版本，需要先取消该 Spider 的其他默认版本
@@ -199,7 +155,7 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         await session.commit()
         await session.refresh(prompt)
 
-        return SpiderPromptResponse(
+        response_data = SpiderPromptResponse(
             id=prompt.id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
@@ -209,9 +165,13 @@ async def create_spider_prompt(request: SpiderPromptCreate):
             created_at=prompt.created_at,
             updated_at=prompt.updated_at,
         )
+        return success_response(
+            data=response_data,
+            message="Spider prompt created successfully",
+        )
 
 
-@router.get("/{prompt_id}", response_model=SpiderPromptResponse)
+@router.get("/{prompt_id}")
 async def get_spider_prompt(prompt_id: int):
     """获取指定提示词的详细信息"""
     async with get_db_session() as session:
@@ -219,7 +179,10 @@ async def get_spider_prompt(prompt_id: int):
         prompt = result.scalar_one_or_none()
 
         if not prompt:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spider prompt not found")
+            return error_response(
+                message="Spider prompt not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         # 获取使用次数
         if prompt.is_default:
@@ -238,7 +201,7 @@ async def get_spider_prompt(prompt_id: int):
             )
         usage_count = usage_count_result.scalar() or 0
 
-        return SpiderPromptResponse(
+        response_data = SpiderPromptResponse(
             id=prompt.id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
@@ -248,9 +211,10 @@ async def get_spider_prompt(prompt_id: int):
             created_at=prompt.created_at,
             updated_at=prompt.updated_at,
         )
+        return success_response(data=response_data)
 
 
-@router.put("/{prompt_id}", response_model=SpiderPromptResponse)
+@router.put("/{prompt_id}")
 async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
     """更新 Spider 提示词"""
     async with get_db_session() as session:
@@ -258,7 +222,10 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
         prompt = result.scalar_one_or_none()
 
         if not prompt:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spider prompt not found")
+            return error_response(
+                message="Spider prompt not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         # 如果修改版本名称，检查是否冲突
         if request.version_name and request.version_name != prompt.version_name:
@@ -270,9 +237,9 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
                 )
             )
             if existing.scalar_one_or_none():
-                raise HTTPException(
+                return error_response(
+                    message=f"Prompt version '{request.version_name}' already exists for spider '{prompt.spider_name}'",
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Prompt version '{request.version_name}' already exists for spider '{prompt.spider_name}'",
                 )
 
         # 更新字段
@@ -301,7 +268,7 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
             )
         usage_count = usage_count_result.scalar() or 0
 
-        return SpiderPromptResponse(
+        response_data = SpiderPromptResponse(
             id=prompt.id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
@@ -311,9 +278,13 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
             created_at=prompt.created_at,
             updated_at=prompt.updated_at,
         )
+        return success_response(
+            data=response_data,
+            message="Spider prompt updated successfully",
+        )
 
 
-@router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{prompt_id}")
 async def delete_spider_prompt(prompt_id: int):
     """删除 Spider 提示词（默认版本或被使用的版本不可删除）"""
     async with get_db_session() as session:
@@ -321,13 +292,16 @@ async def delete_spider_prompt(prompt_id: int):
         prompt = result.scalar_one_or_none()
 
         if not prompt:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spider prompt not found")
+            return error_response(
+                message="Spider prompt not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         # 默认版本不可删除
         if prompt.is_default:
-            raise HTTPException(
+            return error_response(
+                message="Cannot delete default prompt version",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete default prompt version",
             )
 
         # 检查是否被工具使用
@@ -339,23 +313,31 @@ async def delete_spider_prompt(prompt_id: int):
         )
         usage_count = usage_count_result.scalar() or 0
         if usage_count > 0:
-            raise HTTPException(
+            return error_response(
+                message=f"Prompt version is used by {usage_count} tool(s). Remove associations first.",
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Prompt version is used by {usage_count} tool(s). Remove associations first.",
             )
 
         await session.execute(delete(SpiderPrompt).where(SpiderPrompt.id == prompt_id))
         await session.commit()
 
+        return success_response(
+            data=None,
+            message="Spider prompt deleted successfully",
+        )
 
-@router.get("/{prompt_id}/usage", response_model=PromptUsageInfo)
+
+@router.get("/{prompt_id}/usage")
 async def get_prompt_usage(prompt_id: int):
     """查询提示词被哪些工具使用"""
     async with get_db_session() as session:
         result = await session.execute(select(SpiderPrompt).where(SpiderPrompt.id == prompt_id))
         prompt = result.scalar_one_or_none()
         if not prompt:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Spider prompt not found")
+            return error_response(
+                message="Spider prompt not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         # 查找使用此提示词版本的工具
         if prompt.is_default:
@@ -389,19 +371,20 @@ async def get_prompt_usage(prompt_id: int):
                 "service_display_name": service.display_name,
             })
 
-        return PromptUsageInfo(
+        response_data = PromptUsageInfo(
             prompt_id=prompt_id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
             usage_count=len(tools),
             tools=tools,
         )
+        return success_response(data=response_data)
 
 
 # ========== Per-Spider Prompt Endpoints ==========
 
 
-@router.get("/spiders/{spider_name}/prompts", response_model=list[SpiderPromptResponse])
+@router.get("/spiders/{spider_name}/prompts")
 async def list_spider_prompts_by_name(spider_name: str):
     """获取指定 Spider 的所有提示词版本"""
     async with get_db_session() as session:
@@ -409,9 +392,9 @@ async def list_spider_prompts_by_name(spider_name: str):
         spider_reg = await get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
-            raise HTTPException(
+            return error_response(
+                message=f"Spider '{spider_name}' not found",
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Spider '{spider_name}' not found",
             )
 
         result = await session.execute(
@@ -452,10 +435,10 @@ async def list_spider_prompts_by_name(spider_name: str):
                 )
             )
 
-        return responses
+        return success_response(data=responses)
 
 
-@router.post("/spiders/{spider_name}/prompts", response_model=SpiderPromptResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/spiders/{spider_name}/prompts", status_code=status.HTTP_201_CREATED)
 async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromptCreate):
     """为指定 Spider 创建提示词版本（spider_name 从路径获取）"""
     async with get_db_session() as session:
@@ -463,9 +446,9 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         spider_reg = await get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
-            raise HTTPException(
+            return error_response(
+                message=f"Spider '{spider_name}' not found",
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Spider '{spider_name}' not found",
             )
 
         # 检查同名版本是否已存在
@@ -476,9 +459,9 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
             )
         )
         if existing.scalar_one_or_none():
-            raise HTTPException(
+            return error_response(
+                message=f"Prompt version '{request.version_name}' already exists for spider '{spider_name}'",
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Prompt version '{request.version_name}' already exists for spider '{spider_name}'",
             )
 
         # 如果设置为默认版本，需要先取消该 Spider 的其他默认版本
@@ -502,7 +485,7 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         await session.commit()
         await session.refresh(prompt)
 
-        return SpiderPromptResponse(
+        response_data = SpiderPromptResponse(
             id=prompt.id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
@@ -512,9 +495,13 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
             created_at=prompt.created_at,
             updated_at=prompt.updated_at,
         )
+        return success_response(
+            data=response_data,
+            message="Spider prompt created successfully",
+        )
 
 
-@router.get("/spiders/{spider_name}/default-prompt", response_model=SpiderPromptResponse)
+@router.get("/spiders/{spider_name}/default-prompt")
 async def get_spider_default_prompt(spider_name: str):
     """获取指定 Spider 的默认提示词版本"""
     async with get_db_session() as session:
@@ -522,9 +509,9 @@ async def get_spider_default_prompt(spider_name: str):
         spider_reg = await get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
-            raise HTTPException(
+            return error_response(
+                message=f"Spider '{spider_name}' not found",
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Spider '{spider_name}' not found",
             )
 
         result = await session.execute(
@@ -556,7 +543,7 @@ async def get_spider_default_prompt(spider_name: str):
         )
         usage_count = usage_count_result.scalar() or 0
 
-        return SpiderPromptResponse(
+        response_data = SpiderPromptResponse(
             id=prompt.id,
             spider_name=prompt.spider_name,
             version_name=prompt.version_name,
@@ -566,12 +553,13 @@ async def get_spider_default_prompt(spider_name: str):
             created_at=prompt.created_at,
             updated_at=prompt.updated_at,
         )
+        return success_response(data=response_data)
 
 
 # ========== Spider Registry Endpoints ==========
 
 
-@router.get("/spiders/available", response_model=list[SpiderInfoResponse])
+@router.get("/spiders/available")
 async def list_available_spiders():
     """列出所有可用于提示词管理的 Spider"""
     spider_reg = await get_spider_register()
@@ -598,7 +586,7 @@ async def list_available_spiders():
             )
         )
 
-    return responses
+    return success_response(data=responses)
 
 
 # ========== Helper Functions ==========
