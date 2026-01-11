@@ -38,9 +38,25 @@
         <template #default="{ row }">
           <div class="service-name">
             <el-text tag="b">{{ row.name }}</el-text>
-            <el-text size="small" type="info" style="margin-left: 8px">
-              /mcp/{{ row.name }}
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="连接端点" min-width="300">
+        <template #default="{ row }">
+          <div class="endpoint-wrapper">
+            <el-text size="small" type="primary" class="endpoint-url">
+              {{ frontendOrigin }}/mcp/{{ row.name }}/
             </el-text>
+            <el-button
+              link
+              type="primary"
+              :icon="CopyDocument"
+              size="small"
+              @click="handleCopyEndpoint(row)"
+            >
+              复制
+            </el-button>
           </div>
         </template>
       </el-table-column>
@@ -104,7 +120,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useMcpStore } from '@/stores/mcp'
 import type { McpService } from '@/api/types'
@@ -117,6 +133,9 @@ const mcpStore = useMcpStore()
 const searchText = ref('')
 const statusFilter = ref<boolean | string>('')
 const loading = ref(false)
+
+// 当前前端地址
+const frontendOrigin = computed(() => window.location.origin)
 
 const services = computed(() => mcpStore.services)
 
@@ -212,6 +231,16 @@ const formatDateTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
+const handleCopyEndpoint = async (service: McpService) => {
+  const endpoint = `${frontendOrigin.value}/mcp/${service.name}/`
+  try {
+    await navigator.clipboard.writeText(endpoint)
+    ElMessage.success('连接端点已复制')
+  } catch {
+    ElMessage.error('复制失败')
+  }
+}
+
 onMounted(() => {
   fetchServices()
 })
@@ -242,6 +271,16 @@ onMounted(() => {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  .endpoint-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .endpoint-url {
+      font-family: monospace;
+    }
   }
 }
 </style>

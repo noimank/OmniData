@@ -175,7 +175,7 @@ const formRules: FormRules = {
     { required: true, message: '请输入服务名称', trigger: 'blur' },
     {
       pattern: /^[a-z0-9-]+$/,
-      message: '只能包含小写字母、数字和连字符',
+      message: '服务名称不能包含中文，只能使用小写字母、数字和连字符',
       trigger: 'blur',
     },
   ],
