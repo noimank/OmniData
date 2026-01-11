@@ -176,13 +176,19 @@ class BilibiliQRLogin(BaseQRLogin):
             await self.filter_file_load(page, "media")
             await page.goto("https://account.bilibili.com/account/home")
             await page.wait_for_load_state("domcontentloaded", timeout=2000)
-            # 检查是否登录
-            await page.locator(".security-title").wait_for(timeout=250)
-            flag_text = await page.locator(".security-title").first.inner_text()
-            if "个人中心" not in flag_text:
-                return QRLoginState(status="not_logged_in", message="未登录")
+            # 已经跳转回登录界面了的话直接返回
+            if "login" in page.url:
+                return QRLoginState(status="not_logged_in", message="未登录哔哩哔哩")
 
-            return QRLoginState(status="success", message="已登录")
+            # 检查是否登录
+            await page.locator(".security-title").wait_for(timeout=500)
+            flag_text = await page.locator(".security-left").first.inner_text()
+            for text in ["个人中心", "账号安全", "我的头像", "我的硬币", "我的记录", "成就勋章"]:
+                if text in flag_text:
+                    return QRLoginState(status="success", message="已登录")
+
+            return QRLoginState(status="not_logged_in", message="未登录")
+
 
         except Exception as e:
             # logger.error(f"Failed to check Bilibili login status: {e}")

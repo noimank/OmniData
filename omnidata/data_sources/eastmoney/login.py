@@ -173,15 +173,22 @@ class EastmoneyQRLogin(BaseQRLogin):
             await self.apply_anti_detection_scripts(page, "advanced")
             await self.filter_file_load(page, "media")
             await page.goto("https://passport2.eastmoney.com/pub/BasicInfo")
-            await page.wait_for_load_state("domcontentloaded", timeout=1200)
+            await page.wait_for_load_state("domcontentloaded", timeout=1500)
+
+            # 已经跳转回登录界面了的话直接返回
+            if "login" in page.url:
+                return QRLoginState(status="not_logged_in", message="未登录东方财富")
+
             # 检查是否登录
-            await page.locator("#pass_tab").wait_for(timeout=250)
+            await page.locator("#pass_tab").wait_for(timeout=350)
 
             flag_text = await page.locator("#pass_tab").inner_text()
-            if "基本资料" not in flag_text:
-                return QRLoginState(status="not_logged_in", message="未登录")
 
-            return QRLoginState(status="success", message="已登录")
+            for text in ["基本资料", "设置头像", "账户安全", "修改密码", "安全中心"]:
+                if text in flag_text:
+                    return QRLoginState(status="success", message="已登录东方财富")
+
+            return QRLoginState(status="not_logged_in", message="未登录东方财富")
 
         except Exception as e:
             # logger.info(f"Failed to check eastmoney login status: {e}")
