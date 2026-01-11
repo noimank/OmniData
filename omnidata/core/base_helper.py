@@ -115,8 +115,8 @@ class BaseHelper(ABC):
             # 获取完整状态
             state = await context.storage_state()
 
-            # 保存到 Redis（JSON 格式）
-            await redis.setex(key, settings.redis.context_state_ttl, json.dumps(state))
+            # 保存到 Redis（JSON 格式，永久存储）
+            await redis.set(key, json.dumps(state))
             logger.debug(f"Context state saved for namespace: {namespace}")
         except Exception as e:
             logger.error(f"Failed to save context state for {namespace}: {e}")

@@ -82,7 +82,6 @@ class RedisConfig:
     socket_timeout: int = 5
     socket_connect_timeout: int = 5
     decode_responses: bool = True
-    context_state_ttl: int = 604800  # context 状态过期时间(秒)，默认7天
 
 
 @dataclass
