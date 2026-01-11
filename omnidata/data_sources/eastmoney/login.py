@@ -28,10 +28,10 @@ class EastmoneyQRLogin(BaseQRLogin):
         try:
             login_state = await self.is_login()
             if login_state.status == "success":
-                await self.filter_file_load(page)
+                await self.filter_file_load(page, "media")
                 await self.apply_anti_detection_scripts(page, "advanced")
                 await page.goto("https://passport2.eastmoney.com/pub/basicinfo")
-                await page.wait_for_load_state("domcontentloaded", timeout=2000)
+                await page.wait_for_load_state("domcontentloaded", timeout=3000)
                 # 保存登录状态实现刷新
                 await self.save_context_state(context, "eastmoney")
         except Exception as e:
