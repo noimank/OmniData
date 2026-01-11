@@ -23,7 +23,7 @@ class EastmoneyQRLogin(BaseQRLogin):
 
         该方法会定期被调用以刷新登录状态。
         """
-        context = await self.get_context_simple()
+        context = await self.get_context_simple("eastmoney")
         page = await context.new_page()
         try:
             login_state = await self.is_login()
