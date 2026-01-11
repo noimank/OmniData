@@ -119,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import useClipboard from 'vue-clipboard3'
 import { ref, computed, onMounted } from 'vue'
 import { Plus, Refresh, Search, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -133,6 +134,9 @@ const mcpStore = useMcpStore()
 const searchText = ref('')
 const statusFilter = ref<boolean | string>('')
 const loading = ref(false)
+
+// 使用剪贴板 composable
+const { toClipboard } = useClipboard()
 
 // 当前前端地址
 const frontendOrigin = computed(() => window.location.origin)
@@ -234,10 +238,10 @@ const formatDateTime = (dateStr: string) => {
 const handleCopyEndpoint = async (service: McpService) => {
   const endpoint = `${frontendOrigin.value}/mcp/${service.name}/`
   try {
-    await navigator.clipboard.writeText(endpoint)
+    await toClipboard(endpoint)
     ElMessage.success('连接端点已复制')
-  } catch {
-    ElMessage.error('复制失败')
+  } catch (err) {
+    ElMessage.error('复制失败，请手动复制')
   }
 }
 
