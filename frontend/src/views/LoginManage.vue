@@ -98,7 +98,7 @@
                   <el-radio-button
                     v-for="type in currentLogin.qrcode_types || ['default']"
                     :key="type"
-                    :label="type"
+                    :value="type"
                   >
                     {{ type }}
                   </el-radio-button>
@@ -289,12 +289,22 @@ const startCountdown = () => {
   countdown.value = QR_CODE_EXPIRE_TIME
   qrcodeExpired.value = false
 
-  countdownTimer = window.setInterval(() => {
+  countdownTimer = window.setInterval(async () => {
     countdown.value--
     if (countdown.value <= 0) {
       stopCountdown()
       qrcodeExpired.value = true
       loginStore.stopVerifyPolling()
+
+      // 调用后端 API 清理二维码资源
+      if (currentLogin.value) {
+        try {
+          await loginStore.cleanupQrcodeResources(currentLogin.value.name)
+        } catch (error) {
+          console.error('清理二维码资源失败:', error)
+        }
+      }
+
       // 重置为未登录状态
       loginStore.loginStatus = { status: 'not_logged_in', message: '未登录' }
       ElMessage.warning('二维码已过期，请刷新')
@@ -323,6 +333,13 @@ watch(polling, (newVal, oldVal) => {
   }
 })
 
+// 监听登录方式选择变化，保存到 sessionStorage
+watch(selectedQrType, (newVal) => {
+  if (currentLogin.value && newVal) {
+    sessionStorage.setItem(`login_qr_type_${currentLogin.value.name}`, newVal)
+  }
+})
+
 const fetchLogins = async () => {
   await loginStore.fetchLogins()
   // 初始化状态缓存，从列表中的 login_status 字段获取
@@ -334,9 +351,22 @@ const fetchLogins = async () => {
 }
 
 const handleSelectLogin = async (login: LoginInfo | null) => {
+  // 在更新状态之前，先保存旧的登录器信息
+  const oldLoginName = currentLogin.value?.name
+  const wasPolling = polling.value
+
   loginStore.setCurrentLogin(login)
   loginStore.stopVerifyPolling()
   stopCountdown()
+
+  // 切换登录器时清理之前的二维码资源
+  if (oldLoginName && wasPolling) {
+    try {
+      await loginStore.cleanupQrcodeResources(oldLoginName)
+    } catch (error) {
+      console.error('清理二维码资源失败:', error)
+    }
+  }
 
   if (login) {
     // 先从缓存中设置状态，避免闪烁
@@ -407,11 +437,20 @@ const handleGetQrcode = async () => {
   }
 }
 
-const handleCancelLogin = () => {
+const handleCancelLogin = async () => {
   stopCountdown()
   loginStore.stopVerifyPolling()
-  loginStore.qrcode = null
-  // 直接重置为未登录状态
+
+  // 调用后端 API 清理二维码资源
+  if (currentLogin.value) {
+    try {
+      await loginStore.cleanupQrcodeResources(currentLogin.value.name)
+    } catch (error) {
+      console.error('清理二维码资源失败:', error)
+    }
+  }
+
+  // 重置前端状态
   loginStore.loginStatus = { status: 'not_logged_in', message: '未登录' }
   ElMessage.info('已取消登录')
 }
@@ -461,13 +500,61 @@ const getAlertType = (status?: string) => {
   return 'info'
 }
 
-onMounted(() => {
-  fetchLogins()
+onMounted(async () => {
+  // 清理可能残留的轮询状态（从上一次页面访问留下来的）
+  // 如果上次用户在轮询中离开页面，polling 可能还是 true
+  if (loginStore.polling) {
+    loginStore.stopVerifyPolling()
+  }
+  // 清理二维码（只有轮询时才有二维码，如果用户离开页面说明没完成登录）
+  if (loginStore.qrcode) {
+    loginStore.qrcode = null
+  }
+  // 清理 waiting 状态（说明上次没有完成登录就离开了）
+  if (loginStore.loginStatus?.status === 'waiting') {
+    loginStore.loginStatus = null
+  }
+  // 注意：保留 success 状态，因为已登录的用户状态需要保留
+
+  await fetchLogins()
+
+  // 恢复当前登录器的登录方式选择
+  if (loginStore.currentLogin) {
+    const detail = await loginStore.fetchLoginDetail(loginStore.currentLogin.name)
+    if (detail && detail.qrcode_types && detail.qrcode_types.length > 0) {
+      // 尝试从 sessionStorage 恢复之前的选择
+      const savedQrType = sessionStorage.getItem(`login_qr_type_${loginStore.currentLogin.name}`)
+      if (savedQrType && detail.qrcode_types.includes(savedQrType)) {
+        selectedQrType.value = savedQrType
+      } else {
+        selectedQrType.value = detail.qrcode_types[0]
+      }
+    } else {
+      selectedQrType.value = 'default'
+    }
+  }
 })
 
 onUnmounted(() => {
+  // 保存当前登录方式选择
+  if (currentLogin.value && selectedQrType.value) {
+    sessionStorage.setItem(`login_qr_type_${currentLogin.value.name}`, selectedQrType.value)
+  }
+
+  // 在停止轮询之前，先保存状态
+  const currentLoginName = currentLogin.value?.name
+  const isPolling = polling.value
+
   stopCountdown()
   loginStore.stopVerifyPolling()
+
+  // 页面卸载时清理二维码资源
+  if (currentLoginName && isPolling) {
+    loginStore.cleanupQrcodeResources(currentLoginName)
+    // 重置前端状态（只有在轮询中时才重置，说明用户还没完成登录）
+    loginStore.qrcode = null
+    loginStore.loginStatus = null
+  }
 })
 </script>
 

@@ -163,3 +163,41 @@ async def clear_login_session(login_name: str):
     except Exception as e:
         logger.error(f"Error clearing login session: {e}")
         return {"success": False, "message": str(e), "login_name": login_name}
+
+
+@router.post("/{login_name}/cleanup")
+async def cleanup_qrcode_resources(login_name: str):
+    """
+    清理二维码页面资源
+
+    当用户取消登录或二维码过期时，清理 BaseQRLogin 实例中的
+    _qr_page 和 _qr_context，避免资源泄露。
+
+    Args:
+        login_name: 登录器名称
+
+    Returns:
+        操作结果
+    """
+    try:
+        register = await get_login_register()
+        login = register.get_login_instance(login_name)
+
+        # 调用 close 方法清理资源
+        await login.close()
+
+        logger.info(f"Successfully cleaned up QR code resources for {login_name}")
+        return {
+            "success": True,
+            "message": "二维码资源已清理",
+            "login_name": login_name
+        }
+    except LoginNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error cleaning up QR code resources for {login_name}: {e}")
+        return {
+            "success": False,
+            "message": f"清理失败：{str(e)}",
+            "login_name": login_name
+        }

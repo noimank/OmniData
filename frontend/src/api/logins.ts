@@ -38,3 +38,10 @@ export const clearLoginSession = (loginName: string) => {
     `/v1/logins/${loginName}/session`
   )
 }
+
+// 清理二维码资源
+export const cleanupQrcodeResources = (loginName: string) => {
+  return request.post<{ success: boolean; message: string; login_name: string }>(
+    `/v1/logins/${loginName}/cleanup`
+  )
+}

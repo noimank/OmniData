@@ -110,6 +110,24 @@ export const useLoginStore = defineStore('login', () => {
     }
   }
 
+  // 清理二维码资源
+  const cleanupQrcodeResources = async (loginName: string) => {
+    try {
+      const result = await api.cleanupQrcodeResources(loginName)
+      if (result.success) {
+        console.log(`Successfully cleaned up QR code resources for ${loginName}`)
+      } else {
+        console.warn(`Failed to cleanup QR code resources for ${loginName}: ${result.message}`)
+      }
+      qrcode.value = null
+      return result.success
+    } catch (error) {
+      console.error('Failed to cleanup QR code resources:', error)
+      qrcode.value = null
+      return false
+    }
+  }
+
   // 设置当前登录器
   const setCurrentLogin = (login: LoginInfo | null) => {
     currentLogin.value = login
@@ -129,6 +147,7 @@ export const useLoginStore = defineStore('login', () => {
     stopVerifyPolling,
     checkStatus,
     clearSession,
+    cleanupQrcodeResources,
     setCurrentLogin
   }
 })
