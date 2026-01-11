@@ -144,6 +144,13 @@ async def lifespan(app: FastAPI):
         # 关闭时清理（各关闭函数内部有超时保护）
         logger.info("Shutting down OmniData application...")
 
+        # 在 MCP 清理前添加短暂延迟，允许进行中的请求完成
+        try:
+            logger.info("Waiting for in-flight requests to complete...")
+            await asyncio.sleep(0.5)  # 500ms 宽限期
+        except asyncio.CancelledError:
+            pass
+
         # 阶段 1: 清理所有 MCP 服务
         try:
             mcp_manager = await get_mcp_manager()

@@ -21,6 +21,67 @@ from omnidata.utils.mcp_utils import generate_tool_description
 logger = logging.getLogger(__name__)
 
 
+class LifespanTaskManager:
+    """
+    管理 lifespan 上下文的专用 asyncio 任务
+
+    确保 __aenter__ 和 __aexit__ 在同一个任务上下文中调用，
+    避免 ContextVar 错误。
+    """
+
+    def __init__(self, lifespan_context: Any, app: FastAPI, service_name: str):
+        self._lifespan_context = lifespan_context
+        self._app = app
+        self._service_name = service_name
+        self._task: asyncio.Task | None = None
+        self._is_started = False
+        self._stop_event = asyncio.Event()
+        self._startup_complete = asyncio.Event()
+        self._startup_error: Exception | None = None
+
+    async def start(self) -> None:
+        """启动 lifespan 管理任务"""
+        if self._task is not None:
+            return
+
+        self._task = asyncio.create_task(self._lifespan_worker())
+        await self._startup_complete.wait()
+        if self._startup_error:
+            raise self._startup_error
+        self._is_started = True
+
+    async def _lifespan_worker(self) -> None:
+        """管理 lifespan 上下文的工作任务"""
+        try:
+            # lifespan 上下文已经绑定了 app，不需要再传递
+            await self._lifespan_context.__aenter__()
+            self._startup_complete.set()
+        except Exception as e:
+            self._startup_error = e
+            self._startup_complete.set()
+            return
+
+        # 等待停止信号
+        await self._stop_event.wait()
+
+        # 清理 lifespan
+        try:
+            await self._lifespan_context.__aexit__(None, None, None)
+        except Exception as e:
+            logger.warning(f"Lifespan cleanup error for '{self._service_name}': {e}")
+
+    async def stop(self) -> None:
+        """信号通知 lifespan 任务停止"""
+        if not self._is_started:
+            return
+
+        self._stop_event.set()
+        if self._task:
+            await asyncio.shield(self._task)
+            self._task = None
+        self._is_started = False
+
+
 class MCPServiceInfo:
     """MCP 服务信息"""
 
@@ -30,17 +91,13 @@ class MCPServiceInfo:
         mcp_server: FastMCP,
         http_app: Any,
         transport: str,
-        lifespan_context: Any | None = None,
-        creation_task: asyncio.Task | None = None,
-        cleanup_task: asyncio.Task | None = None,
+        lifespan_task_manager: LifespanTaskManager | None = None,
     ):
         self.name = name
         self.mcp_server = mcp_server
         self.http_app = http_app
         self.transport = transport
-        self.lifespan_context = lifespan_context
-        self.creation_task = creation_task
-        self.cleanup_task = cleanup_task
+        self.lifespan_task_manager = lifespan_task_manager
 
 
 class MCPManager:
@@ -70,9 +127,6 @@ class MCPManager:
         self._mount_lock = asyncio.Lock()
         # 存储 app 引用，用于 lifespan
         self._fastapi_app = app
-        # 存储待清理的服务（lifespan exit 必须在相同上下文中执行）
-        # HTTP 请求上下文无法执行 lifespan exit，需要延迟到 shutdown 时执行
-        self._pending_cleanup: list[MCPServiceInfo] = []
 
     async def mount_service(
         self,
@@ -142,17 +196,20 @@ class MCPManager:
             http_app = mcp_server.http_app(path="/", transport=transport)
 
             # 处理 lifespan（对于 http 和 streamable-http）
-            lifespan_context = None
-            creation_task = None
+            lifespan_task_manager = None
             if transport in ("http", "streamable-http"):
                 try:
-                    # 根据 FastMCP 文档，需要手动管理 lifespan
-                    # https://gofastmcp.com/integrations/fastapi
-                    creation_task = asyncio.current_task()
+                    # 使用 LifespanTaskManager 在专用任务中管理 lifespan
+                    # 这确保 __aenter__ 和 __aexit__ 在同一个任务上下文中调用
                     lifespan_context = http_app.lifespan(self._fastapi_app)
-                    # 进入 lifespan 上下文以初始化 session manager
-                    await lifespan_context.__aenter__()
-                    logger.debug(f"Initialized lifespan for service '{service_name}'")
+                    lifespan_task_manager = LifespanTaskManager(
+                        lifespan_context=lifespan_context,
+                        app=self._fastapi_app,
+                        service_name=service_name,
+                    )
+                    # 启动 lifespan 任务（确保同上下文的 __aenter__ 和 __aexit__）
+                    await lifespan_task_manager.start()
+                    logger.debug(f"Started lifespan task for service '{service_name}'")
                 except Exception as e:
                     logger.error(f"Failed to initialize lifespan for {service_name}: {e}")
                     await self._unmount_service_internal(service_name)
@@ -168,9 +225,7 @@ class MCPManager:
                 mcp_server=mcp_server,
                 http_app=http_app,
                 transport=transport,
-                lifespan_context=lifespan_context,
-                creation_task=creation_task,
-                cleanup_task=None,
+                lifespan_task_manager=lifespan_task_manager,
             )
             logger.info(f"MCP service '{service_name}' mounted at {mount_path} (transport={transport})")
 
@@ -182,25 +237,18 @@ class MCPManager:
 
         Args:
             service_name: 服务名称
-            in_shutdown_context: 是否在 shutdown 上下文中调用（True 可以执行 lifespan exit）
+            in_shutdown_context: 是否在 shutdown 上下文中调用（保留参数兼容性）
         """
         if service_name in self._services:
             service_info = self._services[service_name]
 
-            # 处理 lifespan 上下文清理（对于 http 和 streamable-http）
-            if service_info.lifespan_context is not None:
-                if in_shutdown_context:
-                    # 在 shutdown 上下文中，可以直接执行 lifespan exit
-                    try:
-                        await service_info.lifespan_context.__aexit__(None, None, None)
-                        logger.debug(f"Lifespan cleanup completed for '{service_name}'")
-                    except Exception as e:
-                        logger.warning(f"Lifespan cleanup error for '{service_name}': {e}")
-                else:
-                    # 在 HTTP 请求上下文中，将服务添加到待清理列表
-                    # lifespan exit 必须在相同上下文（shutdown）中执行
-                    self._pending_cleanup.append(service_info)
-                    logger.debug(f"Service '{service_name}' marked for pending lifespan cleanup")
+            # 停止 lifespan 任务管理器（对于 http 和 streamable-http）
+            if service_info.lifespan_task_manager is not None:
+                try:
+                    await service_info.lifespan_task_manager.stop()
+                    logger.debug(f"Lifespan task stopped for '{service_name}'")
+                except Exception as e:
+                    logger.warning(f"Lifespan task stop error for '{service_name}': {e}")
 
             # 从 FastAPI 中移除路由（所有 transport 都需要）
             mount_path = f"/mcp/{service_name}"
@@ -230,36 +278,15 @@ class MCPManager:
         清理所有挂载的服务
 
         在应用关闭时调用，会等待所有清理任务完成。
-        首先清理待清理列表中的服务（之前通过 HTTP 请求卸载的），
-        然后卸载当前挂载的服务。
 
         Args:
             timeout: 每个服务清理的超时时间（秒）
         """
-        # 阶段 1: 清理待清理列表中的服务（lifespan exit 必须在 shutdown 上下文中执行）
-        for service_info in self._pending_cleanup:
-            if service_info.lifespan_context is not None:
-                try:
-                    await asyncio.wait_for(
-                        service_info.lifespan_context.__aexit__(None, None, None),
-                        timeout=timeout
-                    )
-                    logger.debug(f"Pending lifespan cleanup completed for '{service_info.name}'")
-                except asyncio.CancelledError:
-                    logger.debug(f"Pending cleanup for '{service_info.name}' cancelled during shutdown")
-                except asyncio.TimeoutError:
-                    logger.warning(f"Pending cleanup timeout for '{service_info.name}' after {timeout}s")
-                except Exception as e:
-                    logger.warning(f"Pending cleanup error for '{service_info.name}': {e}")
-        self._pending_cleanup.clear()
-
-        # 阶段 2: 卸载当前挂载的服务
         service_names = list(self._services.keys())
 
         async with self._mount_lock:
             for service_name in service_names:
                 try:
-                    # 直接调用内部方法，传递 in_shutdown_context=True 以执行 lifespan exit
                     await asyncio.wait_for(
                         self._unmount_service_internal(service_name, in_shutdown_context=True),
                         timeout=timeout
