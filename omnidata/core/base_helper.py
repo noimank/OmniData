@@ -14,7 +14,6 @@ from playwright.async_api import Browser, BrowserContext, Page
 from omnidata.utils.redis_client import get_redis
 
 from .browser_pool import BrowserPool
-from .config import settings
 from .exceptions import BrowserPoolError
 from omnidata.utils.anti_detection_scripts import get_anti_scripts_by_names
 logger = logging.getLogger(__name__)

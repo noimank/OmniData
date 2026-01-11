@@ -3,7 +3,6 @@
 演示如何使用 BaseWebSpider 创建爬虫
 """
 
-from datetime import datetime
 from pydantic import BaseModel, Field, HttpUrl
 
 from omnidata.core.base_web_spider import BaseWebSpider, SpiderResult
