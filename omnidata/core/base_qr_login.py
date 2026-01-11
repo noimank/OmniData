@@ -111,6 +111,7 @@ class BaseQRLogin(BaseHelper):
                     if elapsed >= self._refresh_interval:
                         try:
                             await self.refresh_login_state()
+                            logger.info(f"{datetime.now().isoformat()}->刷新 {self.platform} 平台的登录状态成功！")
                             self._last_refresh_time = now
                         except Exception as e:
                             logger.error(f"Error in refresh task: {e}")

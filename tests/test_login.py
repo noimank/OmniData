@@ -34,7 +34,7 @@ class TestLogin:
         print(register.list_logins())
 
     async def test_bilibili(self, browser_pool):
-        login_name = "bilibili_qr_login"
+        login_name = "bilibili"
         register = login_register()
         instance = register.get_login_instance(login_name)
         # res = await instance.get_qrcode("哔哩哔哩官方")
