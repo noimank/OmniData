@@ -115,6 +115,7 @@ export interface SpiderResult {
   spider_name: string
   success: boolean
   data: any
+  message: string | null
   error: string | null
   started_at: string
   completed_at: string | null

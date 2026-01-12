@@ -201,6 +201,15 @@
               </el-descriptions-item>
             </el-descriptions>
 
+            <!-- 消息信息 -->
+            <el-alert
+              v-if="executionResult.message"
+              type="info"
+              :title="executionResult.message"
+              :closable="false"
+              class="mb-20"
+            />
+
             <!-- 错误信息 -->
             <el-alert
               v-if="!executionResult.success && executionResult.error"
