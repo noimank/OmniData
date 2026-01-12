@@ -45,6 +45,13 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+    async def test_run3(self,browser_pool):
+            spider_name = "eastmoney_search"
+            params = {"keyword":  "666撒旦解放", "search_type": "qa"}
+            register = spider_register()
+            instance = register.get_spider_instance(spider_name)
+            res = await instance.run(params)
+            print(res)
 
 
 
