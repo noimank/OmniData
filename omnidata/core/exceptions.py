@@ -21,12 +21,6 @@ class BrowserAcquisitionError(BrowserPoolError):
     pass
 
 
-class BrowserTimeoutError(BrowserPoolError):
-    """浏览器操作超时异常"""
-
-    pass
-
-
 class SpiderError(OmniDataError):
     """爬虫异常"""
 

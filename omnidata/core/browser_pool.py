@@ -15,7 +15,7 @@ from playwright.async_api import (
 )
 
 from .config import BrowserConfig, settings
-from .exceptions import BrowserPoolError, BrowserTimeoutError
+from .exceptions import BrowserPoolError
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +120,7 @@ class BrowserPool:
     async def _create_browser(self, index: int) -> None:
         """创建浏览器实例"""
         try:
-            browser = await asyncio.wait_for(
-                self._playwright.chromium.launch(**self.launch_options),
-                timeout=self._config.launch_timeout,
-            )
-        except TimeoutError:
-            raise BrowserTimeoutError("Browser launch timeout")
+            browser = await self._playwright.chromium.launch(**self.launch_options)
         except Exception as e:
             raise BrowserPoolError(f"Failed to launch browser: {e}")
 
