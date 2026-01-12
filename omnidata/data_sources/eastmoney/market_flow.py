@@ -54,8 +54,10 @@ class MarketFlowSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        async with self.get_context("eastmoney") as context:
-            page = await context.new_page()
+
+        context = await self.get_context_simple("eastmoney")
+        page = await context.new_page()
+        try:
             await self.apply_anti_detection_scripts(page, "advanced")
 
             # 用于存储拦截到的数据
@@ -186,6 +188,13 @@ class MarketFlowSpider(BaseWebSpider):
                 success=True,
                 data=result_data
             )
+        except Exception as e:
+            return SpiderResult(
+                success=False,
+                message=str(e))
+        finally:
+            await page.close()
+            await context.close()
 
     @staticmethod
     def _parse_jsonp(body: bytes) -> dict | None:
