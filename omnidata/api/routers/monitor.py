@@ -39,7 +39,6 @@ async def get_browser_pool_stats():
         # 添加配置信息
         stats["config"] = {
             "pool_initial_size": settings.browser.pool_initial_size,
-            "idle_timeout": settings.browser.idle_timeout,
             "headless": settings.browser.headless,
         }
 
@@ -112,55 +111,3 @@ async def get_system_stats():
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
         return error_response(f"获取系统状态失败: {str(e)}")
-
-
-@router.get("/stats")
-async def get_all_stats():
-    """
-    获取综合统计信息
-
-    Returns:
-        综合统计信息
-    """
-    try:
-        pool = await get_browser_pool()
-        register = spider_register()
-
-        # 系统状态
-        process = Process(os.getpid())
-        memory_info = process.memory_info()
-        uptime = time.time() - _start_time
-
-        # Redis 状态
-        redis_connected = False
-        try:
-            redis = await get_redis()
-            await redis.ping()
-            redis_connected = True
-        except Exception:
-            pass
-
-        return success_response(
-            {
-                "browser_pool": {
-                    "browser_count": pool.browser_count,
-                    "browsers": pool.get_stats()["browsers"],
-                },
-                "spiders": {
-                    "total_count": register.spider_count,
-                    "spiders": register.list_spider_info(),
-                },
-                "system": {
-                    "status": "healthy",
-                    "uptime_seconds": round(uptime, 2),
-                    "memory_usage_mb": round(memory_info.rss / 1024 / 1024, 2),
-                    "cpu_percent": round(process.cpu_percent(), 2),
-                    "redis_connected": redis_connected,
-                    "timestamp": datetime.now().isoformat(),
-                },
-            },
-            "获取综合统计成功",
-        )
-    except Exception as e:
-        logger.error(f"Error getting all stats: {e}")
-        return error_response(f"获取综合统计失败: {str(e)}")

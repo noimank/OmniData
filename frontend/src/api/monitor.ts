@@ -2,8 +2,7 @@ import request from './request'
 import type {
   BrowserPoolStats,
   SpiderStats,
-  SystemStats,
-  AllStats
+  SystemStats
 } from './types'
 
 // 获取浏览器池状态
@@ -19,9 +18,4 @@ export const getSpiderStats = () => {
 // 获取系统资源状态
 export const getSystemResource = () => {
   return request.get<SystemStats>('/v1/monitor/system')
-}
-
-// 获取综合统计
-export const getAllStats = () => {
-  return request.get<AllStats>('/v1/monitor/stats')
 }

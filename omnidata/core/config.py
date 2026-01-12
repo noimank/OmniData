@@ -13,7 +13,6 @@ class BrowserConfig:
 
     headless: bool = True
     pool_initial_size: int = 2  # 初始化时创建的浏览器数量
-    idle_timeout: int = 300  # 空闲超时时间(秒)
     launch_timeout: int = 30  # 启动超时时间(秒)
 
     # 浏览器启动选项（反爬虫优化）

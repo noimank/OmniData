@@ -16,17 +16,10 @@ export interface PaginatedResponse<T = any> {
 }
 
 // ============== 监控相关 ==============
-export interface BrowserInfo {
-  index: number
-  idle_time_seconds: number
-}
-
 export interface BrowserPoolStats {
   browser_count: number
-  browsers: BrowserInfo[]
   config: {
     pool_initial_size: number
-    idle_timeout: number
     headless: boolean
   }
 }
@@ -52,18 +45,6 @@ export interface SystemStats {
   cpu_percent: number
   redis_connected: boolean
   timestamp?: string
-}
-
-export interface AllStats {
-  browser_pool: {
-    browser_count: number
-    browsers: BrowserInfo[]
-  }
-  spiders: {
-    total_count: number
-    spiders: SpiderInfo[]
-  }
-  system: SystemStats
 }
 
 // ============== 登录管理相关 ==============

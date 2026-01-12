@@ -131,7 +131,6 @@ omnidata/
 
 **2. Browser Pool Management**
 - Multi-instance Chromium pool with round-robin allocation
-- Automatic cleanup and restart of idle browsers (configurable timeout)
 - Context state persistence via Redis for login sessions
 - Connection pooling with configurable initial size
 
@@ -329,7 +328,6 @@ Key settings:
 # Browser
 OMNIDATA_BROWSER__HEADLESS=true
 OMNIDATA_BROWSER__POOL_INITIAL_SIZE=2
-OMNIDATA_BROWSER__IDLE_TIMEOUT=300
 OMNIDATA_BROWSER__LAUNCH_TIMEOUT=30
 
 # Redis

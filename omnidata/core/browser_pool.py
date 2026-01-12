@@ -5,8 +5,7 @@
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from itertools import cycle
 from typing import Any
 
@@ -27,17 +26,6 @@ class BrowserWrapper:
 
     browser: Browser
     index: int  # 浏览器索引
-    created_at: datetime = field(default_factory=datetime.now)
-    last_used_at: datetime = field(default_factory=datetime.now)
-
-    @property
-    def idle_time(self) -> timedelta:
-        """获取空闲时间"""
-        return datetime.now() - self.last_used_at
-
-    def mark_used(self) -> None:
-        """标记为已使用"""
-        self.last_used_at = datetime.now()
 
 
 class BrowserPool:
@@ -45,7 +33,6 @@ class BrowserPool:
     浏览器连接池
 
     初始化时创建固定数量的浏览器实例，通过轮询方式分配浏览器
-    空闲超时后重启浏览器
     """
 
     def __init__(self, config: BrowserConfig | None = None):
@@ -66,7 +53,6 @@ class BrowserPool:
         self._browser_cycle: cycle | None = None
         self._lock = asyncio.Lock()
         self._is_initialized = False
-        self._cleanup_task: asyncio.Task | None = None
 
     async def initialize(self) -> None:
         """初始化浏览器池，预创建固定数量的浏览器"""
@@ -84,10 +70,6 @@ class BrowserPool:
         self._browser_cycle = cycle(self._browsers)
 
         self._is_initialized = True
-
-        # 启动清理任务
-        self._cleanup_task = asyncio.create_task(self._restart_idle_browsers())
-
         logger.info(f"Browser pool initialized with {len(self._browsers)} chromium browsers")
 
     async def shutdown(self) -> None:
@@ -96,14 +78,6 @@ class BrowserPool:
             return
 
         logger.info("Shutting down browser pool...")
-
-        # 取消清理任务
-        if self._cleanup_task:
-            self._cleanup_task.cancel()
-            try:
-                await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # 关闭所有浏览器
         async with self._lock:
@@ -140,7 +114,6 @@ class BrowserPool:
                 raise BrowserPoolError("Browser pool not initialized")
 
             browser_wrapper = next(self._browser_cycle)
-            browser_wrapper.mark_used()
             return browser_wrapper.browser
 
 
@@ -175,49 +148,6 @@ class BrowserPool:
             else:
                 logger.error(f"Error closing browser: {e}")
 
-    async def _restart_browser(self, browser_wrapper: BrowserWrapper) -> BrowserWrapper:
-        """重启浏览器实例"""
-        index = browser_wrapper.index
-        await self._close_browser(browser_wrapper)
-
-        try:
-            browser = await asyncio.wait_for(
-                self._playwright.chromium.launch(**self.launch_options),
-                timeout=self._config.launch_timeout,
-            )
-        except TimeoutError:
-            raise BrowserTimeoutError("Browser launch timeout")
-        except Exception as e:
-            raise BrowserPoolError(f"Failed to restart browser: {e}")
-
-        new_wrapper = BrowserWrapper(browser=browser, index=index)
-        logger.info(f"Browser restarted: index={index}")
-        return new_wrapper
-
-    async def _restart_idle_browsers(self) -> None:
-        """定期重启空闲浏览器"""
-        while self._is_initialized:
-            try:
-                await asyncio.sleep(60)  # 每分钟检查一次
-
-                async with self._lock:
-                    # 检查需要重启的浏览器
-                    for i, browser_wrapper in enumerate(self._browsers):
-                        if browser_wrapper.idle_time.total_seconds() > self._config.idle_timeout:
-                            logger.info(
-                                f"Restarting idle browser: index={browser_wrapper.index}, "
-                                f"idle_time={browser_wrapper.idle_time.total_seconds():.0f}s"
-                            )
-                            self._browsers[i] = await self._restart_browser(browser_wrapper)
-
-                    # 重新创建轮询迭代器
-                    self._browser_cycle = cycle(self._browsers)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in cleanup task: {e}")
-
     @property
     def browser_count(self) -> int:
         """获取当前浏览器数量"""
@@ -227,13 +157,6 @@ class BrowserPool:
         """获取池统计信息"""
         return {
             "browser_count": self.browser_count,
-            "browsers": [
-                {
-                    "index": bw.index,
-                    "idle_time_seconds": bw.idle_time.total_seconds(),
-                }
-                for bw in self._browsers
-            ],
         }
 
 

@@ -19,10 +19,6 @@
               <span class="label">初始配置</span>
               <span class="value">{{ browserPool.config.pool_initial_size }}</span>
             </div>
-            <div class="stat-item">
-              <span class="label">空闲超时</span>
-              <span class="value">{{ browserPool.config.idle_timeout }}s</span>
-            </div>
           </div>
         </el-card>
       </el-col>
@@ -74,42 +70,6 @@
       </el-col>
     </el-row>
 
-    <!-- 浏览器实例列表 -->
-    <el-card class="mt-20" v-loading="loading">
-      <template #header>
-        <div class="card-header">
-          <span>浏览器实例列表</span>
-          <el-button type="primary" :icon="Refresh" @click="refresh" :loading="loading">
-            刷新
-          </el-button>
-        </div>
-      </template>
-
-      <el-table :data="browserPool?.browsers || []" stripe>
-        <el-table-column prop="index" label="索引" width="80" />
-        <el-table-column label="空闲时间" width="150">
-          <template #default="{ row }">
-            {{ formatDuration(row.idle_time_seconds) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getIdleStatusType(row.idle_time_seconds)">
-              {{ getIdleStatusText(row.idle_time_seconds) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="空闲进度">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="getIdleProgress(row.idle_time_seconds)"
-              :color="getIdleProgressColor(row.idle_time_seconds)"
-            />
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
     <!-- 爬虫列表 -->
     <el-card class="mt-20" v-loading="loading">
       <template #header>
@@ -128,7 +88,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useMonitorStore } from '@/stores/monitor'
-import { Monitor, Document, Cpu, Refresh } from '@element-plus/icons-vue'
+import { Monitor, Document, Cpu } from '@element-plus/icons-vue'
 
 const monitorStore = useMonitorStore()
 
@@ -151,36 +111,6 @@ const formatUptime = (seconds: number) => {
   const minutes = Math.floor((seconds % 3600) / 60)
   const secs = Math.floor(seconds % 60)
   return `${hours}h ${minutes}m ${secs}s`
-}
-
-const formatDuration = (seconds: number) => {
-  const minutes = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${minutes}m ${secs}s`
-}
-
-const getIdleStatusType = (seconds: number) => {
-  if (seconds > 300) return 'warning'
-  if (seconds > 120) return 'info'
-  return 'success'
-}
-
-const getIdleStatusText = (seconds: number) => {
-  if (seconds > 300) return '空闲'
-  if (seconds > 120) return '较空闲'
-  return '活跃'
-}
-
-const getIdleProgress = (seconds: number) => {
-  const max = 300 // 5分钟
-  return Math.min(Math.round((seconds / max) * 100), 100)
-}
-
-const getIdleProgressColor = (seconds: number) => {
-  const percentage = getIdleProgress(seconds)
-  if (percentage >= 80) return '#f56c6c'
-  if (percentage >= 50) return '#e6a23c'
-  return '#67c23a'
 }
 
 onMounted(() => {
