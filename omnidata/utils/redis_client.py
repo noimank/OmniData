@@ -48,9 +48,9 @@ async def _init_redis() -> None:
         db=redis_config.db,
         password=redis_config.password,
         max_connections=redis_config.max_connections,
-        socket_timeout=redis_config.socket_timeout,
-        socket_connect_timeout=redis_config.socket_connect_timeout,
-        decode_responses=redis_config.decode_responses,
+        socket_timeout=5,
+        socket_connect_timeout=5,
+        decode_responses=True,
     )
 
     _redis = Redis(connection_pool=_pool)

@@ -77,9 +77,6 @@ class RedisConfig:
     db: int = 0
     password: str | None = None
     max_connections: int = 10
-    socket_timeout: int = 5
-    socket_connect_timeout: int = 5
-    decode_responses: bool = True
 
 
 @dataclass
