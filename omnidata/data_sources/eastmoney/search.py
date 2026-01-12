@@ -193,58 +193,26 @@ class EastMoneySearchSpider(BaseWebSpider):
             return None
 
     @staticmethod
-    def _find_result_items(data: dict | list | None, path: str = "") -> list[dict] | None:
+    def _find_result_items(data: dict | list | None) -> list[dict] | None:
         """
         递归查找包含 title 字段的项目列表
 
-        自动遍历嵌套的字典/列表结构，找到所有包含 'title' 字段的列表项。
-        优先返回包含最多有效项的列表。
-
-        Args:
-            data: 要遍历的数据（字典、列表或其他类型）
-            path: 当前遍历路径（用于调试）
-
-        Returns:
-            包含 title 字段的项目列表，如果找不到返回 None
         """
         if data is None:
             return None
 
-        candidates = []
+        result = data.get("result", {})
+        item_list = None
+        #找到具有title的列表
+        for key,value in result.items():
+            if isinstance(value, list):
+                if any("title" in item for item in value):
+                    item_list = value
+                    break
+        return item_list
 
-        def _traverse(obj, current_path: str = ""):
-            """递归遍历函数"""
-            if isinstance(obj, dict):
-                # 检查字典本身是否包含 title 字段（单独的搜索结果项）
-                if "title" in obj:
-                    candidates.append([obj])
-                # 递归处理字典值
-                for key, value in obj.items():
-                    new_path = f"{current_path}.{key}" if current_path else key
-                    _traverse(value, new_path)
 
-            elif isinstance(obj, list):
-                # 检查列表是否包含多个含 title 字段的项（搜索结果列表）
-                if obj and all(isinstance(item, dict) and "title" in item for item in obj):
-                    candidates.append((obj, current_path))
-                # 递归处理列表元素
-                for idx, item in enumerate(obj):
-                    new_path = f"{current_path}[{idx}]" if current_path else f"[{idx}]"
-                    _traverse(item, new_path)
 
-        _traverse(data)
-
-        if not candidates:
-            return None
-
-        # 返回包含最多项的列表（去掉路径元组）
-        if isinstance(candidates[0], tuple):
-            # 结果列表候选（带路径）
-            best = max(candidates, key=lambda x: len(x[0]))
-            return best[0]
-        else:
-            # 单个项候选，合并返回
-            return [item[0] for item in candidates]
 
     @staticmethod
     def _clean_html(text: str) -> str:
