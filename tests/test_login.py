@@ -53,5 +53,14 @@ class TestLogin:
         res = await instance.is_login()
 
         print(res)
+    async def test_ths_10jqks(self, browser_pool):
+        login_name = "ths_10jqka"
+        register = login_register()
+        instance = register.get_login_instance(login_name)
+        res = await instance.get_qrcode("同花顺APP")
+        # res = await instance.get_qrcode("微信")
+        # res = await instance.is_login()
+
+        print(res)
 
 
