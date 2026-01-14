@@ -93,7 +93,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             )
 
         try:
-            self._qr_context = await self.get_context_simple()
+            self._qr_context = await self.get_context_simple("ths_10jqka")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://upass.10jqka.com.cn/login"
 
@@ -155,7 +155,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         await self.close()
 
         try:
-            self._qr_context = await self.get_context_simple()
+            self._qr_context = await self.get_context_simple("ths_10jqka")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://upass.10jqka.com.cn/login"
 
