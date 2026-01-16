@@ -208,6 +208,10 @@ class BaseHelper(ABC):
 
         try:
             context = await browser.new_context(**context_options)
+            # 应用统一超时配置
+            if self.config and hasattr(self.config, 'browser'):
+                timeout = self.config.browser.default_timeout
+                context.set_default_timeout(timeout)
             logger.debug("Context created")
             return context
         except Exception as e:

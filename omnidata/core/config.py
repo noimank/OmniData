@@ -14,6 +14,9 @@ class BrowserConfig:
     headless: bool = True
     pool_initial_size: int = 2  # 初始化时创建的浏览器数量
 
+    # Playwright 超时配置（毫秒）
+    default_timeout: int = 8000  # 统一操作超时时间 8 秒
+
     # 浏览器启动选项（反爬虫优化）
     args: list[str] = field(
         default_factory=lambda: [
