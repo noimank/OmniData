@@ -21,6 +21,7 @@ from omnidata.api.exception_handler import (
 from omnidata.core.exceptions import OmniDataError
 
 from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
+from omnidata.api.routers.spider_audit import router as spider_audit_router
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
 from omnidata.core import get_browser_pool, get_login_register, get_spider_register
 from omnidata.database import init_db
@@ -227,6 +228,7 @@ app.include_router(monitor.router)
 app.include_router(logins.router)
 app.include_router(mcp_services.router)
 app.include_router(spider_prompt_router)
+app.include_router(spider_audit_router)
 
 
 @app.get("/")

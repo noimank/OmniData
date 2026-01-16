@@ -27,6 +27,10 @@
         <el-icon><Connection /></el-icon>
         <span>MCP 管理</span>
       </el-menu-item>
+      <el-menu-item index="/spider-audit">
+        <el-icon><Document /></el-icon>
+        <span>爬虫审计</span>
+      </el-menu-item>
     </el-menu>
   </el-aside>
 </template>
@@ -34,7 +38,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, User, Setting, Connection } from '@element-plus/icons-vue'
+import { Monitor, User, Setting, Connection, Document } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)

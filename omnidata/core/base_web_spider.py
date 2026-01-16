@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import json
 import logging
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -193,19 +194,28 @@ class BaseWebSpider(BaseHelper):
 
             logger.info(f"Spider {spider_name} completed successfully in {final_result.duration_seconds:.2f}s")
 
+            # 5. 异步记录审计日志（非阻塞）
+            self._audit_spider_run(final_result, validated_params)
+
             return final_result
 
         except SpiderValidationError as e:
             logger.error(f"Spider {spider_name} validation failed: {e}")
-            return self._create_error_result(spider_name, str(e), started_at)
+            error_result = self._create_error_result(spider_name, str(e), started_at)
+            self._audit_spider_run(error_result, params)
+            return error_result
 
         except SpiderError as e:
             logger.error(f"Spider {spider_name} error: {e}")
-            return self._create_error_result(spider_name, str(e), started_at)
+            error_result = self._create_error_result(spider_name, str(e), started_at)
+            self._audit_spider_run(error_result, params)
+            return error_result
 
         except Exception as e:
             logger.exception(f"Unexpected error in spider {spider_name}: {e}")
-            return self._create_error_result(spider_name, str(e), started_at)
+            error_result = self._create_error_result(spider_name, str(e), started_at)
+            self._audit_spider_run(error_result, params)
+            return error_result
 
     def _create_error_result(
         self,
@@ -223,6 +233,60 @@ class BaseWebSpider(BaseHelper):
             completed_at=completed_at,
             duration_seconds=(completed_at - started_at).total_seconds(),
         )
+
+    def _audit_spider_run(self, result: SpiderResult, params: Any) -> None:
+        """
+        异步记录爬虫执行审计日志（非阻塞）
+
+        使用 create_task 在后台执行，不阻塞主流程
+        记录失败不影响爬虫执行结果
+
+        Args:
+            result: 爬虫执行结果
+            params: 爬虫参数
+        """
+        async def _do_audit():
+            try:
+                from omnidata.database import get_db_session
+                from omnidata.database.models import SpiderAudit
+
+                # 将 params 转换为可序列化的格式
+                if params is None:
+                    params_json = None
+                elif isinstance(params, dict):
+                    params_json = json.dumps(params, ensure_ascii=False)
+                elif hasattr(params, "model_dump"):  # Pydantic 模型
+                    params_json = json.dumps(params.model_dump(), ensure_ascii=False)
+                else:
+                    params_json = json.dumps(str(params), ensure_ascii=False)
+
+                # 将 metadata 转换为 JSON
+                metadata_json = (
+                    json.dumps(result.metadata, ensure_ascii=False)
+                    if result.metadata
+                    else None
+                )
+
+                async with get_db_session() as session:
+                    audit_record = SpiderAudit(
+                        spider_name=result.spider_name,
+                        platform=self.platform,
+                        spider_version=self.version,
+                        success=result.success,
+                        error_message=result.message if not result.success else None,
+                        started_at=result.started_at,
+                        completed_at=result.completed_at,
+                        duration_seconds=result.duration_seconds,
+                        params=params_json,
+                        result_metadata=metadata_json,
+                    )
+                    session.add(audit_record)
+            except Exception as e:
+                # 审计记录失败不应影响爬虫执行
+                logger.warning(f"Failed to audit spider run: {e}")
+
+        # 创建后台任务，不等待完成
+        asyncio.create_task(_do_audit())
 
     async def run_batch(
         self,

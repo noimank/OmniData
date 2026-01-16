@@ -113,3 +113,61 @@ class MCPTool(Base):
     __table_args__ = (
         UniqueConstraint("service_id", "spider_name", name="uq_mcp_tool_service_spider"),
     )
+
+
+# ========== 爬虫调用审计 ==========
+
+
+class SpiderAudit(Base):
+    """爬虫调用审计记录表
+
+    记录每次爬虫调用的详细信息，用于统计分析和问题排查。
+    """
+
+    __tablename__ = "spider_audit"
+
+    # 主键和基础字段
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # 爬虫信息
+    spider_name: Mapped[str] = mapped_column(
+        String(200), nullable=False, index=True, comment="爬虫名称"
+    )
+    platform: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True, comment="平台名称"
+    )
+    spider_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="爬虫版本"
+    )
+
+    # 执行信息
+    success: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, index=True, comment="执行是否成功"
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="错误信息"
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True, comment="开始时间"
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="完成时间"
+    )
+    duration_seconds: Mapped[float] = mapped_column(
+        nullable=False, comment="执行时长（秒）"
+    )
+
+    # 参数信息（JSON 格式存储）
+    params: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="爬虫参数（JSON 格式）"
+    )
+
+    # 元数据信息（JSON 格式存储）
+    result_metadata: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="返回的元数据（JSON 格式）"
+    )
+
+    # 时间戳
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), index=True
+    )

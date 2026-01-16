@@ -8,13 +8,6 @@ export interface ApiResponse<T = any> {
   data: T | null
 }
 
-export interface PaginatedResponse<T = any> {
-  success: boolean
-  message: string
-  data: T[] | null
-  count: number
-}
-
 // ============== 监控相关 ==============
 export interface BrowserPoolStats {
   browser_count: number
@@ -247,4 +240,71 @@ export interface SpiderParameterInfo {
   description: string
   default?: any
   enum?: any[]
+}
+
+// ============== 爬虫审计相关 ==============
+
+export interface SpiderAuditRecord {
+  id: number
+  spider_name: string
+  platform: string
+  spider_version: string
+  success: boolean
+  error_message: string | null
+  started_at: string
+  completed_at: string | null
+  duration_seconds: number
+  params: string | null
+  metadata: string | null
+  created_at: string
+}
+
+export interface SpiderAuditStats {
+  today_count: number
+  today_success_count: number
+  today_failure_count: number
+  total_count: number
+  platform_stats: Array<{
+    platform: string
+    count: number
+    success_count: number
+    failure_count: number
+  }>
+  recent_success_rate: number
+  hourly_stats: Array<{
+    hour: string
+    count: number
+    success_count: number
+    failure_count: number
+  }>
+  spider_ranking: Array<{
+    spider_name: string
+    count: number
+    success_count: number
+    failure_count: number
+  }>
+  recent_failures: Array<{
+    id: number
+    spider_name: string
+    platform: string
+    error_message: string | null
+    started_at: string
+    duration_seconds: number
+  }>
+}
+
+export interface SpiderAuditQuery {
+  spider_name?: string
+  platform?: string
+  success?: boolean
+  start_date?: string
+  end_date?: string
+  page?: number
+  page_size?: number
+}
+
+// 分页响应（统一格式，count 在 data 中）
+export interface SpiderAuditResponse {
+  items: SpiderAuditRecord[]
+  count: number
 }

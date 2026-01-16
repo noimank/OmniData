@@ -17,15 +17,6 @@ class ApiResponse(BaseModel, Generic[T]):
     data: T | None = Field(None, description="响应数据")
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
-    """分页响应格式"""
-
-    success: bool = Field(..., description="请求是否成功")
-    message: str = Field(..., description="响应消息")
-    data: list[T] | None = Field(None, description="数据列表")
-    count: int = Field(0, description="总数量")
-
-
 def success_response(data: Any, message: str = "操作成功") -> ApiResponse:
     """创建成功响应"""
     return ApiResponse(success=True, message=message, data=data)
@@ -38,6 +29,9 @@ def error_response(message: str, data: Any = None) -> ApiResponse:
 
 def paginated_success_response(
     items: list[Any], count: int, message: str = "获取成功"
-) -> PaginatedResponse:
-    """创建分页成功响应"""
-    return PaginatedResponse(success=True, message=message, data=items, count=count)
+) -> ApiResponse:
+    """创建分页成功响应
+
+    将 count 放入 data 中，前端统一处理
+    """
+    return ApiResponse(success=True, message=message, data={"items": items, "count": count})
