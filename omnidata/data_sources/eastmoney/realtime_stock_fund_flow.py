@@ -21,10 +21,7 @@ class RealtimeStockFundFlowParams(BaseModel):
         ...,
         description="证券ID，格式：市场ID.代码，例如：1.000001(上证指数)、0.000001(平安银行)、0.000002(万科A)。市场ID：0=深圳，1=上海"
     )
-    data_format: Literal["json", "dict"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict"
-    )
+
 
 
 class RealtimeStockFundFlowSpider(BaseWebSpider):
