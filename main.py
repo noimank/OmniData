@@ -42,12 +42,17 @@ async def list_spiders():
     await register.shutdown()
 
 
-async def run_spider(name: str, params: dict):
+async def run_spider(name: str, params: dict | str):
     """运行指定爬虫"""
+    import json
     from omnidata.core import get_browser_pool, get_spider_register
 
     browser_pool = await get_browser_pool()
     register = await get_spider_register(browser_pool=browser_pool)
+
+    # 如果参数是 JSON 字符串，解析为字典
+    if isinstance(params, str):
+        params = json.loads(params)
 
     logger.info(f"Running spider: {name}")
     result = await register.run_spider(name, params)
@@ -58,9 +63,10 @@ async def run_spider(name: str, params: dict):
     print(f"Duration: {result.duration_seconds:.2f}s")
 
     if result.success:
-        print(f"Data: {result.data}")
+        import json
+        print(f"Data: {json.dumps(result.data, ensure_ascii=False, indent=2)}")
     else:
-        print(f"Error: {result.error}")
+        print(f"Error: {result.message}")
 
     await register.shutdown()
 
