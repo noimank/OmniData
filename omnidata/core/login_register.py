@@ -3,12 +3,14 @@
 """
 
 import asyncio
+import datetime
 import importlib
 import importlib.util
 import inspect
 import logging
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,12 @@ class LoginRegister:
         self._logins: dict[str, type[BaseQRLogin]] = {}
         self._instances: dict[str, BaseQRLogin] = {}
         self._is_initialized = False
+        # 统一后台刷新任务相关字段
+        self._refresh_task: asyncio.Task | None = None
+        self._running: bool = False
+        self._stop_event: asyncio.Event | None = None
+        self._refresh_interval: timedelta = timedelta(hours=1)
+        self._login_refresh_interval: float = 2.0  # 登录器间隔 2 秒
 
     async def initialize(self) -> None:
         if self._is_initialized:
@@ -39,11 +47,67 @@ class LoginRegister:
         await self._discover_logins()
         self._is_initialized = True
 
+        # 注册完所有登录器后，统一启动后台刷新任务
+        self._start_global_refresh_task()
+
         logger.info(f"LoginRegister initialized with {len(self._logins)} login classes")
 
+    def _start_global_refresh_task(self) -> None:
+        """启动全局后台刷新任务"""
+        if self._running:
+            return
+
+        self._running = True
+        self._stop_event = asyncio.Event()
+
+        async def refresh_loop():
+            """每小时依次刷新所有已登录的登录器"""
+            start_time = datetime.datetime.now()
+            while self._running:
+                await asyncio.sleep(1)
+                current_interval = datetime.datetime.now() - start_time
+
+                if self._stop_event.is_set():
+                    break
+
+                if self._running and current_interval >= self._refresh_interval:
+                    start_time = datetime.datetime.now()
+                    # 依次刷新所有已登录的登录器
+                    for login_name, instance in list(self._instances.items()):
+                        if not self._running:
+                            break
+
+                        try:
+                            await instance.refresh_login_state()
+                            #顺带清理可能遗留的登录错误导致的资源未关闭的问题
+                            await instance.close()
+                            logger.info(f"Refreshed login state for {login_name}")
+                            await asyncio.sleep(self._login_refresh_interval)
+                        except Exception as e:
+                            logger.error(f"Error refreshing {login_name}: {e}")
+
+        self._refresh_task = asyncio.create_task(refresh_loop())
+        logger.info("Global login refresh task started")
+
     async def shutdown(self) -> None:
-        """关闭所有登录实例，取消后台登录保持任务（并发优化版本）"""
+        """关闭所有登录实例，取消后台登录保持任务"""
         logger.info(f"Shutting down LoginRegister with {len(self._instances)} instances")
+
+        # 1. 停止全局刷新任务
+        self._running = False
+        if self._stop_event:
+            self._stop_event.set()
+
+        if self._refresh_task and not self._refresh_task.done():
+            try:
+                await asyncio.wait_for(self._refresh_task, timeout=5.0)
+            except (TimeoutError, asyncio.CancelledError):
+                if not self._refresh_task.done():
+                    self._refresh_task.cancel()
+                    try:
+                        await self._refresh_task
+                    except asyncio.CancelledError:
+                        pass
 
         async def destroy_single(name: str, instance: BaseQRLogin) -> None:
             """销毁单个登录实例"""
