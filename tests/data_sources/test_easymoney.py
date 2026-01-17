@@ -87,6 +87,14 @@ class TestEastMoneySpider:
         res = await instance.run(params)
         print(res)
 
+    async def test_run8(self, browser_pool):
+        spider_name = "eastmoney_stock_intraday_flow"
+        params = {"stock_code": '000001', "limit": 1}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
 
 
 
