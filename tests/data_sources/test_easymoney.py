@@ -157,5 +157,14 @@ class TestEastMoneySpider:
         print(res)
 
 
+    async def test_run17(self, browser_pool):
+        spider_name = "eastmoney_stock_daily_kline"
+        params = {"data_format": 'json',"start_date": "20241001","end_date": "20241231", "stock_code": "000001"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
+
 
 
