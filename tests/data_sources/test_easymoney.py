@@ -101,6 +101,13 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+    async def test_run10(self, browser_pool):
+        spider_name = "eastmoney_margin_trading"
+        params = {"market": 'sz', "limit": 10, "data_format": "json"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
 
 
 
