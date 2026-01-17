@@ -661,6 +661,24 @@ onUnmounted(() => {
 
   // 平台统计
   .platform-stats {
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+
+    // 滚动条样式
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 3px;
+
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
+
     .platform-item {
       margin-bottom: 16px;
 
@@ -687,6 +705,24 @@ onUnmounted(() => {
 
   // 爬虫排行
   .spider-ranking {
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+
+    // 滚动条样式
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 3px;
+
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
+
     .spider-ranking-item {
       display: flex;
       align-items: center;
@@ -744,6 +780,24 @@ onUnmounted(() => {
 
   // 最近失败
   .recent-failures {
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+
+    // 滚动条样式
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #dcdfe6;
+      border-radius: 3px;
+
+      &:hover {
+        background: #c0c4cc;
+      }
+    }
+
     .failure-item {
       padding: 10px;
       margin-bottom: 10px;
