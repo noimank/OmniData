@@ -140,6 +140,14 @@ class TestEastMoneySpider:
         res = await instance.run(params)
         print(res)
 
+    async def test_run15(self, browser_pool):
+        spider_name = "eastmoney_active_department"
+        params = {"start_date": "2026-01-16","data_format": 'json',"limit": 10}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
 
 
 
