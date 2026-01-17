@@ -18,7 +18,7 @@ from omnidata.core import BaseWebSpider, SpiderResult
 class StockIntradayFlowParams(BaseModel):
     """个股分时资金流参数模型"""
 
-    stock_code: str = Field(..., min_length=6, max_length=6, description="股票代码，如 000001")
+    stock_code: str = Field(..., min_length=6, max_length=6, description="股票或ETF代码，如 000001（平安银行）、516920（芯片ETF）")
     limit: int = Field(default=0, ge=0, le=500, description="获取最近多少条分时数据，0表示全部")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
         default="json",
@@ -35,7 +35,7 @@ class StockIntradayFlowSpider(BaseWebSpider):
     """
 
     name = "eastmoney_stock_intraday_flow"
-    description = "获取个股分时资金流向数据（分钟级别），包括主力、超大单、大单、中单、小单的净流入"
+    description = "获取个股/ETF分时资金流向数据（分钟级别），包括主力、超大单、大单、中单、小单的净流入"
     version = "1.0.0"
     author = "noimank"
     platform = "东方财富"
@@ -65,15 +65,15 @@ class StockIntradayFlowSpider(BaseWebSpider):
         # 深圳市场：000xxx, 001xxx, 002xxx, 003xxx, 300xxx, 301xxx
         first_char = params.stock_code[0]
 
-        if first_char == "6":
+        if first_char == "6" or first_char == "5":
             market_code = "1"  # 上海市场
-        elif first_char in ("0", "3"):
-            market_code = "0"  # 深圳市场
         else:
-            return SpiderResult(
-                success=False,
-                message=f"无效的股票代码: {params.stock_code}，首位应为 6(沪) 或 0/3(深)"
-            )
+            market_code = "0"  # 深圳市场
+        # else:
+        #     return SpiderResult(
+        #         success=False,
+        #         message=f"无效的股票代码: {params.stock_code}，首位应为 6(沪) 或 0/3(深)"
+        #     )
 
         secid = f"{market_code}.{params.stock_code}"
 

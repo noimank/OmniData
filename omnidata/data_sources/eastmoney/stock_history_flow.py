@@ -18,7 +18,7 @@ from omnidata.core import BaseWebSpider, SpiderResult
 class StockHistoryFlowParams(BaseModel):
     """个股历史资金流参数模型"""
 
-    stock_code: str = Field(..., min_length=6, max_length=6, description="股票代码，如 000001")
+    stock_code: str = Field(..., min_length=6, max_length=6, description="股票或ETF代码，如 000001（平安银行）、516920（芯片ETF）")
     limit: int = Field(default=30, ge=0, le=220, description="获取最近多少个交易日的资金流数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
         default="json",
@@ -35,7 +35,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
     """
 
     name = "eastmoney_stock_history_flow"
-    description = "获取个股历史资金流向数据"
+    description = "获取个股/ETF历史资金流向数据"
     version = "1.0.0"
     author = "noimank"
     platform = "东方财富"
@@ -65,15 +65,10 @@ class StockHistoryFlowSpider(BaseWebSpider):
         # 深圳市场：000xxx, 001xxx, 002xxx, 003xxx, 300xxx, 301xxx
         first_char = params.stock_code[0]
 
-        if first_char == "6":
+        if first_char == "6" or first_char == "5":
             market_code = "1"  # 上海市场
-        elif first_char in ("0", "3"):
+        else :
             market_code = "0"  # 深圳市场
-        else:
-            return SpiderResult(
-                success=False,
-                message=f"无效的股票代码: {params.stock_code}，首位应为 6(沪) 或 0/3(深)"
-            )
 
         secid = f"{market_code}.{params.stock_code}"
 

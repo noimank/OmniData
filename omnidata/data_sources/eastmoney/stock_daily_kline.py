@@ -24,7 +24,7 @@ class StockDailyKlineParams(BaseModel):
     stock_code: str = Field(
         ...,
         min_length=6, max_length=6,
-        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)"
+        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)、516920（芯片ETF）"
     )
     start_date: str = Field(
         default="19900101",
@@ -56,7 +56,7 @@ class StockDailyKlineSpider(BaseWebSpider):
     """
 
     name = "eastmoney_stock_daily_kline"
-    description = "获取A股个股历史日线K线数据，包括开高低收、成交量成交额、涨跌幅等完整K线数据，支持前复权/后复权/不复权，支持日期范围查询"
+    description = "获取A股/ETF基金历史日线K线数据，包括开高低收、成交量成交额、涨跌幅等完整K线数据，支持前复权/后复权/不复权，支持日期范围查询"
     version = "1.1.0"
     author = "noimank"
     platform = "东方财富"
@@ -103,10 +103,10 @@ class StockDailyKlineSpider(BaseWebSpider):
             # 根据股票代码自动判断市场ID
             # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
             stock_code = params.stock_code
-            if stock_code.startswith("6"):
+            if stock_code.startswith("6") or stock_code.startswith("5"):
                 market_id = "1"  # 上海
-            elif stock_code.startswith("8"):
-                market_id = "2"  # 北交所
+            # elif stock_code.startswith("8"):
+            #     market_id = "2"  # 北交所
             else:
                 market_id = "0"  # 深圳
 

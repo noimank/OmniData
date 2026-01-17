@@ -33,7 +33,7 @@ class StockQuoteSpider(BaseWebSpider):
     """
 
     name = "eastmoney_stock_quote"
-    description = "获取A股个股实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据"
+    description = "获取A股/ETF基金实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据"
     version = "1.2.0"
     author = "noimank"
     platform = "东方财富"
@@ -62,10 +62,10 @@ class StockQuoteSpider(BaseWebSpider):
             # 根据股票代码自动判断市场ID
             # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
             stock_code = params.stock_code
-            if stock_code.startswith("6"):
+            if stock_code.startswith("6") or stock_code.startswith('5'):
                 market_id = "1"  # 上海
-            elif stock_code.startswith("8"):
-                market_id = "2"  # 北交所
+            # elif stock_code.startswith("8") or stock_code.startswith("9"):
+            #     market_id = "2"  # 北交所
             else:
                 market_id = "0"  # 深圳
 

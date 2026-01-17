@@ -7,7 +7,6 @@
 """
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +18,7 @@ class RealtimeStockFundFlowParams(BaseModel):
 
     secid: str = Field(
         ...,
-        description="证券ID，格式：市场ID.代码，例如：1.000001(上证指数)、0.000001(平安银行)、0.000002(万科A)。市场ID：0=深圳，1=上海"
+        description="证券ID，格式：市场ID.代码，例如：1.000001(上证指数)、0.000001(平安银行)、1.516920（芯片ETF）。市场ID：0=深圳，1=上海"
     )
 
 
@@ -34,7 +33,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
     """
 
     name = "eastmoney_realtime_stock_fund_flow"
-    description = "获取个股或指数的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向"
+    description = "获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向"
     version = "1.0.0"
     author = "noimank"
     platform = "东方财富"
