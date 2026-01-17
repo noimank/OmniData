@@ -1583,6 +1583,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiosqlite" },
+    { name = "akshare" },
     { name = "apscheduler" },
     { name = "fake-useragent" },
     { name = "fastapi" },
@@ -1592,6 +1593,7 @@ dependencies = [
     { name = "playwright" },
     { name = "playwright-stealth" },
     { name = "psutil" },
+    { name = "py-mini-racer" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -1616,6 +1618,7 @@ dev = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.0.0" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
+    { name = "akshare", specifier = ">=1.18.12" },
     { name = "apscheduler", specifier = ">=3.11.2" },
     { name = "fake-useragent", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
@@ -1625,6 +1628,7 @@ requires-dist = [
     { name = "playwright", specifier = ">=1.57.0" },
     { name = "playwright-stealth", specifier = ">=2.0.0" },
     { name = "psutil", specifier = ">=6.0.0" },
+    { name = "py-mini-racer", specifier = ">=0.6.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
@@ -2038,7 +2042,9 @@ version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/50/97/a578b918b2e5923dd754cb60bb8b8aeffc85255ffb92566e3c65b148ff72/py_mini_racer-0.6.0.tar.gz", hash = "sha256:f71e36b643d947ba698c57cd9bd2232c83ca997b0802fc2f7f79582377040c11", size = 5994836, upload-time = "2021-04-22T07:58:35.993Z" }
 wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/13/058240c7fd1fbf29a24bda048d93346c2a56275736b76b56afe64050a161/py_mini_racer-0.6.0-py2.py3-none-macosx_10_10_x86_64.whl", hash = "sha256:346e73bb89a2024888244d487834be24a121089ceb0641dd0200cb96c4e24b57", size = 5280865, upload-time = "2021-04-22T07:58:29.118Z" },
     { url = "https://files.pythonhosted.org/packages/29/a9/8ce0ca222ef04d602924a1e099be93f5435ca6f3294182a30574d4159ca2/py_mini_racer-0.6.0-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:42896c24968481dd953eeeb11de331f6870917811961c9b26ba09071e07180e2", size = 5416149, upload-time = "2021-04-22T07:58:25.615Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/71/76ac5d593e14b148a4847b608c5ad9a2c7c4827c796c33b396d0437fa113/py_mini_racer-0.6.0-py2.py3-none-win_amd64.whl", hash = "sha256:97cab31bbf63ce462ba4cd6e978c572c916d8b15586156c7c5e0b2e42c10baab", size = 4797809, upload-time = "2021-04-22T07:58:32.286Z" },
 ]
 
 [[package]]
