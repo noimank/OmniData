@@ -132,6 +132,14 @@ class TestEastMoneySpider:
         res = await instance.run(params)
         print(res)
 
+    async def test_run14(self, browser_pool):
+        spider_name = "eastmoney_daily_billboard_details"
+        params = {"data_format": 'json',"limit": 10}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
 
 
 
