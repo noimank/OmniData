@@ -95,10 +95,13 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="210" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="handleEdit(row)">
             编辑
+          </el-button>
+          <el-button link type="success" size="small" @click="handleManagePrompts(row)">
+            提示词
           </el-button>
           <el-button link type="danger" size="small" @click="handleDelete(row)">
             删除
@@ -128,6 +131,7 @@ import type { McpService } from '@/api/types'
 
 const emit = defineEmits<{
   edit: [service: McpService | null]
+  managePrompts: [serviceId: number]
 }>()
 
 const mcpStore = useMcpStore()
@@ -177,7 +181,19 @@ const handleCreate = () => {
 }
 
 const handleEdit = (service: McpService) => {
+  if (!service.is_active) {
+    ElMessage.warning('请先激活服务后再进行编辑')
+    return
+  }
   emit('edit', service)
+}
+
+const handleManagePrompts = (service: McpService) => {
+  if (!service.is_active) {
+    ElMessage.warning('请先激活服务后再管理提示词')
+    return
+  }
+  emit('managePrompts', service.id)
 }
 
 const handleDelete = async (service: McpService) => {

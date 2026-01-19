@@ -84,11 +84,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Select } from '@element-plus/icons-vue'
 import { useMcpStore } from '@/stores/mcp'
 import McpToolPromptDialog from './McpToolPromptDialog.vue'
 import type { McpTool } from '@/api/types'
+
+const props = defineProps<{
+  initialServiceId?: number | null
+}>()
+
+const emit = defineEmits<{
+  'service-id-consumed': []
+}>()
 
 const mcpStore = useMcpStore()
 
@@ -145,6 +153,19 @@ onMounted(async () => {
   // 加载服务列表
   await mcpStore.fetchServices(true)
 })
+
+// 监听外部传入的 serviceId
+watch(
+  () => props.initialServiceId,
+  async (newServiceId) => {
+    if (newServiceId && activeServices.value.some((s) => s.id === newServiceId)) {
+      selectedServiceId.value = newServiceId
+      await loadServiceTools()
+      emit('service-id-consumed')
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
