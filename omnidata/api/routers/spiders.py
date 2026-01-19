@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from omnidata.api.responses import (
     error_response,
-    paginated_success_response,
     success_response,
 )
 from omnidata.core import spider_register

@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import and_, case, func, select
-from sqlalchemy import Integer as SQLAlchemyInteger
 
 from omnidata.api.responses import (
     error_response,

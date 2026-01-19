@@ -6,7 +6,6 @@ Spider 提示词管理路由
 """
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
@@ -15,7 +14,7 @@ from sqlalchemy import delete, func, select, update
 from omnidata.api.responses import error_response, success_response
 from omnidata.core.spider_register import get_spider_register
 from omnidata.database import get_db_session
-from omnidata.database.models import MCPTool, SpiderPrompt
+from omnidata.database.models import MCPTool, SpiderPrompt, MCPService
 from omnidata.utils.mcp_utils import extract_parameter_info, generate_tool_description
 
 logger = logging.getLogger(__name__)

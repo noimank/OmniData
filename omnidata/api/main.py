@@ -10,7 +10,6 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from omnidata.core.mcp_manager import get_mcp_manager
 
 from omnidata.api.exception_handler import (
     general_exception_handler,
@@ -24,11 +23,8 @@ from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
 from omnidata.api.routers.spider_audit import router as spider_audit_router
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
 from omnidata.core import (
-    get_browser_context_pool,
     set_browser_context_pool,
-    get_login_register,
     set_login_register,
-    get_spider_register,
     set_spider_register,
 )
 from omnidata.core.mcp_manager import MCPManager, get_mcp_manager, set_mcp_manager

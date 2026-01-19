@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
 from omnidata.api.responses import error_response, success_response
