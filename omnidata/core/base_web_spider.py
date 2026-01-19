@@ -252,7 +252,7 @@ class BaseWebSpider(BaseHelper):
             elif isinstance(params, dict):
                 params_json = json.dumps(params, ensure_ascii=False)
             elif hasattr(params, "model_dump"):  # Pydantic 模型
-                params_json = json.dumps(params.model_dump(), ensure_ascii=False)
+                params_json = json.dumps(params.model_dump(mode='json'), ensure_ascii=False)
             else:
                 params_json = json.dumps(str(params), ensure_ascii=False)
 
