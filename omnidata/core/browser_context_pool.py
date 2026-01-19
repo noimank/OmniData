@@ -198,22 +198,27 @@ class BrowserContextPool:
         # 生成 key（使用 namespace 或生成唯一临时 key）
         key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
-        # === 阶段1：快速检查（加锁） ===
+        # === 阶段1：乐观复用（先尝试，失败再重建） ===
         async with self._lock:
-            # 使用 get() 减少一次字典查找
             metadata = self._contexts.get(key)
             if metadata is not None:
-                if self._is_context_healthy(metadata.context):
-                    # 更新 LRU
-                    metadata.last_used_at = time.time()
-                    self._contexts.move_to_end(key)
-                    self._stats["total_contexts_reused"] += 1
-                    logger.debug(f"Context reused: namespace={namespace}")
-                    return metadata.context
-                else:
-                    # Context 不健康，移除
-                    await self._close_context(metadata.context)
-                    del self._contexts[key]
+                # 先更新 LRU，乐观返回
+                metadata.last_used_at = time.time()
+                self._contexts.move_to_end(key)
+
+        # === 阶段1.5：在锁外验证（避免阻塞其他请求） ===
+        if metadata is not None:
+            if await self._verify_context_quick(metadata.context):
+                self._stats["total_contexts_reused"] += 1
+                logger.debug(f"Context reused: namespace={namespace}")
+                return metadata.context
+            else:
+                # 验证失败，移除旧 context
+                async with self._lock:
+                    if key in self._contexts and self._contexts[key] is metadata:
+                        await self._close_context(metadata.context)
+                        del self._contexts[key]
+                        logger.warning(f"Context removed due to failed verification: namespace={namespace}")
 
         # === 阶段2：检查并淘汰（加锁，但只淘汰一次） ===
         async with self._lock:
@@ -389,6 +394,26 @@ class BrowserContextPool:
         except Exception as e:
             logger.error(f"Failed to load context state for {namespace}: {e}")
 
+    async def _verify_context_quick(self, context: BrowserContext) -> bool:
+        """
+        快速验证 context 是否可用（乐观检查）
+
+        原理：尝试创建并立即关闭一个临时 page，这是验证 context 可用的最可靠方式。
+        依赖 Playwright 自带的超时机制，无需额外超时控制。
+
+        Args:
+            context: 要验证的 BrowserContext
+
+        Returns:
+            bool: Context 是否可用
+        """
+        try:
+            test_page = await context.new_page()
+            await test_page.close()
+            return True
+        except Exception:
+            return False
+
     async def _close_context(self, context: BrowserContext) -> None:
         """
         关闭 context
@@ -411,31 +436,6 @@ class BrowserContextPool:
             self._stats["total_contexts_closed"] += 1
         except Exception as e:
             logger.debug(f"Error closing context: {e}")
-
-    def _is_context_healthy(self, context: BrowserContext) -> bool:
-        """
-        检查 context 是否健康
-
-        根据 Playwright 最佳实践：
-        1. 通过访问 pages 属性来判断 context 是否可用
-        2. 检查 pages 数量是否异常
-        """
-        try:
-            # 检查 pages 数量是否异常（>50 视为异常）
-            pages = context.pages
-            open_pages = [p for p in pages if not p.is_closed()]
-            if len(open_pages) > 50:
-                logger.warning(f"Context has too many open pages: {len(open_pages)}")
-                return False
-
-            # 尝试访问 browser 来确认 context 仍然连接
-            _ = context.browser
-            return True
-
-        except Exception as e:
-            # 访问属性失败，说明 context 已关闭或不可用
-            logger.debug(f"Context health check failed: {e}")
-            return False
 
     async def _evict_lru(self) -> None:
         """
