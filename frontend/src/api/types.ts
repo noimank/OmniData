@@ -236,6 +236,7 @@ export interface McpTool {
   tool_name: string
   enabled: boolean
   selected_prompt_version?: string | null
+  current_prompt_version_name?: string | null
   current_prompt_description?: string | null
 }
 

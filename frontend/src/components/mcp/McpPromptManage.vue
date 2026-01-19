@@ -38,10 +38,12 @@
         <el-table-column prop="spider_name" label="爬虫" width="180" />
         <el-table-column label="当前版本" width="150">
           <template #default="{ row }">
-            <el-tag v-if="row.selected_prompt_version" size="small" type="success">
-              {{ row.selected_prompt_version }}
+            <el-tag size="small" :type="row.selected_prompt_version ? 'success' : 'warning'">
+              {{ row.current_prompt_version_name || '-' }}
+              <el-tag v-if="!row.selected_prompt_version" size="small" type="danger" style="margin-left: 4px">
+                默认
+              </el-tag>
             </el-tag>
-            <el-tag v-else size="small" type="info">默认版本</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="当前描述" min-width="250" show-overflow-tooltip>

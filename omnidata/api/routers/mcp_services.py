@@ -484,6 +484,7 @@ async def list_service_tools(service_id: int):
                 "tool_name": t.tool_name,
                 "enabled": t.enabled,
                 "selected_prompt_version": t.selected_prompt_version,
+                "current_prompt_version_name": prompt.version_name if prompt else None,
                 "current_prompt_description": prompt.description if prompt else None,
             })
 

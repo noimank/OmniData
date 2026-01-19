@@ -110,6 +110,15 @@
                 选择
               </el-button>
               <el-button
+                v-if="!version.is_default"
+                size="small"
+                type="warning"
+                link
+                @click="handleSetAsDefault(version)"
+              >
+                设为默认
+              </el-button>
+              <el-button
                 size="small"
                 type="primary"
                 link
@@ -394,6 +403,31 @@ const handleDeleteVersion = async (version: SpiderPrompt) => {
     await loadVersionInfo()
   } catch (err: any) {
     ElMessage.error(err.message || '删除失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 设为默认版本
+const handleSetAsDefault = async (version: SpiderPrompt) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要将"${version.version_name}"设为默认版本吗？这将取消当前默认版本。`,
+      '设为默认',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+
+  loading.value = true
+  try {
+    await mcpStore.setSpiderPromptAsDefault(version.id)
+    ElMessage.success('已设为默认版本')
+    await loadVersionInfo()
+    emit('updated')
+  } catch (err: any) {
+    ElMessage.error(err.message || '设置失败')
   } finally {
     loading.value = false
   }

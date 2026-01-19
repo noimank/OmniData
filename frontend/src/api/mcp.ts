@@ -46,6 +46,10 @@ export async function deleteSpiderPrompt(promptId: number): Promise<void> {
   return request.delete<void>(`${SPIDER_PROMPT_BASE}/${promptId}`)
 }
 
+export async function setSpiderPromptAsDefault(promptId: number): Promise<SpiderPrompt> {
+  return request.put<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/${promptId}/set-default`)
+}
+
 export async function getSpiderPromptUsage(promptId: number): Promise<PromptUsageInfo> {
   return request.get<PromptUsageInfo>(`${SPIDER_PROMPT_BASE}/${promptId}/usage`)
 }

@@ -109,6 +109,28 @@ export const useMcpStore = defineStore('mcp', () => {
     }
   }
 
+  const setSpiderPromptAsDefault = async (promptId: number) => {
+    try {
+      loading.value = true
+      error.value = null
+      const result = await mcpApi.setSpiderPromptAsDefault(promptId)
+      // 更新本地状态：重置同 Spider 的其他版本，设置新默认
+      const spiderName = result.spider_name
+      spiderPrompts.value.forEach(p => {
+        if (p.spider_name === spiderName) {
+          p.is_default = (p.id === promptId)
+        }
+      })
+      return result
+    } catch (err: any) {
+      error.value = err.message || '设置默认版本失败'
+      console.error('Failed to set spider prompt as default:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ========== 服务管理 ==========
 
   const fetchServices = async (isActive?: boolean) => {
@@ -422,6 +444,7 @@ export const useMcpStore = defineStore('mcp', () => {
     createSpiderPrompt,
     updateSpiderPrompt,
     deleteSpiderPrompt,
+    setSpiderPromptAsDefault,
 
     // 服务管理
     fetchServices,

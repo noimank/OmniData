@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, update
 from omnidata.api.responses import error_response, success_response
 from omnidata.core.spider_register import get_spider_register
 from omnidata.database import get_db_session
-from omnidata.database.models import MCPService, MCPTool, SpiderPrompt
+from omnidata.database.models import MCPTool, SpiderPrompt
 from omnidata.utils.mcp_utils import extract_parameter_info, generate_tool_description
 
 logger = logging.getLogger(__name__)
@@ -316,6 +316,89 @@ async def delete_spider_prompt(prompt_id: int):
         return success_response(
             data=None,
             message="Spider prompt deleted successfully",
+        )
+
+
+@router.put("/{prompt_id}/set-default")
+async def set_prompt_as_default(prompt_id: int):
+    """将指定提示词版本设为默认版本
+
+    新创建的 MCP 服务将使用新的默认版本。
+    """
+    async with get_db_session() as session:
+        # 验证提示词存在
+        result = await session.execute(select(SpiderPrompt).where(SpiderPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+
+        if not prompt:
+            return error_response(
+                message="Spider prompt not found",
+            )
+
+        # 如果已是默认版本，直接返回
+        if prompt.is_default:
+            # 获取使用次数
+            usage_count_result = await session.execute(
+                select(func.count(MCPTool.id)).where(
+                    MCPTool.spider_name == prompt.spider_name,
+                    MCPTool.selected_prompt_version == None
+                )
+            )
+            usage_count = usage_count_result.scalar() or 0
+
+            response_data = {
+                "id": prompt.id,
+                "spider_name": prompt.spider_name,
+                "version_name": prompt.version_name,
+                "description": prompt.description,
+                "is_default": prompt.is_default,
+                "usage_count": usage_count,
+                "created_at": prompt.created_at,
+                "updated_at": prompt.updated_at,
+            }
+            return success_response(
+                data=response_data,
+                message="Prompt is already the default version",
+            )
+
+        spider_name = prompt.spider_name
+
+        # 数据库事务：将该 Spider 的所有提示词 is_default 设为 False，目标提示词设为 True
+        await session.execute(
+            update(SpiderPrompt)
+            .where(
+                SpiderPrompt.spider_name == spider_name,
+                SpiderPrompt.is_default == True
+            )
+            .values(is_default=False)
+        )
+        prompt.is_default = True
+        await session.commit()
+        await session.refresh(prompt)
+
+        # 获取使用次数
+        usage_count_result = await session.execute(
+            select(func.count(MCPTool.id)).where(
+                MCPTool.spider_name == spider_name,
+                MCPTool.selected_prompt_version == None
+            )
+        )
+        usage_count = usage_count_result.scalar() or 0
+
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": usage_count,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
+
+        return success_response(
+            data=response_data,
+            message="Spider prompt set as default successfully",
         )
 
 
