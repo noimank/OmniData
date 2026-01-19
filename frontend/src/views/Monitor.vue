@@ -18,9 +18,16 @@
         </el-col>
         <el-col :span="6">
           <div class="stat-card">
-            <div class="stat-value">{{ contextPool.context_count }} / {{ contextPool.config.max_pool_size }}</div>
+            <div class="stat-value">
+              {{ contextPool.context_count }}{{ contextPool.config.max_pool_size >= 0 ? ` / ${contextPool.config.max_pool_size}` : ' / 无限制' }}
+            </div>
             <div class="stat-label">Context 数量 / 池容量</div>
-            <el-progress :percentage="contextPool.config.max_pool_size > 0 ? (contextPool.context_count / contextPool.config.max_pool_size * 100) : 0" :show-text="false" />
+            <el-progress
+              v-if="contextPool.config.max_pool_size >= 0"
+              :percentage="(contextPool.context_count / contextPool.config.max_pool_size * 100)"
+              :show-text="false"
+            />
+            <div v-else class="stat-config">LRU 已禁用</div>
           </div>
         </el-col>
         <el-col :span="6">
@@ -104,12 +111,15 @@
           <template #default="{ row }">
             <div class="idle-time-wrapper">
               <div class="idle-time-text">{{ formatIdleTime(row.idle_time) }}</div>
-              <el-progress
-                :percentage="getIdleTimePercent(row.idle_time)"
-                :status="getIdleTimeStatus(row.idle_time)"
-                :show-text="false"
-                :stroke-width="6"
-              />
+              <template v-if="contextPool?.config.idle_timeout >= 0">
+                <el-progress
+                  :percentage="getIdleTimePercent(row.idle_time)"
+                  :status="getIdleTimeStatus(row.idle_time)"
+                  :show-text="false"
+                  :stroke-width="6"
+                />
+              </template>
+              <div v-else class="idle-time-unlimited">不限制</div>
             </div>
           </template>
         </el-table-column>
@@ -194,12 +204,14 @@ const formatTimestamp = (timestamp: number) => {
 }
 
 const getIdleTimePercent = (seconds: number) => {
-  const idleTimeout = contextPool.value?.config.idle_timeout || 300
+  const idleTimeout = contextPool.value!.config.idle_timeout
+  if (idleTimeout < 0) return 0
   return Math.min(100, Math.round((seconds / idleTimeout) * 100))
 }
 
 const getIdleTimeStatus = (seconds: number) => {
-  const idleTimeout = contextPool.value?.config.idle_timeout || 300
+  const idleTimeout = contextPool.value!.config.idle_timeout
+  if (idleTimeout < 0) return ''
   if (seconds >= idleTimeout * 0.8) return 'exception'
   if (seconds >= idleTimeout * 0.5) return 'warning'
   return ''
@@ -264,6 +276,12 @@ onUnmounted(() => {
       font-size: 12px;
       color: #606266;
       margin-bottom: 4px;
+    }
+
+    .idle-time-unlimited {
+      font-size: 12px;
+      color: #909399;
+      font-style: italic;
     }
 
     :deep(.el-progress-bar__outer) {

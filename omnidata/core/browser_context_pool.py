@@ -47,11 +47,15 @@ class BrowserContextPool:
 
     功能特性：
     - 单 Browser 实例（无健康检查、无扩缩容）
-    - Context 池化（LRU 缓存复用）
+    - Context 池化（LRU 缓存复用，max_pool_size < 0 时禁用）
     - Context 永不关闭（仅淘汰时关闭）
     - Redis 状态持久化（显式保存，创建时加载）
-    - 后台清理任务（闲置回收）
+    - 后台清理任务（闲置回收，idle_timeout < 0 时禁用）
     - Page 自动关闭
+
+    配置说明：
+    - max_pool_size < 0: 禁用 LRU 容量限制
+    - idle_timeout < 0: 禁用闲置清理
 
     用法示例：
         pool = BrowserContextPool()
@@ -177,6 +181,8 @@ class BrowserContextPool:
         """
         获取或创建 Context（LRU 复用）
 
+        当 max_pool_size 为负数时，禁用 LRU 限制（不限制池大小）
+
         优化：将慢速的 context 创建操作移出锁，减少锁竞争
 
         Args:
@@ -198,13 +204,17 @@ class BrowserContextPool:
         # 生成 key（使用 namespace 或生成唯一临时 key）
         key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
+        # 是否启用 LRU 限制
+        enable_lru = self._max_pool_size >= 0
+
         # === 阶段1：乐观复用（先尝试，失败再重建） ===
         async with self._lock:
             metadata = self._contexts.get(key)
             if metadata is not None:
-                # 先更新 LRU，乐观返回
-                metadata.last_used_at = time.time()
-                self._contexts.move_to_end(key)
+                # 仅在启用 LRU 时更新 LRU 时间戳和位置
+                if enable_lru:
+                    metadata.last_used_at = time.time()
+                    self._contexts.move_to_end(key)
 
         # === 阶段1.5：在锁外验证（避免阻塞其他请求） ===
         if metadata is not None:
@@ -221,9 +231,10 @@ class BrowserContextPool:
                         logger.warning(f"Context removed due to failed verification: namespace={namespace}")
 
         # === 阶段2：检查并淘汰（加锁，但只淘汰一次） ===
-        async with self._lock:
-            if len(self._contexts) >= self._max_pool_size:
-                await self._evict_lru()
+        if enable_lru:
+            async with self._lock:
+                if len(self._contexts) >= self._max_pool_size:
+                    await self._evict_lru()
 
         # === 阶段3：慢速创建（无锁，关键优化！） ===
         # 在锁外创建 context，避免阻塞其他请求
@@ -231,9 +242,11 @@ class BrowserContextPool:
 
         # === 阶段4：插入池中（加锁，二次检查防止竞态） ===
         async with self._lock:
-            # 二次检查：确保不超过 max_pool_size（修复竞态条件）
-            while len(self._contexts) >= self._max_pool_size:
-                await self._evict_lru()
+            # 仅在启用 LRU 时进行容量检查和淘汰
+            if enable_lru:
+                # 二次检查：确保不超过 max_pool_size（修复竞态条件）
+                while len(self._contexts) >= self._max_pool_size:
+                    await self._evict_lru()
 
             metadata = ContextMetadata(
                 context=context,
@@ -488,6 +501,8 @@ class BrowserContextPool:
         """
         淘汰最久未使用的 Context
 
+        注意：当 max_pool_size 为负数时，此方法不会被调用（LRU 已禁用）
+
         移除 is_checked_out 机制后，LRU 淘汰逻辑更简单：
         - OrderedDict 第一个元素即最久未使用
         - 即使误淘汰活跃 context，下次 get_context 会重建并从 Redis 恢复状态
@@ -510,7 +525,9 @@ class BrowserContextPool:
                 if self._shutdown_event.is_set():
                     break
 
-                await self._cleanup_idle_contexts()
+                # 仅在启用空闲超时时清理
+                if self._idle_timeout >= 0:
+                    await self._cleanup_idle_contexts()
 
             except asyncio.CancelledError:
                 break
@@ -518,7 +535,11 @@ class BrowserContextPool:
                 logger.error(f"Cleanup error: {e}")
 
     async def _cleanup_idle_contexts(self) -> None:
-        """清理闲置 Contexts（超过 idle_timeout）"""
+        """
+        清理闲置 Contexts（超过 idle_timeout）
+
+        注意：当 idle_timeout 为负数时，此方法不会被调用（空闲清理已禁用）
+        """
         current_time = time.time()
         keys_to_remove = []
 
