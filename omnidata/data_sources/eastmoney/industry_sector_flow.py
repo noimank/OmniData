@@ -39,57 +39,50 @@ class IndustrySectorFlowSpider(BaseWebSpider):
     FIELDS = "f12,f14,f2,f3,f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f204,f205,f124,f1,f13"
 
     async def crawl(self, params: IndustrySectorFlowParams) -> SpiderResult:
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await page.goto(self.PAGE_URL)
-            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            async with self.new_page("eastmoney") as page:
+                await self.apply_anti_detection_scripts(page, "advanced")
+                await page.goto(self.PAGE_URL)
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
-            # 获取全部数据（2页，每页50条）
-            all_items = []
-            for page_num in range(1, 3):
-                response = await page.request.get(self.API_URL, params={
-                    "fid": params.sort_field,
-                    "po": "1",
-                    "pz": "50",
-                    "pn": str(page_num),
-                    "np": "1",
-                    "fltt": "2",
-                    "invt": "2",
-                    "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                    "fs": "m:90+t:2",
-                    "fields": self.FIELDS,
-                }, timeout=30000)
+                # 获取全部数据（2页，每页50条）
+                all_items = []
+                for page_num in range(1, 3):
+                    response = await page.request.get(self.API_URL, params={
+                        "fid": params.sort_field,
+                        "po": "1",
+                        "pz": "50",
+                        "pn": str(page_num),
+                        "np": "1",
+                        "fltt": "2",
+                        "invt": "2",
+                        "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
+                        "fs": "m:90+t:2",
+                        "fields": self.FIELDS,
+                    }, timeout=30000)
 
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("rc") == 0:
-                        all_items.extend(data.get("data", {}).get("diff", []))
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("rc") == 0:
+                            all_items.extend(data.get("data", {}).get("diff", []))
 
-            await page.close()
+                # 解析数据
+                data_list = [self._parse_item(item) for item in all_items[:params.limit]]
+                df = pd.DataFrame(data_list)
 
-            # 解析数据
-            data_list = [self._parse_item(item) for item in all_items[:params.limit]]
-            df = pd.DataFrame(data_list)
+                result_data = df.to_dict(orient="records")
+                if params.data_format == "markdown":
+                    result_data = df.to_markdown()
+                elif params.data_format == "string":
+                    result_data = df.to_string()
 
-            result_data = df.to_dict(orient="records")
-            if params.data_format == "markdown":
-                result_data = df.to_markdown()
-            elif params.data_format == "string":
-                result_data = df.to_string()
-
-            return SpiderResult(
-                success=True,
-                data=result_data,
-                message=f"成功获取 {len(data_list)} 条数据"
-            )
-
+                return SpiderResult(
+                    success=True,
+                    data=result_data,
+                    message=f"成功获取 {len(data_list)} 条数据"
+                )
         except Exception as e:
-            return SpiderResult(success=False, message=str(e))
-        finally:
-            await page.close()
-            await context.close()
+            return SpiderResult(success=False, message=f"数据爬取失败：{str(e)}")
 
     def _parse_item(self, item: dict) -> dict:
         def safe_float(v): return float(v) if v not in (None, "") else 0.0

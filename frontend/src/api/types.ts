@@ -9,27 +9,24 @@ export interface ApiResponse<T = any> {
 }
 
 // ============== 监控相关 ==============
-export interface BrowserPoolStats {
+// Browser Context Pool 统计（单 Browser + 多 Context 架构）
+export interface BrowserContextPoolStats {
   browser_count: number
+  context_count: number
+  checked_out_contexts: number
+  total_contexts_created: number
+  total_contexts_reused: number
+  reuse_rate: number
+  total_contexts_evicted: number
+  total_contexts_closed: number
   config: {
-    pool_initial_size: number
+    max_pool_size: number
+    idle_timeout: number
     headless: boolean
   }
 }
 
-export interface SpiderInfo {
-  name: string
-  description: string
-  version: string
-  author?: string
-  platform: string
-}
-
-export interface SpiderStats {
-  total_count: number
-  spiders: SpiderInfo[]
-}
-
+// 系统资源统计
 export interface SystemStats {
   status: string
   uptime_seconds: number
@@ -75,6 +72,15 @@ export interface LoginStatus {
 }
 
 // ============== 爬虫相关 ==============
+// 爬虫基础信息
+export interface SpiderInfo {
+  name: string
+  description: string
+  platform: string
+  version: string
+  author?: string
+}
+
 export interface SpiderListResponse {
   count: number
   spiders: SpiderInfo[]

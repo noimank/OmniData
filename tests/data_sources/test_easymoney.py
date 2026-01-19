@@ -5,15 +5,15 @@
 
 import pytest
 
-from omnidata.core.browser_pool import BrowserPool, close_browser_pool, get_browser_pool
+from omnidata.core.browser_context_pool import BrowserContextPool
 from omnidata.core import get_spider_register, spider_register
 from omnidata.core.config import  BrowserConfig
 
 @pytest.fixture
 async def browser_pool():
-    """创建浏览器池实例, 完成环境初始"""
+    """创建浏览器上下文池实例, 完成环境初始"""
     # 关闭无头模式
-    pool = BrowserPool(BrowserConfig(headless=False))
+    pool = BrowserContextPool(BrowserConfig(headless=False))
     await pool.initialize()
     await get_spider_register(pool)
     yield pool

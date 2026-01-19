@@ -239,6 +239,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useSpiderStore } from '@/stores/spider'
+import type { SpiderInfo, ParamSchema } from '@/api/types'
 import { Refresh, Loading, VideoPlay, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
@@ -258,7 +259,7 @@ const selectedPlatform = ref('')
 // 获取所有平台列表（去重并排序）
 const platforms = computed(() => {
   const platformSet = new Set<string>()
-  spiders.value.forEach((spider) => {
+  spiders.value.forEach((spider: SpiderInfo) => {
     if (spider.platform) {
       platformSet.add(spider.platform)
     }
@@ -271,7 +272,7 @@ const filteredSpiders = computed(() => {
   if (!selectedPlatform.value) {
     return spiders.value
   }
-  return spiders.value.filter((spider) => spider.platform === selectedPlatform.value)
+  return spiders.value.filter((spider: SpiderInfo) => spider.platform === selectedPlatform.value)
 })
 
 const selectedSpiderName = ref('')
@@ -288,7 +289,7 @@ const handlePlatformChange = () => {
 }
 
 const handleSpiderChange = async (spiderName: string) => {
-  const spider = filteredSpiders.value.find((s) => s.name === spiderName)
+  const spider = filteredSpiders.value.find((s: SpiderInfo) => s.name === spiderName)
   if (spider) {
     spiderStore.setCurrentSpider(spider)
     schemaLoading.value = true
@@ -297,7 +298,7 @@ const handleSpiderChange = async (spiderName: string) => {
       // 初始化参数值
       spiderParams.value = {}
       if (schema) {
-        Object.entries(schema.params_schema).forEach(([key, config]) => {
+        Object.entries(schema.params_schema).forEach(([key, config]: [string, ParamSchema]) => {
           if (config.default !== undefined) {
             spiderParams.value[key] = config.default
           } else if (config.type === 'boolean') {

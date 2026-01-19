@@ -55,75 +55,68 @@ class StockQuoteSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            # 根据股票代码自动判断市场ID
-            # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
-            stock_code = params.stock_code
-            if stock_code.startswith("6") or stock_code.startswith('5'):
-                market_id = "1"  # 上海
-            # elif stock_code.startswith("8") or stock_code.startswith("9"):
-            #     market_id = "2"  # 北交所
-            else:
-                market_id = "0"  # 深圳
+            async with self.new_page("eastmoney") as page:
+                # 根据股票代码自动判断市场ID
+                # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
+                stock_code = params.stock_code
+                if stock_code.startswith("6") or stock_code.startswith('5'):
+                    market_id = "1"  # 上海
+                # elif stock_code.startswith("8") or stock_code.startswith("9"):
+                #     market_id = "2"  # 北交所
+                else:
+                    market_id = "0"  # 深圳
 
-            secid = f"{market_id}.{stock_code}"
+                secid = f"{market_id}.{stock_code}"
 
-            # 构建请求参数
-            request_params = {
-                "fltt": "2",
-                "invt": "2",
-                "fields": self.FIELDS,
-                "secid": secid,
-            }
-            await self.apply_anti_detection_scripts(page, "advanced")
+                # 构建请求参数
+                request_params = {
+                    "fltt": "2",
+                    "invt": "2",
+                    "fields": self.FIELDS,
+                    "secid": secid,
+                }
+                # 发送请求
+                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-            # 发送请求
-            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                if response.status != 200:
+                    return SpiderResult(
+                        success=False,
+                        message=f"请求失败，状态码：{response.status}"
+                    )
 
-            if response.status != 200:
+                # 解析响应
+                data = await response.json()
+
+                # 检查返回状态
+                if data.get("rc") != 0:
+                    return SpiderResult(
+                        success=False,
+                        message=f"获取数据失败：{data.get('msg', '未知错误')}"
+                    )
+
+                # 检查是否有数据 (新API直接返回data对象)
+                quote_data = data.get("data", {})
+                if not quote_data or not isinstance(quote_data, dict):
+                    return SpiderResult(
+                        success=False,
+                        message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确"
+                    )
+
+                # 解析数据
+                result_data = self._parse_quote(quote_data)
+
                 return SpiderResult(
-                    success=False,
-                    message=f"请求失败，状态码：{response.status}"
+                    success=True,
+                    data=result_data,
+                    message=f"成功获取 {params.stock_code} 的行情报价数据"
                 )
-
-            # 解析响应
-            data = await response.json()
-
-            # 检查返回状态
-            if data.get("rc") != 0:
-                return SpiderResult(
-                    success=False,
-                    message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                )
-
-            # 检查是否有数据 (新API直接返回data对象)
-            quote_data = data.get("data", {})
-            if not quote_data or not isinstance(quote_data, dict):
-                return SpiderResult(
-                    success=False,
-                    message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确"
-                )
-
-            # 解析数据
-            result_data = self._parse_quote(quote_data)
-
-            return SpiderResult(
-                success=True,
-                data=result_data,
-                message=f"成功获取 {params.stock_code} 的行情报价数据"
-            )
 
         except Exception as e:
             return SpiderResult(
                 success=False,
                 message=f"爬取失败：{str(e)}"
             )
-        finally:
-            await page.close()
-            await context.close()
 
     def _parse_quote(self, item: dict) -> dict:
         """

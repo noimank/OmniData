@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_qr_login import BaseQRLogin, QRCode
-from .browser_pool import BrowserPool, get_browser_pool
+from .browser_context_pool import BrowserContextPool, get_browser_context_pool
 from .exceptions import LoginNotFoundError, LoginRegistrationError
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 class LoginRegister:
     """登录类注册器"""
 
-    def __init__(self, browser_pool: BrowserPool | None = None):
+    def __init__(self, browser_context_pool: BrowserContextPool | None = None):
         self._data_sources_dir = Path(__file__).parent.parent.joinpath("data_sources")
-        self._browser_pool = browser_pool
+        self._browser_context_pool = browser_context_pool
         self._logins: dict[str, type[BaseQRLogin]] = {}
         self._instances: dict[str, BaseQRLogin] = {}
         self._is_initialized = False
@@ -41,8 +41,8 @@ class LoginRegister:
         if self._is_initialized:
             return
 
-        if self._browser_pool is None:
-            self._browser_pool = await get_browser_pool()
+        if self._browser_context_pool is None:
+            self._browser_context_pool = await get_browser_context_pool()
 
         await self._discover_logins()
         self._is_initialized = True
@@ -187,7 +187,7 @@ class LoginRegister:
             raise LoginNotFoundError(f"Login '{login_name}' not found")
 
         login_class = self._logins[login_name]
-        instance = login_class(browser_pool=self._browser_pool)
+        instance = login_class(browser_context_pool=self._browser_context_pool)
         self._instances[login_name] = instance
 
         return instance
@@ -289,7 +289,7 @@ _login_register: LoginRegister | None = None
 _register_lock: asyncio.Lock | None = None
 
 
-async def get_login_register(browser_pool: BrowserPool | None = None) -> LoginRegister:
+async def get_login_register(browser_context_pool: BrowserContextPool | None = None) -> LoginRegister:
     global _login_register, _register_lock
 
     if _register_lock is None:
@@ -297,7 +297,7 @@ async def get_login_register(browser_pool: BrowserPool | None = None) -> LoginRe
 
     async with _register_lock:
         if _login_register is None:
-            _login_register = LoginRegister(browser_pool)
+            _login_register = LoginRegister(browser_context_pool)
             await _login_register.initialize()
 
         return _login_register

@@ -55,62 +55,56 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            # 构建请求参数
-            request_params = {
-                "fltt": "2",
-                "secids": params.secid,
-                "fields": self.FIELDS,
-                "ut": "b2884a393a59ad64002292a3e90d46a5",
-            }
+            async with self.new_page("eastmoney") as page:
+                # 构建请求参数
+                request_params = {
+                    "fltt": "2",
+                    "secids": params.secid,
+                    "fields": self.FIELDS,
+                    "ut": "b2884a393a59ad64002292a3e90d46a5",
+                }
 
-            # 发送请求
-            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                # 发送请求
+                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-            if response.status != 200:
+                if response.status != 200:
+                    return SpiderResult(
+                        success=False,
+                        message=f"请求失败，状态码：{response.status}"
+                    )
+
+                # 解析响应
+                data = await response.json()
+
+                # 检查返回状态
+                if data.get("rc") != 0:
+                    return SpiderResult(
+                        success=False,
+                        message=f"获取数据失败：{data.get('msg', '未知错误')}"
+                    )
+
+                # 检查是否有数据
+                diff_data = data.get("data", {}).get("diff", [])
+                if not diff_data:
+                    return SpiderResult(
+                        success=False,
+                        message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确"
+                    )
+
+                # 解析数据
+                result_data = self._parse_fund_flow(diff_data[0], params)
+
                 return SpiderResult(
-                    success=False,
-                    message=f"请求失败，状态码：{response.status}"
+                    success=True,
+                    data=result_data,
+                    message=f"成功获取 {params.secid} 的资金流向数据"
                 )
-
-            # 解析响应
-            data = await response.json()
-
-            # 检查返回状态
-            if data.get("rc") != 0:
-                return SpiderResult(
-                    success=False,
-                    message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                )
-
-            # 检查是否有数据
-            diff_data = data.get("data", {}).get("diff", [])
-            if not diff_data:
-                return SpiderResult(
-                    success=False,
-                    message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确"
-                )
-
-            # 解析数据
-            result_data = self._parse_fund_flow(diff_data[0], params)
-
-            return SpiderResult(
-                success=True,
-                data=result_data,
-                message=f"成功获取 {params.secid} 的资金流向数据"
-            )
-
         except Exception as e:
             return SpiderResult(
                 success=False,
                 message=f"爬取失败：{str(e)}"
             )
-        finally:
-            await page.close()
-            await context.close()
 
     def _parse_fund_flow(self, item: dict, params: RealtimeStockFundFlowParams) -> dict:
         """

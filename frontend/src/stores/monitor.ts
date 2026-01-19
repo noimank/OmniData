@@ -1,29 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/monitor'
-import type { BrowserPoolStats, SpiderStats, SystemStats } from '@/api/types'
+import type { BrowserContextPoolStats, SystemStats } from '@/api/types'
 
 export const useMonitorStore = defineStore('monitor', () => {
-  const browserPool = ref<BrowserPoolStats | null>(null)
-  const spiderStats = ref<SpiderStats | null>(null)
+  const contextPool = ref<BrowserContextPoolStats | null>(null)
   const systemResource = ref<SystemStats | null>(null)
   const loading = ref<boolean>(false)
 
-  // 获取浏览器池状态
-  const fetchBrowserPool = async () => {
+  // 获取浏览器上下文池状态
+  const fetchContextPool = async () => {
     try {
-      browserPool.value = await api.getBrowserPool()
+      contextPool.value = await api.getBrowserContextPool()
     } catch (error) {
-      console.error('Failed to fetch browser pool stats:', error)
-    }
-  }
-
-  // 获取爬虫统计
-  const fetchSpiderStats = async () => {
-    try {
-      spiderStats.value = await api.getSpiderStats()
-    } catch (error) {
-      console.error('Failed to fetch spider stats:', error)
+      console.error('Failed to fetch context pool stats:', error)
     }
   }
 
@@ -41,8 +31,7 @@ export const useMonitorStore = defineStore('monitor', () => {
     loading.value = true
     try {
       await Promise.all([
-        fetchBrowserPool(),
-        fetchSpiderStats(),
+        fetchContextPool(),
         fetchSystemResource()
       ])
     } finally {
@@ -51,12 +40,10 @@ export const useMonitorStore = defineStore('monitor', () => {
   }
 
   return {
-    browserPool,
-    spiderStats,
+    contextPool,
     systemResource,
     loading,
-    fetchBrowserPool,
-    fetchSpiderStats,
+    fetchContextPool,
     fetchSystemResource,
     fetchAll
   }

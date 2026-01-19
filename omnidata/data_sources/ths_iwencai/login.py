@@ -25,7 +25,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
 
         该方法会定期被调用以刷新登录状态。
         """
-        context = await self.get_context_simple("ths_iwencai")
+        context = await self.browser_context_pool.get_context("ths_iwencai")
         page = await context.new_page()
         try:
             login_state = await self.is_login()
@@ -40,7 +40,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             logger.error(f"Failed to refresh login state: {e}")
         finally:
             await page.close()
-            await context.close()
+            context = None
 
     async def get_qrcode_types(self) -> list:
         """返回支持的二维码类型"""
@@ -83,7 +83,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         await self.close()
 
         try:
-            self._qr_context = await self.get_context_simple("ths_iwencai")
+            self._qr_context = await self.browser_context_pool.get_context("ths_iwencai")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://www.iwencai.com/unifiedwap/home/index"
 
@@ -155,7 +155,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         # 确保资源关闭，每次调用该函数都是新的操作
         await self.close()
         try:
-            self._qr_context = await self.get_context_simple("ths_iwencai")
+            self._qr_context = await self.browser_context_pool.get_context("ths_iwencai")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://www.iwencai.com/unifiedwap/home/index"
 
@@ -252,25 +252,17 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         Returns:
             是否已登录
         """
-        context = await self.get_context_simple("ths_iwencai")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await self.filter_file_load(page, "media")
-            await page.goto("https://www.iwencai.com/unifiedwap/home/index")
-            await page.wait_for_load_state("domcontentloaded")
+            async with self.new_page("ths_iwencai") as page:
+                await self.filter_file_load(page, "media")
+                await page.goto("https://www.iwencai.com/unifiedwap/home/index")
+                await page.wait_for_load_state("domcontentloaded", timeout=6000)
 
-            # 检查是否登录 - 等待登录成功标志元素
-            await page.wait_for_selector(".login-box .user-photo", state="visible", timeout=800)
+                # 检查是否登录 - 等待登录成功标志元素
+                await page.wait_for_selector(".login-box .user-photo", state="visible", timeout=800)
 
-            return QRLoginState(status="success", message="已登录同花顺问财")
-
+                return QRLoginState(status="success", message="已登录同花顺问财")
         except Exception as e:
             logger.debug(f"Failed to check ths_iwencai login status: {e}")
             return QRLoginState(status="not_logged_in", message="未登录同花顺问财")
-
-        finally:
-            await page.close()
-            await context.close()
-
 

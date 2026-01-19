@@ -23,7 +23,7 @@ from omnidata.core.exceptions import OmniDataError
 from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
 from omnidata.api.routers.spider_audit import router as spider_audit_router
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
-from omnidata.core import get_browser_pool, get_login_register, get_spider_register
+from omnidata.core import get_browser_context_pool, get_login_register, get_spider_register
 from omnidata.database import init_db
 from omnidata.utils import close_redis
 
@@ -45,16 +45,16 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized")
 
-        # 初始化浏览器池
-        browser_pool = await get_browser_pool()
-        logger.info("Browser pool initialized")
+        # 初始化浏览器上下文池
+        browser_context_pool = await get_browser_context_pool()
+        logger.info("Browser context pool initialized")
 
         # 初始化爬虫注册器
-        spider_reg = await get_spider_register(browser_pool=browser_pool)
+        spider_reg = await get_spider_register(browser_context_pool=browser_context_pool)
         logger.info(f"Spider register initialized with {spider_reg.spider_count} spiders")
 
         # 初始化登录注册器
-        login_reg = await get_login_register(browser_pool=browser_pool)
+        login_reg = await get_login_register(browser_context_pool=browser_context_pool)
         logger.info(f"Login register initialized with {login_reg.login_count} logins")
 
         # 恢复已激活的 MCP 服务
@@ -160,7 +160,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error cleaning up MCP services: {e}")
 
-        from omnidata.core.browser_pool import close_browser_pool
+        from omnidata.core.browser_context_pool import close_browser_context_pool
         from omnidata.core.login_register import close_login_register
         from omnidata.core.spider_register import close_spider_register
 
@@ -182,11 +182,11 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error closing spider register: {e}")
 
-        # 阶段 4: 关闭浏览器池
+        # 阶段 4: 关闭浏览器上下文池
         try:
-            await close_browser_pool()
+            await close_browser_context_pool()
         except Exception as e:
-            logger.error(f"Error closing browser pool: {e}")
+            logger.error(f"Error closing browser context pool: {e}")
 
         # 阶段 5: 关闭 Redis
         try:

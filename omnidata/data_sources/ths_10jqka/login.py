@@ -23,7 +23,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
 
         该方法会定期被调用以刷新登录状态。
         """
-        context = await self.get_context_simple("ths_10jqka")
+        context = await self.browser_context_pool.get_context("ths_10jqka")
         page = await context.new_page()
         try:
             login_state = await self.is_login()
@@ -38,7 +38,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             logger.error(f"Failed to refresh login state: {e}")
         finally:
             await page.close()
-            await context.close()
+            context = None
 
     async def get_qrcode_types(self) -> list:
         """返回支持的二维码类型"""
@@ -93,7 +93,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             )
 
         try:
-            self._qr_context = await self.get_context_simple("ths_10jqka")
+            self._qr_context = await self.browser_context_pool.get_context("ths_10jqka")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://upass.10jqka.com.cn/login"
 
@@ -155,7 +155,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         await self.close()
 
         try:
-            self._qr_context = await self.get_context_simple("ths_10jqka")
+            self._qr_context = await self.browser_context_pool.get_context("ths_10jqka")
             self._qr_page = await self._qr_context.new_page()
             base_url = "https://upass.10jqka.com.cn/login"
 
@@ -242,26 +242,20 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         Returns:
             是否已登录
         """
-        context = await self.get_context_simple("ths_10jqka")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await self.filter_file_load(page, "media")
-            #去修改密码页面，每登录就是会跳回登录界面
-            await page.goto("https://upass.10jqka.com.cn/bind/")
+            async with self.new_page("ths_10jqka") as page:
+                await self.filter_file_load(page, "media")
+                #去修改密码页面，每登录就是会跳回登录界面
+                await page.goto("https://upass.10jqka.com.cn/bind/")
 
-            await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                await page.wait_for_load_state("domcontentloaded", timeout=3000)
 
-            # 已经跳转回登录界面了的话直接返回
-            if 'login' in page.url:
-                return QRLoginState(status="not_logged_in", message="未登录同花顺10jqka")
+                # 已经跳转回登录界面了的话直接返回
+                if 'login' in page.url:
+                    return QRLoginState(status="not_logged_in", message="未登录同花顺10jqka")
 
-            return QRLoginState(status="success", message="已登录同花顺10jqka网站")
+                return QRLoginState(status="success", message="已登录同花顺10jqka网站")
 
         except Exception as e:
             logger.error(f"Failed to check 10jqka login status: {e}")
             return QRLoginState(status="not_logged_in", message=f"未登录同花顺10jqka")
-
-        finally:
-            await page.close()
-            await context.close()

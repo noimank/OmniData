@@ -101,122 +101,115 @@ class StockBillboardSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
+            async with self.new_page("eastmoney") as page:
+                # 格式化日期
+                start_date_formatted = self._format_date(params.start_date)
+                end_date_formatted = self._format_date(params.end_date)
 
-            # 格式化日期
-            start_date_formatted = self._format_date(params.start_date)
-            end_date_formatted = self._format_date(params.end_date)
+                # 构建 filter 参数
+                # 格式：(SECURITY_CODE="601138")(TRADE_DATE>='2025-01-17')
+                filter_str = f'(SECURITY_CODE="{params.stock_code}")(TRADE_DATE>=\'{start_date_formatted}\')(TRADE_DATE<=\'{end_date_formatted}\')'
 
-            # 构建 filter 参数
-            # 格式：(SECURITY_CODE="601138")(TRADE_DATE>='2025-01-17')
-            filter_str = f'(SECURITY_CODE="{params.stock_code}")(TRADE_DATE>=\'{start_date_formatted}\')(TRADE_DATE<=\'{end_date_formatted}\')'
-
-            # 构建请求参数
-            request_params = {
-                "callback": self._generate_jsonp_callback(),
-                "sortColumns": "TRADE_DATE,TRADE_DATE",
-                "sortTypes": "-1,-1",  # 降序
-                # "pageSize": str(params.page_size), 不需要
-                "pageNumber": "1",
-                "reportName": "RPT_BILLBOARD_PERFORMANCEHIS",
-                "columns": "ALL",
-                "filter": filter_str,
-                "source": "WEB",
-                "client": "WEB",
-            }
+                # 构建请求参数
+                request_params = {
+                    "callback": self._generate_jsonp_callback(),
+                    "sortColumns": "TRADE_DATE,TRADE_DATE",
+                    "sortTypes": "-1,-1",  # 降序
+                    # "pageSize": str(params.page_size), 不需要
+                    "pageNumber": "1",
+                    "reportName": "RPT_BILLBOARD_PERFORMANCEHIS",
+                    "columns": "ALL",
+                    "filter": filter_str,
+                    "source": "WEB",
+                    "client": "WEB",
+                }
 
 
-            # 发送请求
-            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                # 发送请求
+                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-            if response.status != 200:
-                return SpiderResult(
-                    success=False,
-                    message=f"请求失败，状态码：{response.status}"
-                )
+                if response.status != 200:
+                    return SpiderResult(
+                        success=False,
+                        message=f"请求失败，状态码：{response.status}"
+                    )
 
-            # 获取响应文本
-            response_text = await response.text()
+                # 获取响应文本
+                response_text = await response.text()
 
-            # 移除 JSONP 回调函数
-            # 响应格式：jQuery{random}_{timestamp}({...});
-            # 例如：jQuery112304786753408034462_1768642295467({...});
-            json_match = re.search(r'jQuery[\d_]+\((.*)\);?', response_text)
-            if json_match:
-                json_str = json_match.group(1)
-            elif response_text.startswith("jQuery"):
-                # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                start_idx = response_text.find('(')
-                end_idx = response_text.rfind(')')
-                if start_idx != -1 and end_idx != -1:
-                    json_str = response_text[start_idx + 1:end_idx]
+                # 移除 JSONP 回调函数
+                # 响应格式：jQuery{random}_{timestamp}({...});
+                # 例如：jQuery112304786753408034462_1768642295467({...});
+                json_match = re.search(r'jQuery[\d_]+\((.*)\);?', response_text)
+                if json_match:
+                    json_str = json_match.group(1)
+                elif response_text.startswith("jQuery"):
+                    # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
+                    start_idx = response_text.find('(')
+                    end_idx = response_text.rfind(')')
+                    if start_idx != -1 and end_idx != -1:
+                        json_str = response_text[start_idx + 1:end_idx]
+                    else:
+                        json_str = response_text
                 else:
                     json_str = response_text
-            else:
-                json_str = response_text
 
-            # 解析 JSON
-            import json
-            try:
-                data = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                return SpiderResult(
-                    success=False,
-                    message=f"解析响应数据失败：{str(e)}"
-                )
+                # 解析 JSON
+                import json
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    return SpiderResult(
+                        success=False,
+                        message=f"解析响应数据失败：{str(e)}"
+                    )
 
-            # 检查返回数据
-            result = data.get("result", {})
-            if not result or not result.get("data"):
-                return SpiderResult(
-                    success=False,
-                    message=f"未找到股票代码 {params.stock_code} 的龙虎榜数据，该股票可能未上过龙虎榜"
-                )
+                # 检查返回数据
+                result = data.get("result", {})
+                if not result or not result.get("data"):
+                    return SpiderResult(
+                        success=False,
+                        message=f"未找到股票代码 {params.stock_code} 的龙虎榜数据，该股票可能未上过龙虎榜"
+                    )
 
-            # 解析数据
-            billboard_data = result.get("data", [])
-            parsed_data = self._parse_billboard_data(billboard_data)
+                # 解析数据
+                billboard_data = result.get("data", [])
+                parsed_data = self._parse_billboard_data(billboard_data)
 
-            # 转换为 DataFrame 并按日期升序排列（最早的在前）
-            df = pd.DataFrame(parsed_data)
-            if not df.empty:
-                df = df.sort_values("交易日期", ascending=True).reset_index(drop=True)
+                # 转换为 DataFrame 并按日期升序排列（最早的在前）
+                df = pd.DataFrame(parsed_data)
+                if not df.empty:
+                    df = df.sort_values("交易日期", ascending=True).reset_index(drop=True)
 
-            # 获取股票名称
-            stock_name = parsed_data[0].get("股票名称", params.stock_code) if parsed_data else params.stock_code
+                # 获取股票名称
+                stock_name = parsed_data[0].get("股票名称", params.stock_code) if parsed_data else params.stock_code
 
-            # 格式化输出
-            if params.data_format == "markdown":
+                # 格式化输出
+                if params.data_format == "markdown":
+                    return SpiderResult(
+                        success=True,
+                        data=df.to_markdown() if not df.empty else [],
+                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
+                    )
+                if params.data_format == "string":
+                    return SpiderResult(
+                        success=True,
+                        data=df.to_string() if not df.empty else [],
+                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
+                    )
+
+                # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
-                    data=df.to_markdown() if not df.empty else [],
+                    data=df.to_dict(orient="records") if not df.empty else [],
                     message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
                 )
-            if params.data_format == "string":
-                return SpiderResult(
-                    success=True,
-                    data=df.to_string() if not df.empty else [],
-                    message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
-                )
-
-            # 默认返回 dict 格式
-            return SpiderResult(
-                success=True,
-                data=df.to_dict(orient="records") if not df.empty else [],
-                message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
-            )
-
         except Exception as e:
             return SpiderResult(
                 success=False,
                 message=f"爬取失败：{str(e)}"
             )
-        finally:
-            await page.close()
-            await context.close()
 
     def _parse_billboard_data(self, billboard_data: list) -> list[dict]:
         """

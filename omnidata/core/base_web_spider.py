@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .base_helper import BaseHelper
-from .browser_pool import BrowserPool
+from .browser_context_pool import BrowserContextPool
 from .exceptions import SpiderError, SpiderValidationError
 
 logger = logging.getLogger(__name__)
@@ -74,8 +74,8 @@ class BaseWebSpider(BaseHelper):
             author = "我"
 
             async def crawl(self, params: MyParams) -> SpiderResult:
-                # 通过 browser_pool.get_context() 获取上下文
-                async with self.browser_pool.get_context() as context:
+                # 通过 browser_context_pool.get_context() 获取上下文
+                async with self.browser_context_pool.get_context() as context:
                     page = await context.new_page()
                     try:
                         await page.goto(params.url)
@@ -92,10 +92,10 @@ class BaseWebSpider(BaseHelper):
 
     属性说明:
         - self.config: 爬虫配置对象
-        - self.browser_pool: 浏览器池实例
+        - self.browser_context_pool: 浏览器上下文池实例
 
     可用方法:
-        - async with self.browser_pool.get_context(namespace="xxx", use_stealth=True): 获取浏览器上下文
+        - async with self.browser_context_pool.get_context(namespace="xxx", use_stealth=True): 获取浏览器上下文
         - 用户需自行从 context 创建 page: page = await context.new_page()
     """
 
@@ -112,17 +112,17 @@ class BaseWebSpider(BaseHelper):
 
     def __init__(
         self,
-        browser_pool: BrowserPool | None = None,
+        browser_context_pool: BrowserContextPool | None = None,
         config: Any | None = None,
     ):
         """
         初始化爬虫
 
         Args:
-            browser_pool: 浏览器池实例
+            browser_context_pool: 浏览器上下文池实例
             config: 爬虫配置
         """
-        super().__init__(browser_pool, config)
+        super().__init__(browser_context_pool, config)
 
     @abstractmethod
     async def crawl(self, params: Any) -> SpiderResult:

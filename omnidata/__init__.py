@@ -6,8 +6,8 @@ __version__ = "0.1.0"
 
 from omnidata.core import (
     BaseWebSpider,
-    BrowserPool,
-    get_browser_pool,
+    BrowserContextPool,
+    get_browser_context_pool,
     get_spider_register,
     spider_register,
 )
@@ -15,8 +15,8 @@ from omnidata.core import (
 __all__ = [
     "__version__",
     "BaseWebSpider",
-    "BrowserPool",
-    "get_browser_pool",
+    "BrowserContextPool",
+    "get_browser_context_pool",
     "spider_register",
     "get_spider_register",
 ]

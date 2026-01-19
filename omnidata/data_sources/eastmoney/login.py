@@ -23,7 +23,7 @@ class EastmoneyQRLogin(BaseQRLogin):
 
         该方法会定期被调用以刷新登录状态。
         """
-        context = await self.get_context_simple("eastmoney")
+        context = await self.browser_context_pool.get_context("eastmoney")
         page = await context.new_page()
         try:
             login_state = await self.is_login()
@@ -38,13 +38,13 @@ class EastmoneyQRLogin(BaseQRLogin):
             logger.error(f"Failed to refresh login state: {e}")
         finally:
             await page.close()
-            await context.close()
+            context = None
 
     async def get_qrcode_types(self) -> list:
         return ["微信", "东方财富官方"]
 
     async def get_eastmoney_qr_code(self) -> QRCode:
-        self._qr_context = await self.get_context_simple()
+        self._qr_context = await self.browser_context_pool.get_context("eastmoney")
         self._qr_page = await self._qr_context.new_page()
         base_url = "https://passport2.eastmoney.com/pub/login"
 
@@ -70,7 +70,7 @@ class EastmoneyQRLogin(BaseQRLogin):
             return QRCode(url="", qr_type="东方财富官方", success=False, message=f"东方财富官方二维码失败: {e}")
 
     async def get_weixin_qr_code(self) -> QRCode:
-        self._qr_context = await self.get_context_simple()
+        self._qr_context = await self.browser_context_pool.get_context("eastmoney")
         self._qr_page = await self._qr_context.new_page()
         base_url = "https://passport2.eastmoney.com/pub/login"
         try:
@@ -167,33 +167,26 @@ class EastmoneyQRLogin(BaseQRLogin):
         Returns:
             是否已登录
         """
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await self.filter_file_load(page, "media")
-            await page.goto("https://passport2.eastmoney.com/pub/BasicInfo")
-            await page.wait_for_load_state("domcontentloaded", timeout=1500)
+            async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, "media")
+                await page.goto("https://passport2.eastmoney.com/pub/BasicInfo")
+                await page.wait_for_load_state("domcontentloaded", timeout=1500)
 
-            # 已经跳转回登录界面了的话直接返回
-            if "login" in page.url:
+                # 已经跳转回登录界面了的话直接返回
+                if "login" in page.url:
+                    return QRLoginState(status="not_logged_in", message="未登录东方财富")
+
+                # 检查是否登录
+                await page.locator("#pass_tab").wait_for(timeout=350)
+
+                flag_text = await page.locator("#pass_tab").inner_text()
+
+                for text in ["基本资料", "设置头像", "账户安全", "修改密码", "安全中心"]:
+                    if text in flag_text:
+                        return QRLoginState(status="success", message="已登录东方财富")
+
+                return QRLoginState(status="not_logged_in", message="未登录东方财富")
+        except Exception as e:
                 return QRLoginState(status="not_logged_in", message="未登录东方财富")
 
-            # 检查是否登录
-            await page.locator("#pass_tab").wait_for(timeout=350)
-
-            flag_text = await page.locator("#pass_tab").inner_text()
-
-            for text in ["基本资料", "设置头像", "账户安全", "修改密码", "安全中心"]:
-                if text in flag_text:
-                    return QRLoginState(status="success", message="已登录东方财富")
-
-            return QRLoginState(status="not_logged_in", message="未登录东方财富")
-
-        except Exception as e:
-            # logger.info(f"Failed to check eastmoney login status: {e}")
-            return QRLoginState(status="not_logged_in", message=f"未登录东方财富")
-
-        finally:
-            await page.close()
-            await context.close()

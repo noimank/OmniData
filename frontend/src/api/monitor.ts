@@ -1,18 +1,12 @@
 import request from './request'
 import type {
-  BrowserPoolStats,
-  SpiderStats,
+  BrowserContextPoolStats,
   SystemStats
 } from './types'
 
-// 获取浏览器池状态
-export const getBrowserPool = () => {
-  return request.get<BrowserPoolStats>('/v1/monitor/browser-pool')
-}
-
-// 获取爬虫统计
-export const getSpiderStats = () => {
-  return request.get<SpiderStats>('/v1/monitor/spiders')
+// 获取浏览器上下文池状态
+export const getBrowserContextPool = () => {
+  return request.get<BrowserContextPoolStats>('/v1/monitor/browser-pool')
 }
 
 // 获取系统资源状态

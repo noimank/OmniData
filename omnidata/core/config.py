@@ -12,7 +12,6 @@ class BrowserConfig:
     """浏览器配置"""
 
     headless: bool = True
-    pool_initial_size: int = 2  # 初始化时创建的浏览器数量
 
     # Playwright 超时配置（毫秒）
     default_timeout: int = 8000  # 统一操作超时时间 8 秒
@@ -69,6 +68,10 @@ class BrowserConfig:
     ignore_default_args: list[str] = field(
         default_factory=lambda: ["--enable-automation", "--enable-blink-features=IdleDetection"]
     )
+
+    # Context Pool 配置
+    context_pool_max_size: int = 10  # 最多缓存 context 数
+    context_idle_timeout: int = 300  # Context 空闲超时（秒）
 
 
 @dataclass

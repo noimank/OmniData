@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_web_spider import BaseWebSpider
-from .browser_pool import BrowserPool, get_browser_pool
+from .browser_context_pool import BrowserContextPool, get_browser_context_pool
 from .exceptions import SpiderNotFoundError, SpiderRegistrationError
 
 logger = logging.getLogger(__name__)
@@ -29,16 +29,16 @@ class SpiderRegister:
 
     def __init__(
         self,
-        browser_pool: BrowserPool | None = None,
+        browser_context_pool: BrowserContextPool | None = None,
     ):
         """
         初始化爬虫注册器
 
         Args:
-            browser_pool: 浏览器池实例
+            browser_pool: 浏览器上下文池实例
         """
         self._data_sources_dir = Path(__file__).parent.parent.joinpath("data_sources")
-        self._browser_pool = browser_pool
+        self._browser_context_pool = browser_context_pool
         self._spiders: dict[str, type[BaseWebSpider]] = {}
         self._instances: dict[str, BaseWebSpider] = {}
         self._is_initialized = False
@@ -48,8 +48,8 @@ class SpiderRegister:
         if self._is_initialized:
             return
 
-        if self._browser_pool is None:
-            self._browser_pool = await get_browser_pool()
+        if self._browser_context_pool is None:
+            self._browser_context_pool = await get_browser_context_pool()
 
         await self._discover_spiders()
         self._is_initialized = True
@@ -210,7 +210,7 @@ class SpiderRegister:
         spider_class = self.get_spider_class(spider_name)
 
         # 创建实例并注入浏览器池
-        instance = spider_class(browser_pool=self._browser_pool)
+        instance = spider_class(browser_context_pool=self._browser_context_pool)
         self._instances[spider_name] = instance
 
         return instance
@@ -310,13 +310,13 @@ _register_lock: "asyncio.Lock" = None
 
 
 async def get_spider_register(
-    browser_pool: BrowserPool | None = None,
+    browser_context_pool: BrowserContextPool | None = None,
 ) -> SpiderRegister:
     """
     获取全局爬虫注册器实例
 
     Args:
-        browser_pool: 浏览器池实例
+        browser_context_pool: 浏览器上下文池实例
 
     Returns:
         SpiderRegister: 爬虫注册器实例
@@ -328,7 +328,7 @@ async def get_spider_register(
 
     async with _register_lock:
         if _spider_register is None:
-            _spider_register = SpiderRegister(browser_pool)
+            _spider_register = SpiderRegister(browser_context_pool)
             await _spider_register.initialize()
 
         return _spider_register

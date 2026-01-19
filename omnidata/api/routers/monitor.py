@@ -8,10 +8,10 @@ import time
 from datetime import datetime
 
 from fastapi import APIRouter
-from psutil import Process, virtual_memory
+from psutil import Process
 
 from omnidata.api.responses import success_response, error_response
-from omnidata.core import get_browser_pool, spider_register
+from omnidata.core import get_browser_context_pool
 from omnidata.utils import get_redis
 
 logger = logging.getLogger(__name__)
@@ -30,17 +30,9 @@ async def get_browser_pool_stats():
     Returns:
         浏览器池统计信息
     """
-    from omnidata.core.config import settings
-
     try:
-        pool = await get_browser_pool()
+        pool = await get_browser_context_pool()
         stats = pool.get_stats()
-
-        # 添加配置信息
-        stats["config"] = {
-            "pool_initial_size": settings.browser.pool_initial_size,
-            "headless": settings.browser.headless,
-        }
 
         return success_response(stats, "获取浏览器池状态成功")
     except Exception as e:
@@ -48,27 +40,59 @@ async def get_browser_pool_stats():
         return error_response(f"获取浏览器池状态失败: {str(e)}")
 
 
-@router.get("/spiders")
-async def get_spider_stats():
+@router.get("/context-pool")
+async def get_context_pool_stats():
     """
-    获取爬虫统计信息
+    获取 Context Pool 状态
 
     Returns:
-        爬虫统计信息
+        Context Pool 统计信息
     """
     try:
-        register = spider_register()
-        spiders = register.list_spider_info()
+        pool = await get_browser_context_pool()
+        stats = pool.get_stats()
 
-        enabled_count = sum(1 for s in spiders if s.get("enabled", True))
-
-        return success_response(
-            {"total_count": len(spiders), "enabled_count": enabled_count, "spiders": spiders},
-            "获取爬虫统计成功",
-        )
+        return success_response(stats, "获取 Context Pool 状态成功")
     except Exception as e:
-        logger.error(f"Error getting spider stats: {e}")
-        return error_response(f"获取爬虫统计失败: {str(e)}")
+        logger.error(f"Error getting context pool stats: {e}")
+        return error_response(f"获取 Context Pool 状态失败: {str(e)}")
+
+
+@router.get("/performance")
+async def get_performance_metrics():
+    """
+    获取性能指标
+
+    Returns:
+        性能指标信息
+    """
+    try:
+        pool = await get_browser_context_pool()
+        stats = pool.get_stats()
+
+        # 提取关键性能指标
+        performance = {
+            "browser": {
+                "browser_count": stats.get("browser_count", 0),
+            },
+            "context": {
+                "total_contexts": stats.get("context_count", 0),
+                "checked_out_contexts": stats.get("checked_out_contexts", 0),
+                "reuse_rate": stats.get("reuse_rate", 0),
+                "total_contexts_created": stats.get("total_contexts_created", 0),
+                "total_contexts_reused": stats.get("total_contexts_reused", 0),
+                "total_contexts_evicted": stats.get("total_contexts_evicted", 0),
+            },
+            "health": {
+                "total_contexts_closed": stats.get("total_contexts_closed", 0),
+            },
+        }
+
+        return success_response(performance, "获取性能指标成功")
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}")
+        return error_response(f"获取性能指标失败: {str(e)}")
+
 
 
 @router.get("/system")

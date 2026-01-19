@@ -7,16 +7,16 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 import pytest
 
-from omnidata.core.browser_pool import BrowserPool
+from omnidata.core.browser_context_pool import BrowserContextPool
 from omnidata.core import get_login_register, login_register
 from omnidata.core.config import settings
 
 
 @pytest.fixture
 async def browser_pool():
-    """创建浏览器池实例, 完成环境初始"""
+    """创建浏览器上下文池实例, 完成环境初始"""
     # 关闭无头模式
-    pool = BrowserPool(settings.browser)
+    pool = BrowserContextPool(settings.browser)
     await pool.initialize()
     await get_login_register(pool)
     yield pool

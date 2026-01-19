@@ -54,77 +54,72 @@ class ConceptSectorFlowSpider(BaseWebSpider):
     }
 
     async def crawl(self, params: ConceptSectorFlowParams) -> SpiderResult:
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
-            await page.goto(self.PAGE_URL)
-            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            async with self.new_page("eastmoney") as page:
+                await page.goto(self.PAGE_URL)
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
-            # 获取当前 rank_type 的配置
-            config = self.RANK_TYPE_CONFIG[params.rank_type]
+                # 获取当前 rank_type 的配置
+                config = self.RANK_TYPE_CONFIG[params.rank_type]
 
-            # 获取全部数据
-            all_items = []
-            page_num = 1
-            page_size = 50
+                # 获取全部数据
+                all_items = []
+                page_num = 1
+                page_size = 50
 
-            current_num = 0
+                current_num = 0
 
-            while True:
-                response = await page.request.get(self.API_URL, params={
-                    "fid": config["fid"],
-                    "po": "1",  # 1=降序，-1=升序
-                    "pz": str(page_size),
-                    "pn": str(page_num),
-                    "np": "1",
-                    "fltt": "2",
-                    "invt": "2",
-                    "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                    "fs": "m:90+t:3",  # t:3 表示概念板块（行业板块是 t:2）
-                    "fields": config["fields"],
-                }, timeout=30000)
-                current_num += page_size
+                while True:
+                    response = await page.request.get(self.API_URL, params={
+                        "fid": config["fid"],
+                        "po": "1",  # 1=降序，-1=升序
+                        "pz": str(page_size),
+                        "pn": str(page_num),
+                        "np": "1",
+                        "fltt": "2",
+                        "invt": "2",
+                        "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
+                        "fs": "m:90+t:3",  # t:3 表示概念板块（行业板块是 t:2）
+                        "fields": config["fields"],
+                    }, timeout=30000)
+                    current_num += page_size
 
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("rc") == 0:
-                        diff = data.get("data", {}).get("diff", [])
-                        if not diff:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("rc") == 0:
+                            diff = data.get("data", {}).get("diff", [])
+                            if not diff:
+                                break
+                            all_items.extend(diff)
+                            if len(diff) < page_size:
+                                break
+                            page_num += 1
+                        else:
                             break
-                        all_items.extend(diff)
-                        if len(diff) < page_size:
-                            break
-                        page_num += 1
                     else:
                         break
-                else:
-                    break
-                if current_num >= params.limit:
-                    break
+                    if current_num >= params.limit:
+                        break
 
 
-            # 解析数据 - 根据 rank_type 动态生成字段
-            data_list = [self._parse_item(item, params.rank_type) for item in all_items[:params.limit]]
-            df = pd.DataFrame(data_list)
+                # 解析数据 - 根据 rank_type 动态生成字段
+                data_list = [self._parse_item(item, params.rank_type) for item in all_items[:params.limit]]
+                df = pd.DataFrame(data_list)
 
-            result_data = df.to_dict(orient="records")
-            if params.data_format == "markdown":
-                result_data = df.to_markdown()
-            elif params.data_format == "string":
-                result_data = df.to_string()
+                result_data = df.to_dict(orient="records")
+                if params.data_format == "markdown":
+                    result_data = df.to_markdown()
+                elif params.data_format == "string":
+                    result_data = df.to_string()
 
-            return SpiderResult(
-                success=True,
-                data=result_data,
-                message=f"成功获取 {params.rank_type} 排行 {len(data_list)} 条数据"
-            )
+                return SpiderResult(
+                    success=True,
+                    data=result_data,
+                    message=f"成功获取 {params.rank_type} 排行 {len(data_list)} 条数据"
+                )
 
         except Exception as e:
             return SpiderResult(success=False, message=str(e))
-        finally:
-            await page.close()
-            await context.close()
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
         def safe_float(v): return float(v) if v not in (None, "") else 0.0

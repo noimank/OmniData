@@ -11,7 +11,7 @@ from playwright.async_api import Page
 from pydantic import BaseModel, Field
 
 from .base_helper import BaseHelper
-from .browser_pool import BrowserPool
+from .browser_context_pool import BrowserContextPool
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class BaseQRLogin(BaseHelper):
 
             async def refresh_login_state(self) -> None:
                 # 重新保存登录状态到 Redis
-                await self.browser_pool.save_context_state(self._qr_context, "login:eastmoney")
+                await self.browser_context_pool.save_context_state(self._qr_context, "login:eastmoney")
 
             async def get_qrcode(self, qr_type: str) -> dict:
                 # 获取二维码，使用 self._qr_page 和 self._qr_context
@@ -76,8 +76,8 @@ class BaseQRLogin(BaseHelper):
     _qr_context: Any = None
     _qr_page: Page | None = None
 
-    def __init__(self, browser_pool: BrowserPool | None = None, config: Any | None = None):
-        super().__init__(browser_pool, config)
+    def __init__(self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None):
+        super().__init__(browser_context_pool, config)
 
     @abstractmethod
     async def refresh_login_state(self) -> None:
@@ -145,14 +145,17 @@ class BaseQRLogin(BaseHelper):
     async def close(self) -> None:
         """清理资源"""
 
-        if self._qr_page and not self._qr_page.is_closed():
-            await self._qr_page.close()
+        # 关闭 page
+        if self._qr_page:
+            try:
+                if not self._qr_page.is_closed():
+                    await self._qr_page.close()
+            except Exception:
+                pass  # page 可能已经被关闭
 
-        if self._qr_context:
-            await self._qr_context.close()
-
-        self._qr_context = None
         self._qr_page = None
+        # 不再引用context，但是不关闭
+        self._qr_context = None
 
     async def destroy(self) -> None:
         """销毁实例，清理浏览器资源

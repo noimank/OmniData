@@ -42,36 +42,45 @@ class ExampleSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        # 使用上下文管理器获取页面（推荐）
-        async with self.get_context() as context:
-            page = await context.new_page()
-            # 访问目标 URL
-            await page.goto(str(params.url))
+        # 方式1: 使用 get_context() - 不需要手动释放，由 ContextPool 自动管理
+        context = await self.get_context()
+        page = await context.new_page()
 
-            # 等待指定选择器
-            await page.wait_for_selector(params.wait_for_selector)
+        # 方式2: 使用 new_context() - 支持 async with，退出时自动释放
+        # async with self.new_context() as context:
+        #     page = await context.new_page()
 
-            # 提取页面信息
-            title = await page.title()
-            url = page.url
+        # 方式3: 使用 new_page() - 最简洁，自动管理 page 和 context
+        # async with self.new_page() as page:
+        #     pass
 
-            # 可选：截图
-            screenshot_data = None
-            if params.screenshot:
-                screenshot_bytes = await page.screenshot(full_page=False)
-                import base64
+        # 访问目标 URL
+        await page.goto(str(params.url))
 
-                screenshot_data = base64.b64encode(screenshot_bytes).decode("utf-8")
+        # 等待指定选择器
+        await page.wait_for_selector(params.wait_for_selector)
 
-            return SpiderResult(
-                success=True,
-                data={
-                    "title": title,
-                    "url": url,
-                    "screenshot": screenshot_data,
-                    "timestamp": self._get_timestamp(),
-                },
-            )
+        # 提取页面信息
+        title = await page.title()
+        url = page.url
+
+        # 可选：截图
+        screenshot_data = None
+        if params.screenshot:
+            screenshot_bytes = await page.screenshot(full_page=False)
+            import base64
+
+            screenshot_data = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+        return SpiderResult(
+            success=True,
+            data={
+                "title": title,
+                "url": url,
+                "screenshot": screenshot_data,
+                "timestamp": self._get_timestamp(),
+            },
+        )
 
     def _get_timestamp(self) -> str:
         """获取当前时间戳"""

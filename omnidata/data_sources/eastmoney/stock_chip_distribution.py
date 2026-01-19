@@ -222,109 +222,102 @@ class StockChipDistributionSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
+            async with self.new_page("eastmoney") as page:
+                # 判断市场ID
+                stock_code = params.stock_code
+                if stock_code.startswith("6") or stock_code.startswith("5"):
+                    market_id = "1"  # 上海
+                else:
+                    market_id = "0"  # 深圳
 
-            # 判断市场ID
-            stock_code = params.stock_code
-            if stock_code.startswith("6") or stock_code.startswith("5"):
-                market_id = "1"  # 上海
-            else:
-                market_id = "0"  # 深圳
+                secid = f"{market_id}.{stock_code}"
 
-            secid = f"{market_id}.{stock_code}"
+                # 构建 K 线请求参数
+                end_date = datetime.now().strftime("%Y%m%d")
+                request_params = {
+                    "fields1": "f1,f2,f3,f4,f5,f6",
+                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                    "ut": "b2884a393a59ad64002292a3e90d46a5",
+                    "klt": "101",  # 日线
+                    "fqt": self.ADJUST_TYPE_MAP[params.adjust_type],
+                    "secid": secid,
+                    "end": end_date,
+                    "lmt": str(params.kline_limit),
+                }
 
-            # 构建 K 线请求参数
-            end_date = datetime.now().strftime("%Y%m%d")
-            request_params = {
-                "fields1": "f1,f2,f3,f4,f5,f6",
-                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-                "ut": "b2884a393a59ad64002292a3e90d46a5",
-                "klt": "101",  # 日线
-                "fqt": self.ADJUST_TYPE_MAP[params.adjust_type],
-                "secid": secid,
-                "end": end_date,
-                "lmt": str(params.kline_limit),
-            }
+                # 发送 K 线请求
+                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-            # 发送 K 线请求
-            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                if response.status != 200:
+                    return SpiderResult(
+                        success=False,
+                        message=f"请求失败，状态码：{response.status}"
+                    )
 
-            if response.status != 200:
-                return SpiderResult(
-                    success=False,
-                    message=f"请求失败，状态码：{response.status}"
-                )
+                import json
+                response_text = await response.text()
+                data = json.loads(response_text)
 
-            import json
-            response_text = await response.text()
-            data = json.loads(response_text)
+                # 检查返回状态
+                if data.get("rc") != 0:
+                    return SpiderResult(
+                        success=False,
+                        message=f"获取数据失败：{data.get('rt', '未知错误')}"
+                    )
 
-            # 检查返回状态
-            if data.get("rc") != 0:
-                return SpiderResult(
-                    success=False,
-                    message=f"获取数据失败：{data.get('rt', '未知错误')}"
-                )
+                # 检查是否有数据
+                kline_data = data.get("data", {})
+                if not kline_data or not kline_data.get("klines"):
+                    return SpiderResult(
+                        success=False,
+                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确"
+                    )
 
-            # 检查是否有数据
-            kline_data = data.get("data", {})
-            if not kline_data or not kline_data.get("klines"):
-                return SpiderResult(
-                    success=False,
-                    message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确"
-                )
+                # 解析 K 线数据
+                kline_records = self._parse_klines(kline_data.get("klines", []))
 
-            # 解析 K 线数据
-            kline_records = self._parse_klines(kline_data.get("klines", []))
+                if len(kline_records) < 30:
+                    return SpiderResult(
+                        success=False,
+                        message=f"K线数据不足，至少需要30条数据，当前只有{len(kline_records)}条"
+                    )
 
-            if len(kline_records) < 30:
-                return SpiderResult(
-                    success=False,
-                    message=f"K线数据不足，至少需要30条数据，当前只有{len(kline_records)}条"
-                )
+                # 计算筹码分布
+                chip_data = self._calculate_chip_distribution(kline_records, len(kline_records))
 
-            # 计算筹码分布
-            chip_data = self._calculate_chip_distribution(kline_records, len(kline_records))
+                # 获取最近 N 天的数据
+                chip_data = chip_data.tail(params.days)
 
-            # 获取最近 N 天的数据
-            chip_data = chip_data.tail(params.days)
+                # 获取股票名称
+                stock_name = kline_data.get("name", params.stock_code)
+                adjust_name = self._get_adjust_name(params.adjust_type)
 
-            # 获取股票名称
-            stock_name = kline_data.get("name", params.stock_code)
-            adjust_name = self._get_adjust_name(params.adjust_type)
+                # 格式化输出
+                if params.data_format == "markdown":
+                    return SpiderResult(
+                        success=True,
+                        data=chip_data.to_markdown(),
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
+                    )
+                if params.data_format == "string":
+                    return SpiderResult(
+                        success=True,
+                        data=chip_data.to_string(),
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
+                    )
 
-            # 格式化输出
-            if params.data_format == "markdown":
+                # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
-                    data=chip_data.to_markdown(),
+                    data=chip_data.to_dict(orient="records"),
                     message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
                 )
-            if params.data_format == "string":
-                return SpiderResult(
-                    success=True,
-                    data=chip_data.to_string(),
-                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
-                )
-
-            # 默认返回 dict 格式
-            return SpiderResult(
-                success=True,
-                data=chip_data.to_dict(orient="records"),
-                message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
-            )
-
         except Exception as e:
             return SpiderResult(
                 success=False,
                 message=f"爬取失败：{str(e)}"
             )
-        finally:
-            await page.close()
-            await context.close()
 
     def _get_adjust_name(self, adjust_type: str) -> str:
         """获取复权类型显示名称"""

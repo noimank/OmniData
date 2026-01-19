@@ -54,147 +54,136 @@ class MarketFlowSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-
-        context = await self.get_context_simple("eastmoney")
-        page = await context.new_page()
         try:
-            await self.apply_anti_detection_scripts(page, "advanced")
+            async with self.new_page("eastmoney") as page:
+                # 用于存储拦截到的数据
+                captured_data = {}
 
-            # 用于存储拦截到的数据
-            captured_data = {}
+                # 拦截 API 请求
+                async def handle_route(route):
+                    """拦截并处理 API 请求"""
+                    try:
+                        url = route.request.url
+                        if "push2his.eastmoney.com/api/qt/stock/fflow/daykline/get" in url:
+                            # 获取响应数据
+                            response = await route.fetch()
+                            body = await response.body()
+                            try:
+                                captured_data["api_response"] = self._parse_jsonp(body)
+                            except Exception:
+                                captured_data["api_response"] = None
+                            # 继续请求，不中断页面正常加载
+                            await route.continue_()
+                            # await route.abort()
+                        else:
+                            await route.continue_()
+                    except Exception:
+                        # 出错时继续请求，避免影响页面加载
+                        await route.continue_()
 
-            # 拦截 API 请求
-            async def handle_route(route):
-                """拦截并处理 API 请求"""
+                # 设置路由拦截
+                await page.route("**/*", handle_route)
+
+                # 访问页面，触发 API 请求
+                await page.goto("https://data.eastmoney.com/zjlx/dpzjlx.html")
+
+                # 等待 API 请求被拦截（最多等待 10 秒）
                 try:
-                    url = route.request.url
-                    if "push2his.eastmoney.com/api/qt/stock/fflow/daykline/get" in url:
-                        # 获取响应数据
-                        response = await route.fetch()
-                        body = await response.body()
-                        try:
-                            captured_data["api_response"] = self._parse_jsonp(body)
-                        except Exception:
-                            captured_data["api_response"] = None
-                        # 继续请求，不中断页面正常加载
-                        await route.continue_()
-                        # await route.abort()
-                    else:
-                        await route.continue_()
+                    await page.wait_for_load_state("domcontentloaded", timeout=3000)
                 except Exception:
-                    # 出错时继续请求，避免影响页面加载
-                    await route.continue_()
+                    pass
 
-            # 设置路由拦截
-            await page.route("**/*", handle_route)
+                # 检查是否成功获取数据
+                if "api_response" not in captured_data:
+                    return SpiderResult(
+                        success=False,
+                        message="获取数据失败：未拦截到 API 响应"
+                    )
 
-            # 访问页面，触发 API 请求
-            await page.goto("https://data.eastmoney.com/zjlx/dpzjlx.html")
+                data = captured_data["api_response"]
 
-            # 等待 API 请求被拦截（最多等待 10 秒）
-            try:
-                await page.wait_for_load_state("domcontentloaded", timeout=3000)
-            except Exception:
-                pass
+                # 解析返回数据
+                if data.get("rc") != 0 or not data.get("data"):
+                    return SpiderResult(
+                        success=False,
+                        message="获取数据失败"
+                    )
 
-            await page.close()
+                # 获取数据内容
+                klines = data["data"].get("klines", [])
+                klines = [line.split(",") for line in klines]
 
-            # 检查是否成功获取数据
-            if "api_response" not in captured_data:
+                # 构建数据列表
+                data_list = []
+
+                for kline in klines:
+                    if len(kline) >= 15:
+                        date_str = kline[0]  # 格式: "2024-10-30"
+
+                        # 解析数值
+                        sh_close = self._safe_float(kline[11])
+                        sh_change = self._safe_float(kline[12])
+                        sz_close = self._safe_float(kline[13])
+                        sz_change = self._safe_float(kline[14])
+
+                        # 主力净流入
+                        main_net_amount = self._safe_float(kline[1])  # 净额（元）
+                        main_net_ratio = self._safe_float(kline[6])  # 净占比（百分比）
+
+                        # 超大单净流入
+                        super_large_net_amount = self._safe_float(kline[5])  # 净额（元）
+                        super_large_net_ratio = self._safe_float(kline[10])  # 净占比（百分比）
+
+                        # 大单净流入
+                        large_net_amount = self._safe_float(kline[4])  # 净额（元）
+                        large_net_ratio = self._safe_float(kline[9])  # 净占比（百分比）
+
+                        # 中单净流入
+                        medium_net_amount = self._safe_float(kline[3])  # 净额（元）
+                        medium_net_ratio = self._safe_float(kline[8])  # 净占比（百分比）
+
+                        # 小单净流入
+                        small_net_amount = self._safe_float(kline[2])  # 净额（元）
+                        small_net_ratio = self._safe_float(kline[7])  # 净占比（百分比）
+
+                        data_list.append({
+                            "日期": date_str,
+                            "上证收盘价": sh_close,
+                            "上证涨跌幅(%)": sh_change,
+                            "深证收盘价": sz_close,
+                            "深证涨跌幅(%)": sz_change,
+                            "主力净流入净额(亿元)": round(main_net_amount / 100000000, 2),  # 转换为亿元
+                            "主力净流入净占比(%)": main_net_ratio,
+                            "超大单净流入净额(亿元)": round(super_large_net_amount / 100000000, 2),  # 转换为亿元
+                            "超大单净流入净占比(%)": super_large_net_ratio,
+                            "大单净流入净额(亿元)": round(large_net_amount / 100000000, 2),  # 转换为亿元
+                            "大单净流入净占比(%)": large_net_ratio,
+                            "中单净流入净额(亿元)": round(medium_net_amount / 100000000, 2),  # 转换为亿元
+                            "中单净流入净占比(%)": medium_net_ratio,
+                            "小单净流入净额(亿元)": round(small_net_amount / 100000000, 2),  # 转换为亿元
+                            "小单净流入净占比(%)": small_net_ratio,
+                        })
+
+                # 转换为 DataFrame
+                df = pd.DataFrame(data_list)
+
+                # 按日期降序排列（最新的在前）
+                df = df.sort_values("日期", ascending=False).reset_index(drop=True)
+                # 截取数据
+                df = df.head(params.limit)
+
+                result_data = df.to_dict(orient="records")
+                if params.data_format == "markdown":
+                    result_data = df.to_markdown()
+                if params.data_format == "string":
+                    result_data = df.to_string()
+
                 return SpiderResult(
-                    success=False,
-                    message="获取数据失败：未拦截到 API 响应"
+                    success=True,
+                    data=result_data
                 )
-
-            data = captured_data["api_response"]
-
-            # 解析返回数据
-            if data.get("rc") != 0 or not data.get("data"):
-                return SpiderResult(
-                    success=False,
-                    message="获取数据失败"
-                )
-
-            # 获取数据内容
-            klines = data["data"].get("klines", [])
-            klines = [line.split(",") for line in klines]
-
-            # 构建数据列表
-            data_list = []
-
-            for kline in klines:
-                if len(kline) >= 15:
-                    date_str = kline[0]  # 格式: "2024-10-30"
-
-                    # 解析数值
-                    sh_close = self._safe_float(kline[11])
-                    sh_change = self._safe_float(kline[12])
-                    sz_close = self._safe_float(kline[13])
-                    sz_change = self._safe_float(kline[14])
-
-                    # 主力净流入
-                    main_net_amount = self._safe_float(kline[1])  # 净额（元）
-                    main_net_ratio = self._safe_float(kline[6])  # 净占比（百分比）
-
-                    # 超大单净流入
-                    super_large_net_amount = self._safe_float(kline[5])  # 净额（元）
-                    super_large_net_ratio = self._safe_float(kline[10])  # 净占比（百分比）
-
-                    # 大单净流入
-                    large_net_amount = self._safe_float(kline[4])  # 净额（元）
-                    large_net_ratio = self._safe_float(kline[9])  # 净占比（百分比）
-
-                    # 中单净流入
-                    medium_net_amount = self._safe_float(kline[3])  # 净额（元）
-                    medium_net_ratio = self._safe_float(kline[8])  # 净占比（百分比）
-
-                    # 小单净流入
-                    small_net_amount = self._safe_float(kline[2])  # 净额（元）
-                    small_net_ratio = self._safe_float(kline[7])  # 净占比（百分比）
-
-                    data_list.append({
-                        "日期": date_str,
-                        "上证收盘价": sh_close,
-                        "上证涨跌幅(%)": sh_change,
-                        "深证收盘价": sz_close,
-                        "深证涨跌幅(%)": sz_change,
-                        "主力净流入净额(亿元)": round(main_net_amount / 100000000, 2),  # 转换为亿元
-                        "主力净流入净占比(%)": main_net_ratio,
-                        "超大单净流入净额(亿元)": round(super_large_net_amount / 100000000, 2),  # 转换为亿元
-                        "超大单净流入净占比(%)": super_large_net_ratio,
-                        "大单净流入净额(亿元)": round(large_net_amount / 100000000, 2),  # 转换为亿元
-                        "大单净流入净占比(%)": large_net_ratio,
-                        "中单净流入净额(亿元)": round(medium_net_amount / 100000000, 2),  # 转换为亿元
-                        "中单净流入净占比(%)": medium_net_ratio,
-                        "小单净流入净额(亿元)": round(small_net_amount / 100000000, 2),  # 转换为亿元
-                        "小单净流入净占比(%)": small_net_ratio,
-                    })
-
-            # 转换为 DataFrame
-            df = pd.DataFrame(data_list)
-
-            # 按日期降序排列（最新的在前）
-            df = df.sort_values("日期", ascending=False).reset_index(drop=True)
-            # 截取数据
-            df = df.head(params.limit)
-
-            result_data = df.to_dict(orient="records")
-            if params.data_format == "markdown":
-                result_data = df.to_markdown()
-            if params.data_format == "string":
-                result_data = df.to_string()
-
-            return SpiderResult(
-                success=True,
-                data=result_data
-            )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=str(e))
-        finally:
-            await page.close()
-            await context.close()
+            return SpiderResult(success=False, message=f"获取数据失败: {str(e)}")
 
     @staticmethod
     def _parse_jsonp(body: bytes) -> dict | None:
