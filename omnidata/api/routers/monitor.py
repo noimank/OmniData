@@ -77,7 +77,6 @@ async def get_performance_metrics():
             },
             "context": {
                 "total_contexts": stats.get("context_count", 0),
-                "checked_out_contexts": stats.get("checked_out_contexts", 0),
                 "reuse_rate": stats.get("reuse_rate", 0),
                 "total_contexts_created": stats.get("total_contexts_created", 0),
                 "total_contexts_reused": stats.get("total_contexts_reused", 0),

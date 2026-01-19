@@ -20,7 +20,7 @@
           <div class="stat-card">
             <div class="stat-value">{{ contextPool.context_count }}</div>
             <div class="stat-label">Context 数量</div>
-            <div class="stat-config">已借出: {{ contextPool.checked_out_contexts }}</div>
+            <div class="stat-config">池容量: {{ contextPool.config.max_pool_size }}</div>
           </div>
         </el-col>
         <el-col :span="6">

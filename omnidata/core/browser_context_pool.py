@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -32,14 +33,12 @@ class ContextMetadata:
         namespace: 命名空间（用于状态持久化）
         created_at: 创建时间戳
         last_used_at: 最后使用时间戳（用于 LRU）
-        is_checked_out: 是否已借出
     """
 
     context: BrowserContext
     namespace: str | None
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
-    is_checked_out: bool = False
 
 
 class BrowserContextPool:
@@ -77,11 +76,6 @@ class BrowserContextPool:
             config: 浏览器配置
         """
         self._config = config or settings.browser
-        self.launch_options = {
-            "headless": self._config.headless,
-            "args": self._config.args,
-            "ignore_default_args": self._config.ignore_default_args,
-        }
         self._playwright: Any = None
         self._browser: Browser | None = None
         self._contexts: OrderedDict[str, ContextMetadata] = OrderedDict()
@@ -111,7 +105,13 @@ class BrowserContextPool:
 
         logger.info("Initializing browser context pool...")
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(**self.launch_options)
+
+        launch_options = {
+            "headless": self._config.headless,
+            "args": self._config.args,
+            "ignore_default_args": self._config.ignore_default_args,
+        }
+        self._browser = await self._playwright.chromium.launch(**launch_options)
         self._is_initialized = True
         self._shutdown_event.clear()
 
@@ -145,35 +145,33 @@ class BrowserContextPool:
                 await self._close_context(metadata.context)
             self._contexts.clear()
 
-        # 关闭 browser
-        if self._browser:
-            try:
-                await self._browser.close()
-                logger.debug("Browser closed")
-            except asyncio.CancelledError:
-                logger.debug("Browser close cancelled during shutdown")
-            except Exception as e:
-                logger.warning(f"Error closing browser: {e}")
-            self._browser = None
-
-        # 关闭 playwright
-        if self._playwright:
-            try:
-                await self._playwright.stop()
-            except asyncio.CancelledError:
-                logger.debug("Playwright stop cancelled during shutdown")
-            except Exception as e:
-                logger.warning(f"Error stopping playwright: {e}")
-            self._playwright = None
+        # 关闭 browser 和 playwright
+        await self._close_resource(self._browser, "Browser", "close")
+        self._browser = None
+        await self._close_resource(self._playwright, "Playwright", "stop")
+        self._playwright = None
 
         logger.info("Browser context pool shut down")
 
-    async def get_browser(self):
-        """获取 Browser 实例"""
-        if self._browser is None:
-            raise BrowserPoolError("Browser not initialized")
-        return self._browser
+    async def _close_resource(self, resource: Any, name: str, close_method: str = "close") -> None:
+        """
+        安全关闭资源的辅助方法
 
+        Args:
+            resource: 要关闭的资源
+            name: 资源名称（用于日志）
+            close_method: 关闭方法名，默认为 "close"，playwright 使用 "stop"
+        """
+        if resource is None:
+            return
+        try:
+            close_func = getattr(resource, close_method)
+            await close_func()
+            logger.debug(f"{name} closed")
+        except asyncio.CancelledError:
+            logger.debug(f"{name} close cancelled during shutdown")
+        except Exception as e:
+            logger.warning(f"Error closing {name.lower()}: {e}")
 
     async def get_context(self, namespace: str | None = None, **kwargs: Any) -> BrowserContext:
         """
@@ -195,8 +193,8 @@ class BrowserContextPool:
         if self._browser is None:
             raise BrowserPoolError("Browser not initialized")
 
-        # 生成 key（使用 namespace 或临时 key）
-        key = namespace if namespace else f"_temp_{id(kwargs)}"
+        # 生成 key（使用 namespace 或生成唯一临时 key）
+        key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
         async with self._lock:
             # 尝试从池中获取
@@ -205,7 +203,6 @@ class BrowserContextPool:
                 if self._is_context_healthy(metadata.context):
                     # 更新 LRU
                     metadata.last_used_at = time.time()
-                    metadata.is_checked_out = True
                     self._contexts.move_to_end(key)
                     self._stats["total_contexts_reused"] += 1
                     logger.debug(f"Context reused: namespace={namespace}")
@@ -224,7 +221,6 @@ class BrowserContextPool:
             metadata = ContextMetadata(
                 context=context,
                 namespace=namespace,
-                is_checked_out=True,
             )
             self._contexts[key] = metadata
             self._stats["total_contexts_created"] += 1
@@ -265,7 +261,6 @@ class BrowserContextPool:
             # 自动关闭 page，context 不关闭
             if not page.is_closed():
                 await page.close()
-                page = None
 
 
     async def save_context_state(self, context: BrowserContext, namespace: str) -> None:
@@ -324,8 +319,6 @@ class BrowserContextPool:
 
     def get_stats(self) -> dict[str, Any]:
         """获取池统计信息"""
-        checked_out = sum(1 for m in self._contexts.values() if m.is_checked_out)
-
         reuse_rate = (
             self._stats["total_contexts_reused"]
             / max(1, self._stats["total_contexts_created"] + self._stats["total_contexts_reused"])
@@ -334,7 +327,6 @@ class BrowserContextPool:
         return {
             "browser_count": 1 if self._browser else 0,
             "context_count": len(self._contexts),
-            "checked_out_contexts": checked_out,
             "total_contexts_created": self._stats["total_contexts_created"],
             "total_contexts_reused": self._stats["total_contexts_reused"],
             "reuse_rate": round(reuse_rate, 4),
@@ -438,21 +430,22 @@ class BrowserContextPool:
             return False
 
     async def _evict_lru(self) -> None:
-        """淘汰最久未使用的 Context"""
+        """
+        淘汰最久未使用的 Context
+
+        移除 is_checked_out 机制后，LRU 淘汰逻辑更简单：
+        - OrderedDict 第一个元素即最久未使用
+        - 即使误淘汰活跃 context，下次 get_context 会重建并从 Redis 恢复状态
+        """
         if not self._contexts:
             return
 
-        # 找到第一个未借出的 context
-        for key, metadata in list(self._contexts.items()):
-            if not metadata.is_checked_out:
-                await self._close_context(metadata.context)
-                del self._contexts[key]
-                self._stats["total_contexts_evicted"] += 1
-                logger.debug(f"Context evicted (LRU): namespace={metadata.namespace}")
-                return
-
-        # 所有 context 都被借出，无法淘汰
-        logger.warning("All contexts checked out, cannot evict")
+        # 直接淘汰最久未使用的（OrderedDict 第一个元素）
+        key, metadata = next(iter(self._contexts.items()))
+        await self._close_context(metadata.context)
+        del self._contexts[key]
+        self._stats["total_contexts_evicted"] += 1
+        logger.debug(f"Context evicted (LRU): namespace={metadata.namespace}")
 
     async def _cleanup_loop(self) -> None:
         """后台清理循环"""
@@ -476,11 +469,7 @@ class BrowserContextPool:
 
         async with self._lock:
             for key, metadata in self._contexts.items():
-                # 跳过已借出的 context
-                if metadata.is_checked_out:
-                    continue
-
-                # 检查空闲时间
+                # 检查空闲时间（基于 last_used_at）
                 idle_time = current_time - metadata.last_used_at
                 if idle_time > self._idle_timeout:
                     keys_to_remove.append(key)
