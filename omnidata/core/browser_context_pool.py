@@ -177,6 +177,8 @@ class BrowserContextPool:
         """
         获取或创建 Context（LRU 复用）
 
+        优化：将慢速的 context 创建操作移出锁，减少锁竞争
+
         Args:
             namespace: 命名空间（用于复用和状态持久化）
             **kwargs: 创建 context 时的额外参数
@@ -196,10 +198,11 @@ class BrowserContextPool:
         # 生成 key（使用 namespace 或生成唯一临时 key）
         key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
+        # === 阶段1：快速检查（加锁） ===
         async with self._lock:
-            # 尝试从池中获取
-            if key in self._contexts:
-                metadata = self._contexts[key]
+            # 使用 get() 减少一次字典查找
+            metadata = self._contexts.get(key)
+            if metadata is not None:
                 if self._is_context_healthy(metadata.context):
                     # 更新 LRU
                     metadata.last_used_at = time.time()
@@ -212,12 +215,17 @@ class BrowserContextPool:
                     await self._close_context(metadata.context)
                     del self._contexts[key]
 
-            # 池已满，淘汰最久未使用的
+        # === 阶段2：检查并淘汰（加锁，但只淘汰一次） ===
+        async with self._lock:
             if len(self._contexts) >= self._max_pool_size:
                 await self._evict_lru()
 
-            # 创建新 context
-            context = await self._create_context(namespace, **kwargs)
+        # === 阶段3：慢速创建（无锁，关键优化！） ===
+        # 在锁外创建 context，避免阻塞其他请求
+        context = await self._create_context(namespace, **kwargs)
+
+        # === 阶段4：插入池中（加锁） ===
+        async with self._lock:
             metadata = ContextMetadata(
                 context=context,
                 namespace=namespace,
