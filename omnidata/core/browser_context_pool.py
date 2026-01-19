@@ -229,8 +229,12 @@ class BrowserContextPool:
         # 在锁外创建 context，避免阻塞其他请求
         context = await self._create_context(namespace, **kwargs)
 
-        # === 阶段4：插入池中（加锁） ===
+        # === 阶段4：插入池中（加锁，二次检查防止竞态） ===
         async with self._lock:
+            # 二次检查：确保不超过 max_pool_size（修复竞态条件）
+            while len(self._contexts) >= self._max_pool_size:
+                await self._evict_lru()
+
             metadata = ContextMetadata(
                 context=context,
                 namespace=namespace,
