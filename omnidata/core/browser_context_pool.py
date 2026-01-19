@@ -47,15 +47,15 @@ class BrowserContextPool:
 
     功能特性：
     - 单 Browser 实例（无健康检查、无扩缩容）
-    - Context 池化（LRU 缓存复用，max_pool_size < 0 时禁用）
+    - Context 池化（LRU 缓存复用，max_pool_size <= 0 时禁用）
     - Context 永不关闭（仅淘汰时关闭）
     - Redis 状态持久化（显式保存，创建时加载）
-    - 后台清理任务（闲置回收，idle_timeout < 0 时禁用）
+    - 后台清理任务（闲置回收，idle_timeout <= 0 时禁用）
     - Page 自动关闭
 
     配置说明：
-    - max_pool_size < 0: 禁用 LRU 容量限制
-    - idle_timeout < 0: 禁用闲置清理
+    - max_pool_size <= 0: 禁用 LRU 容量限制
+    - idle_timeout <= 0: 禁用闲置清理
 
     用法示例：
         pool = BrowserContextPool()
@@ -181,7 +181,7 @@ class BrowserContextPool:
         """
         获取或创建 Context（LRU 复用）
 
-        当 max_pool_size 为负数时，禁用 LRU 限制（不限制池大小）
+        当 max_pool_size <= 0 时，禁用 LRU 限制（不限制池大小）
 
         优化：将慢速的 context 创建操作移出锁，减少锁竞争
 
@@ -204,8 +204,8 @@ class BrowserContextPool:
         # 生成 key（使用 namespace 或生成唯一临时 key）
         key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
-        # 是否启用 LRU 限制
-        enable_lru = self._max_pool_size >= 0
+        # 是否启用 LRU 限制（<= 0 时禁用）
+        enable_lru = self._max_pool_size > 0
 
         # === 阶段1：乐观复用（先尝试，失败再重建） ===
         async with self._lock:
@@ -501,7 +501,7 @@ class BrowserContextPool:
         """
         淘汰最久未使用的 Context
 
-        注意：当 max_pool_size 为负数时，此方法不会被调用（LRU 已禁用）
+        注意：当 max_pool_size <= 0 时，此方法不会被调用（LRU 已禁用）
 
         移除 is_checked_out 机制后，LRU 淘汰逻辑更简单：
         - OrderedDict 第一个元素即最久未使用
@@ -525,8 +525,8 @@ class BrowserContextPool:
                 if self._shutdown_event.is_set():
                     break
 
-                # 仅在启用空闲超时时清理
-                if self._idle_timeout >= 0:
+                # 仅在启用空闲超时时清理（<= 0 时禁用）
+                if self._idle_timeout > 0:
                     await self._cleanup_idle_contexts()
 
             except asyncio.CancelledError:
@@ -538,7 +538,7 @@ class BrowserContextPool:
         """
         清理闲置 Contexts（超过 idle_timeout）
 
-        注意：当 idle_timeout 为负数时，此方法不会被调用（空闲清理已禁用）
+        注意：当 idle_timeout <= 0 时，此方法不会被调用（空闲清理已禁用）
         """
         current_time = time.time()
         keys_to_remove = []

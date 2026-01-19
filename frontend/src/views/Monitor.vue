@@ -19,11 +19,11 @@
         <el-col :span="6">
           <div class="stat-card">
             <div class="stat-value">
-              {{ contextPool.context_count }}{{ contextPool.config.max_pool_size >= 0 ? ` / ${contextPool.config.max_pool_size}` : ' / 无限制' }}
+              {{ contextPool.context_count }}{{ contextPool.config.max_pool_size > 0 ? ` / ${contextPool.config.max_pool_size}` : ' / 无限制' }}
             </div>
             <div class="stat-label">Context 数量 / 池容量</div>
             <el-progress
-              v-if="contextPool.config.max_pool_size >= 0"
+              v-if="contextPool.config.max_pool_size > 0"
               :percentage="(contextPool.context_count / contextPool.config.max_pool_size * 100)"
               :show-text="false"
             />
@@ -111,7 +111,7 @@
           <template #default="{ row }">
             <div class="idle-time-wrapper">
               <div class="idle-time-text">{{ formatIdleTime(row.idle_time) }}</div>
-              <template v-if="(contextPool?.config.idle_timeout ?? -1) >= 0">
+              <template v-if="(contextPool?.config.idle_timeout ?? -1) > 0">
                 <el-progress
                   :percentage="getIdleTimePercent(row.idle_time)"
                   :status="getIdleTimeStatus(row.idle_time)"
@@ -205,13 +205,13 @@ const formatTimestamp = (timestamp: number) => {
 
 const getIdleTimePercent = (seconds: number) => {
   const idleTimeout = contextPool.value!.config.idle_timeout
-  if (idleTimeout < 0) return 0
+  if (idleTimeout <= 0) return 0
   return Math.min(100, Math.round((seconds / idleTimeout) * 100))
 }
 
 const getIdleTimeStatus = (seconds: number) => {
   const idleTimeout = contextPool.value!.config.idle_timeout
-  if (idleTimeout < 0) return ''
+  if (idleTimeout <= 0) return ''
   if (seconds >= idleTimeout * 0.8) return 'exception'
   if (seconds >= idleTimeout * 0.5) return 'warning'
   return ''
