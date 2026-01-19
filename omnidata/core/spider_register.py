@@ -3,7 +3,6 @@
 自动发现和注册 data_sources 目录下的所有爬虫类
 """
 
-import asyncio
 import importlib
 import importlib.util
 import inspect
@@ -306,32 +305,36 @@ class SpiderRegister:
 
 # 全局爬虫注册器实例
 _spider_register: SpiderRegister | None = None
-_register_lock: "asyncio.Lock" = None
 
 
-async def get_spider_register(
-    browser_context_pool: BrowserContextPool | None = None,
-) -> SpiderRegister:
+def get_spider_register() -> SpiderRegister:
     """
-    获取全局爬虫注册器实例
-
-    Args:
-        browser_context_pool: 浏览器上下文池实例
+    获取全局爬虫注册器实例（同步，无锁）
 
     Returns:
         SpiderRegister: 爬虫注册器实例
+
+    Raises:
+        SpiderRegistrationError: 未初始化
     """
-    global _spider_register, _register_lock
+    global _spider_register
+    if _spider_register is None:
+        raise SpiderRegistrationError(
+            "SpiderRegister not initialized. "
+            "Ensure main.py lifespan startup completes before calling this function."
+        )
+    return _spider_register
 
-    if _register_lock is None:
-        _register_lock = asyncio.Lock()
 
-    async with _register_lock:
-        if _spider_register is None:
-            _spider_register = SpiderRegister(browser_context_pool)
-            await _spider_register.initialize()
+def set_spider_register(instance: SpiderRegister) -> None:
+    """
+    设置全局爬虫注册器实例（由 main.py lifespan 调用）
 
-        return _spider_register
+    Args:
+        instance: 爬虫注册器实例
+    """
+    global _spider_register
+    _spider_register = instance
 
 
 async def close_spider_register() -> None:

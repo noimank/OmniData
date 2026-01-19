@@ -73,3 +73,9 @@ class LoginRegistrationError(LoginError):
     """登录类注册异常"""
 
     pass
+
+
+class InitializationError(OmniDataError):
+    """单例未初始化异常"""
+
+    pass

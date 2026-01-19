@@ -498,34 +498,42 @@ class BrowserContextPool:
 
 # 全局实例
 _pool: BrowserContextPool | None = None
-_pool_lock = asyncio.Lock()
 
 
-async def get_browser_context_pool(config: BrowserConfig | None = None) -> BrowserContextPool:
+def get_browser_context_pool() -> BrowserContextPool:
     """
-    获取全局 BrowserContextPool 实例
-
-    Args:
-        config: 浏览器配置
+    获取全局 BrowserContextPool 实例（同步，无锁）
 
     Returns:
         BrowserContextPool: 浏览器上下文池实例
+
+    Raises:
+        BrowserPoolError: 未初始化
     """
     global _pool
+    if _pool is None:
+        raise BrowserPoolError(
+            "BrowserContextPool not initialized. "
+            "Ensure main.py lifespan startup completes before calling this function."
+        )
+    return _pool
 
-    async with _pool_lock:
-        if _pool is None:
-            _pool = BrowserContextPool(config)
-            await _pool.initialize()
 
-        return _pool
+def set_browser_context_pool(instance: BrowserContextPool) -> None:
+    """
+    设置全局 BrowserContextPool 实例（由 main.py lifespan 调用）
+
+    Args:
+        instance: 浏览器上下文池实例
+    """
+    global _pool
+    _pool = instance
 
 
 async def close_browser_context_pool() -> None:
     """关闭全局 BrowserContextPool 实例"""
     global _pool
 
-    async with _pool_lock:
-        if _pool is not None:
-            await _pool.shutdown()
-            _pool = None
+    if _pool is not None:
+        await _pool.shutdown()
+        _pool = None

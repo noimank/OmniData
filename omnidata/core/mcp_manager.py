@@ -15,6 +15,7 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool
 
 from omnidata.core.spider_register import SpiderRegister
+from omnidata.core.exceptions import InitializationError
 from omnidata.utils.mcp_utils import generate_tool_description
 
 logger = logging.getLogger(__name__)
@@ -380,19 +381,33 @@ class MCPManager:
 
 # 全局 MCP 管理器实例
 _mcp_manager: MCPManager | None = None
-_mcp_manager_lock = asyncio.Lock()
 
 
-async def get_mcp_manager() -> MCPManager:
-    """获取全局 MCP 管理器实例"""
+def get_mcp_manager() -> MCPManager:
+    """
+    获取全局 MCP 管理器实例（同步，无锁）
+
+    Returns:
+        MCPManager: MCP 管理器实例
+
+    Raises:
+        InitializationError: 未初始化
+    """
     global _mcp_manager
     if _mcp_manager is None:
-        async with _mcp_manager_lock:
-            # 双重检查锁定
-            if _mcp_manager is None:
-                from omnidata.api.main import app
-                from omnidata.core.spider_register import get_spider_register
-
-                spider_reg = await get_spider_register()
-                _mcp_manager = MCPManager(spider_reg, app)
+        raise InitializationError(
+            "MCPManager not initialized. "
+            "Ensure main.py lifespan startup completes before calling this function."
+        )
     return _mcp_manager
+
+
+def set_mcp_manager(instance: MCPManager) -> None:
+    """
+    设置全局 MCP 管理器实例（由 main.py lifespan 调用）
+
+    Args:
+        instance: MCP 管理器实例
+    """
+    global _mcp_manager
+    _mcp_manager = instance

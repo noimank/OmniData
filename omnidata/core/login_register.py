@@ -286,21 +286,36 @@ class LoginRegister:
 
 
 _login_register: LoginRegister | None = None
-_register_lock: asyncio.Lock | None = None
 
 
-async def get_login_register(browser_context_pool: BrowserContextPool | None = None) -> LoginRegister:
-    global _login_register, _register_lock
+def get_login_register() -> LoginRegister:
+    """
+    获取全局登录注册器实例（同步，无锁）
 
-    if _register_lock is None:
-        _register_lock = asyncio.Lock()
+    Returns:
+        LoginRegister: 登录注册器实例
 
-    async with _register_lock:
-        if _login_register is None:
-            _login_register = LoginRegister(browser_context_pool)
-            await _login_register.initialize()
+    Raises:
+        LoginRegistrationError: 未初始化
+    """
+    global _login_register
+    if _login_register is None:
+        raise LoginRegistrationError(
+            "LoginRegister not initialized. "
+            "Ensure main.py lifespan startup completes before calling this function."
+        )
+    return _login_register
 
-        return _login_register
+
+def set_login_register(instance: LoginRegister) -> None:
+    """
+    设置全局登录注册器实例（由 main.py lifespan 调用）
+
+    Args:
+        instance: 登录注册器实例
+    """
+    global _login_register
+    _login_register = instance
 
 
 async def close_login_register() -> None:

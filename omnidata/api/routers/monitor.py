@@ -31,7 +31,7 @@ async def get_browser_pool_stats():
         浏览器池统计信息
     """
     try:
-        pool = await get_browser_context_pool()
+        pool = get_browser_context_pool()
         stats = pool.get_stats()
 
         return success_response(stats, "获取浏览器池状态成功")
@@ -49,7 +49,7 @@ async def get_context_pool_stats():
         Context Pool 统计信息
     """
     try:
-        pool = await get_browser_context_pool()
+        pool = get_browser_context_pool()
         stats = pool.get_stats()
 
         return success_response(stats, "获取 Context Pool 状态成功")
@@ -67,7 +67,7 @@ async def get_performance_metrics():
         性能指标信息
     """
     try:
-        pool = await get_browser_context_pool()
+        pool = get_browser_context_pool()
         stats = pool.get_stats()
 
         # 提取关键性能指标

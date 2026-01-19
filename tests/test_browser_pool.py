@@ -11,6 +11,7 @@ import pytest
 from omnidata.core.browser_context_pool import (
     BrowserContextPool,
     close_browser_context_pool,
+    set_browser_context_pool,
     get_browser_context_pool,
 )
 from omnidata.core.config import BrowserConfig
@@ -122,8 +123,8 @@ class TestGlobalBrowserContextPool:
     @pytest.mark.asyncio
     async def test_get_browser_context_pool_singleton(self):
         """测试全局浏览器上下文池单例"""
-        pool1 = await get_browser_context_pool()
-        pool2 = await get_browser_context_pool()
+        pool1 = get_browser_context_pool()
+        pool2 = get_browser_context_pool()
         assert pool1 is pool2
 
         # 清理
@@ -132,13 +133,13 @@ class TestGlobalBrowserContextPool:
     @pytest.mark.asyncio
     async def test_close_browser_context_pool(self):
         """测试关闭全局浏览器上下文池"""
-        pool = await get_browser_context_pool()
+        pool = get_browser_context_pool()
         assert pool is not None
 
         await close_browser_context_pool()
 
         # 再次获取应该是新的实例
-        new_pool = await get_browser_context_pool()
+        new_pool = get_browser_context_pool()
         assert new_pool is not pool
 
         # 清理

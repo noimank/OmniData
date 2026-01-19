@@ -23,7 +23,15 @@ from omnidata.core.exceptions import OmniDataError
 from omnidata.api.routers import health, logins, mcp_services, monitor, spiders
 from omnidata.api.routers.spider_audit import router as spider_audit_router
 from omnidata.api.routers.spider_prompt_router import router as spider_prompt_router
-from omnidata.core import get_browser_context_pool, get_login_register, get_spider_register
+from omnidata.core import (
+    get_browser_context_pool,
+    set_browser_context_pool,
+    get_login_register,
+    set_login_register,
+    get_spider_register,
+    set_spider_register,
+)
+from omnidata.core.mcp_manager import MCPManager, get_mcp_manager, set_mcp_manager
 from omnidata.database import init_db
 from omnidata.utils import close_redis
 
@@ -45,17 +53,31 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized")
 
-        # 初始化浏览器上下文池
-        browser_context_pool = await get_browser_context_pool()
+        # 阶段 2: 初始化浏览器上下文池
+        from omnidata.core.browser_context_pool import BrowserContextPool
+        browser_context_pool = BrowserContextPool()
+        await browser_context_pool.initialize()
+        set_browser_context_pool(browser_context_pool)
         logger.info("Browser context pool initialized")
 
-        # 初始化爬虫注册器
-        spider_reg = await get_spider_register(browser_context_pool=browser_context_pool)
+        # 阶段 3: 初始化爬虫注册器
+        from omnidata.core.spider_register import SpiderRegister
+        spider_reg = SpiderRegister(browser_context_pool)
+        await spider_reg.initialize()
+        set_spider_register(spider_reg)
         logger.info(f"Spider register initialized with {spider_reg.spider_count} spiders")
 
-        # 初始化登录注册器
-        login_reg = await get_login_register(browser_context_pool=browser_context_pool)
+        # 阶段 4: 初始化登录注册器
+        from omnidata.core.login_register import LoginRegister
+        login_reg = LoginRegister(browser_context_pool)
+        await login_reg.initialize()
+        set_login_register(login_reg)
         logger.info(f"Login register initialized with {login_reg.login_count} logins")
+
+        # 阶段 5: 初始化 MCP 管理器
+        mcp_mgr = MCPManager(spider_reg, app)
+        set_mcp_manager(mcp_mgr)
+        logger.info("MCP manager initialized")
 
         # 恢复已激活的 MCP 服务
         from omnidata.database import get_db_session
@@ -73,7 +95,7 @@ async def lifespan(app: FastAPI):
 
             if active_services:
                 logger.info(f"Restoring {len(active_services)} active MCP services...")
-                mcp_manager = await get_mcp_manager()
+                mcp_manager = get_mcp_manager()
 
                 for service in active_services:
                     try:
@@ -154,7 +176,7 @@ async def lifespan(app: FastAPI):
 
         # 阶段 1: 清理所有 MCP 服务
         try:
-            mcp_manager = await get_mcp_manager()
+            mcp_manager = get_mcp_manager()
             await mcp_manager.cleanup_all_services()
             logger.info("All MCP services cleaned up")
         except Exception as e:

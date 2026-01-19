@@ -113,7 +113,7 @@ async def create_spider_prompt(request: SpiderPromptCreate):
     """创建新的 Spider 提示词版本"""
     async with get_db_session() as session:
         # 验证 Spider 存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider = spider_reg.get_spider_instance(request.spider_name)
         if not spider:
             return error_response(
@@ -380,7 +380,7 @@ async def list_spider_prompts_by_name(spider_name: str):
     """获取指定 Spider 的所有提示词版本"""
     async with get_db_session() as session:
         # 验证 Spider 存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
             return error_response(
@@ -433,7 +433,7 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
     """为指定 Spider 创建提示词版本（spider_name 从路径获取）"""
     async with get_db_session() as session:
         # 验证 Spider 存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
             return error_response(
@@ -494,7 +494,7 @@ async def get_spider_default_prompt(spider_name: str):
     """获取指定 Spider 的默认提示词版本"""
     async with get_db_session() as session:
         # 验证 Spider 存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider = spider_reg.get_spider_instance(spider_name)
         if not spider:
             return error_response(
@@ -549,7 +549,7 @@ async def get_spider_default_prompt(spider_name: str):
 @router.get("/spiders/available")
 async def list_available_spiders():
     """列出所有可用于提示词管理的 Spider"""
-    spider_reg = await get_spider_register()
+    spider_reg = get_spider_register()
     spider_info = spider_reg.list_spider_info()
 
     responses = []

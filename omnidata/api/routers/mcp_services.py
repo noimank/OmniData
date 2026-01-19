@@ -85,7 +85,7 @@ async def create_service(request: MCPServiceCreate):
             return error_response(f"服务名称 '{request.name}' 已存在")
 
         # 验证所有 Spider 都存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider_names = [t.spider_name for t in request.tools]
         for spider_name in spider_names:
             spider = spider_reg.get_spider_instance(spider_name)
@@ -133,7 +133,7 @@ async def create_service(request: MCPServiceCreate):
         await session.refresh(service)
 
         # 挂载服务
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         await mcp_manager.mount_service(
             service_name=service.name,
             display_name=service.display_name,
@@ -237,7 +237,7 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
         # 处理工具列表更新（如果提供）
         if request.tools is not None:
             # 验证所有 Spider 存在
-            spider_reg = await get_spider_register()
+            spider_reg = get_spider_register()
             requested_spider_names = {t.spider_name for t in request.tools}
 
             for spider_name in requested_spider_names:
@@ -287,7 +287,7 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
         await session.refresh(service)
 
         # 重新挂载服务
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
 
         try:
             await mcp_manager.unmount_service(service.name)
@@ -354,7 +354,7 @@ async def delete_service(service_id: int):
         await session.commit()
 
         # 卸载服务
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         await mcp_manager.unmount_service(service_name)
 
         return success_response(None, "MCP 服务删除成功")
@@ -379,7 +379,7 @@ async def activate_service(service_id: int):
         await session.refresh(service)
 
         # 挂载 MCP 服务（捕获所有异常，确保服务状态已更新）
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         spider_names = [t.spider_name for t in service.tools if t.enabled]
         tool_configs = {}
         for t in service.tools:
@@ -430,7 +430,7 @@ async def deactivate_service(service_id: int):
         await session.refresh(service)
 
         # 卸载 MCP 服务（捕获所有异常，确保服务状态已更新）
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         try:
             await mcp_manager.unmount_service(service.name)
         except asyncio.CancelledError:
@@ -505,7 +505,7 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
             return error_response("服务不存在")
 
         # 验证 Spider 存在
-        spider_reg = await get_spider_register()
+        spider_reg = get_spider_register()
         spider = spider_reg.get_spider_instance(request.spider_name)
         if not spider:
             return error_response(f"Spider '{request.spider_name}' 不存在")
@@ -538,7 +538,7 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
         await session.refresh(tool)
 
         # 重新挂载服务
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         await mcp_manager.unmount_service(service.name)
 
         spider_names = [t.spider_name for t in service.tools if t.enabled] + [request.spider_name]
@@ -601,7 +601,7 @@ async def remove_tool_from_service(service_id: int, tool_id: int):
         await session.commit()
 
         # 重新挂载服务
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         await mcp_manager.unmount_service(service.name)
 
         spider_names = [t.spider_name for t in service.tools if t.enabled and t.spider_name != spider_name]
@@ -703,7 +703,7 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
         await session.commit()
 
         # 重新挂载服务（捕获所有异常，确保提示词版本已更新）
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         try:
             await mcp_manager.unmount_service(service.name)
         except Exception as e:
@@ -778,7 +778,7 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
         await session.commit()
 
         # 重新挂载服务（捕获所有异常，确保提示词版本已更新）
-        mcp_manager = await get_mcp_manager()
+        mcp_manager = get_mcp_manager()
         try:
             await mcp_manager.unmount_service(service.name)
         except Exception as e:
@@ -835,7 +835,7 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
 @router.get("/spiders/available")
 async def list_available_spiders():
     """列出所有可用于 MCP 服务的 Spider"""
-    spider_reg = await get_spider_register()
+    spider_reg = get_spider_register()
     spider_info = spider_reg.list_spider_info()
 
     responses = []

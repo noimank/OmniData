@@ -32,7 +32,7 @@ async def list_logins():
         登录器列表，每个登录器包含 login_status 字段
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         logins = await register.list_login_info()
         return success_response({"logins": logins, "count": len(logins)}, "获取登录器列表成功")
     except LoginRegistrationError as e:
@@ -52,7 +52,7 @@ async def get_login_detail(login_name: str):
         登录器详细信息，包含 login_status 字段
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         login = await register.get_login_info(login_name)
         return success_response(login, "获取登录器详情成功")
     except LoginNotFoundError as e:
@@ -75,7 +75,7 @@ async def get_qrcode(login_name: str, request: QrcodeRequest):
         二维码信息
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         qrcode = await register.get_qrcode(login_name, request.qr_type)
 
         return success_response(
@@ -101,7 +101,7 @@ async def verify_login(login_name: str):
         登录状态
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         login = register.get_login_instance(login_name)
         status_info = await login.verify_login_state()
         return success_response(status_info.model_dump(), "验证登录状态成功")
@@ -125,7 +125,7 @@ async def get_login_status(login_name: str):
         登录状态
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         login = register.get_login_instance(login_name)
 
         # 调用登录器的 is_login 方法实际验证登录状态
@@ -178,7 +178,7 @@ async def cleanup_qrcode_resources(login_name: str):
         操作结果
     """
     try:
-        register = await get_login_register()
+        register = get_login_register()
         login = register.get_login_instance(login_name)
 
         # 调用 close 方法清理资源
