@@ -356,6 +356,26 @@ class BrowserContextPool:
             },
         }
 
+    def get_contexts(self) -> list[dict[str, Any]]:
+        """
+        获取当前所有 Context 的详细信息
+
+        Returns:
+            Context 信息列表
+        """
+        contexts = []
+        for key, metadata in self._contexts.items():
+            context_info = {
+                "namespace": metadata.namespace or "(临时)",
+                "key": key,
+                "created_at": metadata.created_at,
+                "last_used_at": metadata.last_used_at,
+                "idle_time": round(time.time() - metadata.last_used_at, 1),
+                "pages_count": len(metadata.context.pages),
+            }
+            contexts.append(context_info)
+        return contexts
+
     async def _create_context(self, namespace: str | None = None, **kwargs: Any) -> BrowserContext:
         """
         创建新的 BrowserContext

@@ -26,6 +26,16 @@ export interface BrowserContextPoolStats {
   }
 }
 
+// Context 信息
+export interface ContextInfo {
+  namespace: string
+  key: string
+  created_at: number
+  last_used_at: number
+  idle_time: number
+  pages_count: number
+}
+
 // 系统资源统计
 export interface SystemStats {
   status: string

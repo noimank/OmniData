@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/monitor'
-import type { BrowserContextPoolStats, SystemStats } from '@/api/types'
+import type { BrowserContextPoolStats, SystemStats, ContextInfo } from '@/api/types'
 
 export const useMonitorStore = defineStore('monitor', () => {
   const contextPool = ref<BrowserContextPoolStats | null>(null)
   const systemResource = ref<SystemStats | null>(null)
+  const contextList = ref<ContextInfo[]>([])
   const loading = ref<boolean>(false)
 
   // 获取浏览器上下文池状态
@@ -26,13 +27,23 @@ export const useMonitorStore = defineStore('monitor', () => {
     }
   }
 
+  // 获取 Context 列表
+  const fetchContextList = async () => {
+    try {
+      contextList.value = await api.getContextList()
+    } catch (error) {
+      console.error('Failed to fetch context list:', error)
+    }
+  }
+
   // 获取所有数据
   const fetchAll = async () => {
     loading.value = true
     try {
       await Promise.all([
         fetchContextPool(),
-        fetchSystemResource()
+        fetchSystemResource(),
+        fetchContextList()
       ])
     } finally {
       loading.value = false
@@ -42,9 +53,11 @@ export const useMonitorStore = defineStore('monitor', () => {
   return {
     contextPool,
     systemResource,
+    contextList,
     loading,
     fetchContextPool,
     fetchSystemResource,
+    fetchContextList,
     fetchAll
   }
 })

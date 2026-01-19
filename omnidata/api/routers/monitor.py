@@ -134,3 +134,21 @@ async def get_system_stats():
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
         return error_response(f"获取系统状态失败: {str(e)}")
+
+
+@router.get("/contexts")
+async def get_contexts_list():
+    """
+    获取当前所有 Context 的详细信息
+
+    Returns:
+        Context 列表信息
+    """
+    try:
+        pool = get_browser_context_pool()
+        contexts = pool.get_contexts()
+
+        return success_response(contexts, "获取 Context 列表成功")
+    except Exception as e:
+        logger.error(f"Error getting contexts list: {e}")
+        return error_response(f"获取 Context 列表失败: {str(e)}")
