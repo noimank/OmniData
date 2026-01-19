@@ -10,7 +10,6 @@ import inspect
 import logging
 import os
 import sys
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,8 +33,10 @@ class LoginRegister:
         self._refresh_task: asyncio.Task | None = None
         self._running: bool = False
         self._stop_event: asyncio.Event | None = None
-        self._refresh_interval: timedelta = timedelta(hours=1)
-        self._login_refresh_interval: float = 2.0  # 登录器间隔 2 秒
+        self._num_seconds_per_hour: int = 3600  # 每小时秒数（固定）
+
+        # 登录器到秒数的分配映射（在 initialize 时计算）
+        self._login_second_assignments: dict[str, int] = {}
 
     async def initialize(self) -> None:
         if self._is_initialized:
@@ -45,6 +46,10 @@ class LoginRegister:
             self._browser_context_pool = await get_browser_context_pool()
 
         await self._discover_logins()
+
+        # 构建登录器到秒数的分配映射
+        self._build_login_assignments()
+
         self._is_initialized = True
 
         # 注册完所有登录器后，统一启动后台刷新任务
@@ -52,8 +57,23 @@ class LoginRegister:
 
         logger.info(f"LoginRegister initialized with {len(self._logins)} login classes")
 
+    def _build_login_assignments(self) -> None:
+        """
+        构建登录器到秒数的分配映射
+
+        使用哈希确保：
+        - 同一登录器始终分配到同一秒
+        - 均匀分布在 0-3599 秒范围内
+        """
+        self._login_second_assignments = {}
+        for login_name in self._logins.keys():
+            # 使用哈希将登录器名称映射到 0-3599 秒
+            assigned_second = hash(login_name) % self._num_seconds_per_hour
+            self._login_second_assignments[login_name] = assigned_second
+            # logger.debug(f"Login '{login_name}' assigned to second {assigned_second}")
+
     def _start_global_refresh_task(self) -> None:
-        """启动全局后台刷新任务"""
+        """启动全局后台刷新任务（每秒轮询版本）"""
         if self._running:
             return
 
@@ -61,33 +81,64 @@ class LoginRegister:
         self._stop_event = asyncio.Event()
 
         async def refresh_loop():
-            """每小时依次刷新所有已登录的登录器"""
-            start_time = datetime.datetime.now()
+            """每秒检查并刷新分配到当前秒数的登录器"""
             while self._running:
-                await asyncio.sleep(1)
-                current_interval = datetime.datetime.now() - start_time
+                try:
+                    await asyncio.sleep(1)
 
-                if self._stop_event.is_set():
-                    break
+                    if self._stop_event.is_set():
+                        break
 
-                if self._running and current_interval >= self._refresh_interval:
-                    start_time = datetime.datetime.now()
-                    # 依次刷新所有已登录的登录器
-                    for login_name, instance in list(self._instances.items()):
-                        if not self._running:
-                            break
+                    if not self._instances:
+                        continue  # 没有活跃的登录器实例
 
-                        try:
-                            await instance.refresh_login_state()
-                            #顺带清理可能遗留的登录错误导致的资源未关闭的问题
-                            await instance.close()
-                            logger.info(f"Refreshed login state for {login_name}")
-                            await asyncio.sleep(self._login_refresh_interval)
-                        except Exception as e:
-                            logger.error(f"Error refreshing {login_name}: {e}")
+                    # 获取当前时间在小时内的秒数（0-3599）
+                    now = datetime.datetime.now()
+                    current_second = now.minute * 60 + now.second
+
+                    # 找出分配到当前秒的所有登录器
+                    logins_to_refresh = []
+                    for login_name, assigned_second in self._login_second_assignments.items():
+                        if assigned_second == current_second and login_name in self._instances:
+                            logins_to_refresh.append((login_name, self._instances[login_name]))
+
+                    if not logins_to_refresh:
+                        continue
+
+                    logger.debug(
+                        f"Second {current_second}: refreshing {len(logins_to_refresh)} login(s)"
+                    )
+
+                    # 并发刷新（但限制并发数）
+                    # 使用现有配置中的 check_concurrency 作为并发限制
+                    from omnidata.core.config import settings
+                    concurrency = settings.login.check_concurrency
+
+                    semaphore = asyncio.Semaphore(concurrency)
+
+                    async def refresh_with_semaphore(login_name: str, instance: BaseQRLogin):
+                        async with semaphore:
+                            try:
+                                await instance.refresh_login_state()
+                                await instance.close()
+                                # logger.debug(f"Refreshed {login_name} at second {current_second}")
+                            except Exception as e:
+                                logger.error(f"Error refreshing {login_name}: {e}")
+
+                    tasks = [
+                        refresh_with_semaphore(name, instance)
+                        for name, instance in logins_to_refresh
+                    ]
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+                except Exception as e:
+                    logger.error(f"Error in refresh loop: {e}")
 
         self._refresh_task = asyncio.create_task(refresh_loop())
-        logger.info("Global login refresh task started")
+        logger.info(
+            f"Global login refresh task started (second-based polling, "
+            f"{len(self._logins)} logins assigned across {self._num_seconds_per_hour} seconds)"
+        )
 
     async def shutdown(self) -> None:
         """关闭所有登录实例，取消后台登录保持任务"""
@@ -273,8 +324,6 @@ class LoginRegister:
             info["login_status"] = {"status": "error", "message": str(e)}
 
         return info
-
- 
 
     @property
     def login_count(self) -> int:
