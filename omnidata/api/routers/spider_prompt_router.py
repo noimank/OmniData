@@ -263,16 +263,16 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
             )
         usage_count = usage_count_result.scalar() or 0
 
-        response_data = SpiderPromptResponse(
-            id=prompt.id,
-            spider_name=prompt.spider_name,
-            version_name=prompt.version_name,
-            description=prompt.description,
-            is_default=prompt.is_default,
-            usage_count=usage_count,
-            created_at=prompt.created_at,
-            updated_at=prompt.updated_at,
-        )
+        response_data = {
+            "id": prompt.id,
+            "spider_name": prompt.spider_name,
+            "version_name": prompt.version_name,
+            "description": prompt.description,
+            "is_default": prompt.is_default,
+            "usage_count": usage_count,
+            "created_at": prompt.created_at,
+            "updated_at": prompt.updated_at,
+        }
         return success_response(
             data=response_data,
             message="Spider prompt updated successfully",
@@ -450,7 +450,6 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         if existing.scalar_one_or_none():
             return error_response(
                 message=f"Prompt version '{request.version_name}' already exists for spider '{spider_name}'",
-                status_code=status.HTTP_409_CONFLICT,
             )
 
         # 如果设置为默认版本，需要先取消该 Spider 的其他默认版本
