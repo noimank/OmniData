@@ -111,7 +111,7 @@
           <template #default="{ row }">
             <div class="idle-time-wrapper">
               <div class="idle-time-text">{{ formatIdleTime(row.idle_time) }}</div>
-              <template v-if="contextPool?.config.idle_timeout >= 0">
+              <template v-if="(contextPool?.config.idle_timeout ?? -1) >= 0">
                 <el-progress
                   :percentage="getIdleTimePercent(row.idle_time)"
                   :status="getIdleTimeStatus(row.idle_time)"
