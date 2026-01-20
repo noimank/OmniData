@@ -1,11 +1,18 @@
 """
 MCP 服务管理器
 负责动态创建、挂载和管理 MCP 服务
+
+基于 FastAPI 和 FastMCP 最佳实践实现，修复内存泄漏问题
+参考:
+- FastAPI GitHub Discussion #9995: 正确的 Mount 删除方法
+- FastMCP 官方文档: Lifespan 管理和资源清理
 """
 
 import asyncio
+import gc
 import inspect
 import logging
+import weakref
 from collections.abc import Callable
 from inspect import Parameter
 from typing import Any, Literal
@@ -13,6 +20,7 @@ from typing import Any, Literal
 from fastapi import FastAPI
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
+from starlette.routing import Mount
 
 from omnidata.core.spider_register import SpiderRegister
 from omnidata.core.exceptions import InitializationError
@@ -25,13 +33,16 @@ class LifespanTaskManager:
     """
     管理 lifespan 上下文的专用 asyncio 任务
 
-    确保 __aenter__ 和 __aexit__ 在同一个任务上下文中调用，
-    避免 ContextVar 错误。
+    关键改进:
+    - 使用弱引用打破循环引用链 (LifespanTaskManager -> FastAPI -> Routes -> Mount)
+    - 添加 cleanup() 方法显式清理所有引用
+    - 确保 __aenter__ 和 __aexit__ 在同一个任务上下文中调用，避免 ContextVar 错误
     """
 
     def __init__(self, lifespan_context: Any, app: FastAPI, service_name: str):
         self._lifespan_context = lifespan_context
-        self._app = app
+        # 使用弱引用打破循环引用链，防止内存泄漏
+        self._app_ref = weakref.ref(app)
         self._service_name = service_name
         self._task: asyncio.Task | None = None
         self._is_started = False
@@ -70,20 +81,67 @@ class LifespanTaskManager:
         except Exception as e:
             logger.warning(f"Lifespan cleanup error for '{self._service_name}': {e}")
 
-    async def stop(self) -> None:
-        """信号通知 lifespan 任务停止"""
+    async def stop(self, timeout: float = 5.0) -> None:
+        """
+        信号通知 lifespan 任务停止
+
+        Args:
+            timeout: 等待任务完成的超时时间（秒），默认 5 秒
+        """
         if not self._is_started:
             return
 
+        # 发送停止信号
         self._stop_event.set()
+
         if self._task:
-            await asyncio.shield(self._task)
-            self._task = None
+            # 使用超时等待任务完成，防止无限阻塞
+            try:
+                await asyncio.wait_for(self._task, timeout=timeout)
+            except TimeoutError:
+                # 超时后强制取消任务
+                logger.warning(
+                    f"Lifespan task for '{self._service_name}' did not complete "
+                    f"within {timeout}s, cancelling"
+                )
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    # 任务已被取消，这是预期行为
+                    pass
+            except asyncio.CancelledError:
+                # 调用方被取消，允许传播
+                # 任务会通过 _stop_event 自然完成清理
+                logger.debug(f"Stop for '{self._service_name}' was cancelled")
+                raise
+            finally:
+                self._task = None
+
         self._is_started = False
+
+    def cleanup(self) -> None:
+        """
+        显式清理所有引用，帮助垃圾回收
+
+        在服务卸载时必须调用，以打破所有可能的引用链
+        """
+        self._lifespan_context = None
+        self._app_ref = None
+        self._task = None
+        self._stop_event = None
+        self._startup_complete = None
+        self._startup_error = None
 
 
 class MCPServiceInfo:
-    """MCP 服务信息"""
+    """
+    MCP 服务信息包装类
+
+    关键改进:
+    - 添加 cleanup_resources() 方法显式清理所有 FastMCP 相关引用
+    - 确保在卸载时彻底释放内存
+    """
 
     def __init__(
         self,
@@ -99,13 +157,62 @@ class MCPServiceInfo:
         self.transport = transport
         self.lifespan_task_manager = lifespan_task_manager
 
+    def cleanup_resources(self) -> None:
+        """
+        清理所有资源引用
+
+        根据 FastMCP 最佳实践，显式断开所有引用以确保资源释放
+
+        清理顺序:
+        1. LifespanTaskManager (停止任务并清理引用)
+        2. FastMCP 内部工具注册表
+        3. FastMCP 实例
+        4. HTTP app (Starlette/FastAPI 子应用)
+        """
+        # 清理 lifespan 管理器
+        if self.lifespan_task_manager:
+            try:
+                self.lifespan_task_manager.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up lifespan manager for '{self.name}': {e}")
+            finally:
+                self.lifespan_task_manager = None
+
+        # 清理 FastMCP 工具注册表 (FastMCP 内部使用 dict 存储)
+        if self.mcp_server is not None:
+            try:
+                if hasattr(self.mcp_server, '_tools'):
+                    self.mcp_server._tools.clear()
+                if hasattr(self.mcp_server, '_resources'):
+                    self.mcp_server._resources.clear()
+                if hasattr(self.mcp_server, '_prompts'):
+                    self.mcp_server._prompts.clear()
+            except Exception as e:
+                logger.warning(f"Error clearing FastMCP registries for '{self.name}': {e}")
+            finally:
+                self.mcp_server = None
+
+        # 清理 HTTP app 引用
+        self.http_app = None
+
+        logger.debug(f"All resources cleaned up for MCP service '{self.name}'")
+
 
 class MCPManager:
     """
-    MCP 服务管理器
+    MCP 服务管理器 - 修复内存泄漏版本
 
-    负责动态创建和挂载 MCP 服务到 FastAPI 应用
-    正确处理所有传输模式（http, streamable-http, sse）的 lifespan 管理
+    关键改进:
+    1. 使用 FastAPI 官方推荐的 Mount 删除方法 (isinstance + del)
+    2. 显式清理 FastMCP 所有资源引用
+    3. 使用弱引用打破循环引用链
+    4. 清除 FastAPI 路由缓存和 OpenAPI 缓存
+    5. 显式调用垃圾回收
+
+    参考:
+    - FastAPI GitHub #9995: 正确的 sub-app unmount 方法
+    - Starlette 路由实现: Mount 类型检测和删除
+    - FastMCP 文档: Lifespan 管理最佳实践
     """
 
     def __init__(
@@ -174,7 +281,8 @@ class MCPManager:
                 # 去重检查：防止同名工具被添加多次
                 if tool_name in added_tools:
                     logger.warning(
-                        f"Duplicate tool '{tool_name}' (spider: {spider_name}) skipped in service '{service_name}'"
+                        f"Duplicate tool '{tool_name}' (spider: {spider_name}) "
+                        f"skipped in service '{service_name}'"
                     )
                     continue
                 added_tools.add(tool_name)
@@ -227,41 +335,83 @@ class MCPManager:
                 transport=transport,
                 lifespan_task_manager=lifespan_task_manager,
             )
-            logger.info(f"MCP service '{service_name}' mounted at {mount_path} (transport={transport})")
+            logger.info(
+                f"MCP service '{service_name}' mounted at {mount_path} (transport={transport})"
+            )
 
-    async def _unmount_service_internal(self, service_name: str, in_shutdown_context: bool = False) -> None:
+    async def _unmount_service_internal(self, service_name: str) -> None:
         """
         内部方法：卸载 MCP 服务（假设已持有锁）
 
-        清理 lifespan 上下文并从 FastAPI 中移除路由
+        修复内存泄漏的完整实现，参考 FastAPI GitHub #9995 官方推荐方法
+
+        清理步骤:
+        1. 从服务字典中移除（先移除防止重复清理）
+        2. 停止 lifespan 任务管理器
+        3. 使用 isinstance(Mount) 精确匹配并删除路由
+        4. 清除 FastAPI 路由缓存和 OpenAPI 缓存
+        5. 显式清理所有 FastMCP 资源引用
 
         Args:
             service_name: 服务名称
-            in_shutdown_context: 是否在 shutdown 上下文中调用（保留参数兼容性）
         """
-        if service_name in self._services:
-            service_info = self._services[service_name]
-
-            # 停止 lifespan 任务管理器（对于 http 和 streamable-http）
-            if service_info.lifespan_task_manager is not None:
-                try:
-                    await service_info.lifespan_task_manager.stop()
-                    logger.debug(f"Lifespan task stopped for '{service_name}'")
-                except Exception as e:
-                    logger.warning(f"Lifespan task stop error for '{service_name}': {e}")
-
-            # 从 FastAPI 中移除路由（所有 transport 都需要）
-            mount_path = f"/mcp/{service_name}"
-            self._app.router.routes = [
-                r for r in self._app.router.routes
-                if not getattr(r, "path", "").startswith(mount_path)
-            ]
-
-            # 删除缓存（使用 pop 避免 KeyError，使方法幂等）
-            self._services.pop(service_name, None)
-            logger.info(f"MCP service '{service_name}' unmounted")
-        else:
+        # 检查服务是否存在
+        if service_name not in self._services:
             logger.debug(f"MCP service '{service_name}' not mounted, skipping unmount")
+            return
+
+        # 步骤 1: 先从字典中移除（防止重复清理）
+        service_info = self._services.pop(service_name)
+        mount_path = f"/mcp/{service_name}"
+
+        # 步骤 2: 停止 lifespan 任务管理器（对于 http 和 streamable-http）
+        if service_info.lifespan_task_manager is not None:
+            try:
+                await service_info.lifespan_task_manager.stop()
+                logger.debug(f"Lifespan task stopped for '{service_name}'")
+            except Exception as e:
+                logger.warning(f"Lifespan task stop error for '{service_name}': {e}")
+
+        # 步骤 3: 从 FastAPI 路由表中删除 Mount 对象
+        # 使用 FastAPI 官方推荐的方法 (GitHub #9995)
+        mount_removed = False
+        routes_to_remove = []
+
+        # 首先收集要删除的路由索引
+        for index, route in enumerate(list(self._app.router.routes)):
+            # 使用 isinstance(Mount) 精确匹配，而非字符串前缀匹配
+            if isinstance(route, Mount) and route.path == mount_path:
+                routes_to_remove.append(index)
+                mount_removed = True
+                logger.debug(f"Found Mount route at index {index} for '{mount_path}'")
+
+        # 从后往前删除，避免索引变化
+        for index in reversed(routes_to_remove):
+            del self._app.router.routes[index]
+            logger.debug(f"Removed route at index {index} for '{mount_path}'")
+
+        if not mount_removed:
+            logger.warning(
+                f"No Mount route found for '{mount_path}', may have been already removed"
+            )
+
+        # 步骤 4: 清除路由缓存（重要！防止旧路由被继续使用）
+        if hasattr(self._app.router, '_route_cache'):
+            self._app.router._route_cache.clear()
+            logger.debug(f"Cleared route cache for '{service_name}'")
+
+        # 步骤 5: 清除 OpenAPI 缓存（确保 Swagger 文档更新）
+        if hasattr(self._app, 'openapi_schema'):
+            self._app.openapi_schema = None
+            logger.debug(f"Cleared OpenAPI schema cache for '{service_name}'")
+
+        # 步骤 6: 显式清理服务资源引用（调用 MCPServiceInfo 的清理方法）
+        try:
+            service_info.cleanup_resources()
+        except Exception as e:
+            logger.warning(f"Error cleaning up resources for '{service_name}': {e}")
+
+        logger.info(f"MCP service '{service_name}' unmounted and all resources cleaned up")
 
     async def unmount_service(self, service_name: str) -> None:
         """
@@ -279,6 +429,8 @@ class MCPManager:
 
         在应用关闭时调用，会等待所有清理任务完成。
 
+        改进: 添加显式垃圾回收，确保释放所有资源
+
         Args:
             timeout: 每个服务清理的超时时间（秒）
         """
@@ -288,18 +440,23 @@ class MCPManager:
             for service_name in service_names:
                 try:
                     await asyncio.wait_for(
-                        self._unmount_service_internal(service_name, in_shutdown_context=True),
+                        self._unmount_service_internal(service_name),
                         timeout=timeout
                     )
                 except asyncio.CancelledError:
                     logger.debug(f"Cleanup for service '{service_name}' cancelled during shutdown")
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(f"Timeout cleaning up service '{service_name}' after {timeout}s")
                 except Exception as e:
                     logger.error(f"Error cleaning up service '{service_name}': {e}")
 
             # 额外保护：确保服务字典被清空
             self._services.clear()
+
+        # 强制垃圾回收（确保释放所有循环引用的资源）
+        # 这是修复内存泄漏的关键步骤
+        gc.collect()
+        logger.info("Forced garbage collection after MCP services cleanup")
 
     def is_service_mounted(self, service_name: str) -> bool:
         """检查服务是否已挂载"""
