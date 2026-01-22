@@ -393,11 +393,13 @@ class BrowserContextPool:
         """
         创建新的 BrowserContext
 
-        如果有 namespace，从 Redis 加载保存的状态。
+        如果有 namespace，从 Redis 加载保存的状态（cookies + localStorage）。
+        使用 Playwright 原生的 storage_state 机制，自动恢复所有状态。
         """
         if self._browser is None:
             raise BrowserPoolError("Browser not initialized")
 
+        # 准备 context 选项
         context_options = {
             "viewport": {"width": 1920, "height": 1080},
             "locale": "zh-CN",
@@ -406,17 +408,26 @@ class BrowserContextPool:
             **kwargs
         }
 
+        # 从 Redis 加载 storage_state
+        storage_state = None
+        if namespace:
+            storage_state = await self._get_storage_state(namespace)
+            if storage_state:
+                # 使用 storage_state 参数，Playwright 会自动恢复 cookies 和 localStorage
+                context_options["storage_state"] = storage_state
+
         context = await self._browser.new_context(**context_options)
         context.set_default_timeout(self._config.default_timeout)
 
-        # 仅在创建时加载状态（显式保存）
-        if namespace:
-            await self._load_context_state(context, namespace)
-
         return context
 
-    async def _load_context_state(self, context: BrowserContext, namespace: str) -> None:
-        """从 Redis 加载 context 状态"""
+    async def _get_storage_state(self, namespace: str) -> dict | None:
+        """
+        从 Redis 获取 storage_state（包含 cookies + localStorage）
+
+        Returns:
+            storage_state 对象或 None（如果不存在）
+        """
         try:
             redis = await get_redis()
             key = f"omnidata:context_state:{namespace}"
@@ -424,12 +435,23 @@ class BrowserContextPool:
 
             if data:
                 state = json.loads(data)
+
+                # 验证数据完整性
                 cookies = state.get("cookies", [])
-                if cookies:
-                    await context.add_cookies(cookies)
-                logger.debug(f"Context state loaded: namespace={namespace}")
+                origins = state.get("origins", [])
+
+                if not cookies and not origins:
+                    logger.debug(f"Empty storage state for namespace={namespace}")
+                    return None
+
+                logger.debug(f"Storage state loaded: namespace={namespace}, "
+                           f"cookies={len(cookies)}, origins={len(origins)}")
+                return state
+
+            return None
         except Exception as e:
-            logger.error(f"Failed to load context state for {namespace}: {e}")
+            logger.error(f"Failed to get storage state for {namespace}: {e}")
+            return None
 
     async def _verify_context_quick(self, context: BrowserContext) -> bool:
         """
