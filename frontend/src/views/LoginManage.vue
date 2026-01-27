@@ -217,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useLoginStore } from '@/stores/login'
 import {
   Refresh,
@@ -330,12 +330,6 @@ watch(polling, (newVal, oldVal) => {
   }
 })
 
-// 监听登录方式选择变化，保存到 sessionStorage
-watch(selectedQrType, (newVal) => {
-  if (currentLogin.value && newVal) {
-    sessionStorage.setItem(`login_qr_type_${currentLogin.value.name}`, newVal)
-  }
-})
 
 const fetchLogins = async () => {
   await loginStore.fetchLogins()
@@ -568,74 +562,22 @@ const getAlertType = (status?: string) => {
   return 'info'
 }
 
-// 组件激活时（从 keep-alive 恢复或首次挂载）
-onActivated(async () => {
-  // 刷新登录器列表，获取最新状态
-  await fetchLogins()
-})
-
-// 组件挂载时（仅首次）
+// 组件挂载时
 onMounted(async () => {
-  // 清理可能残留的轮询状态（从上一次页面访问留下来的）
-  if (loginStore.polling) {
-    loginStore.stopVerifyPolling()
-  }
-  if (loginStore.qrcode) {
-    loginStore.qrcode = null
-  }
-  if (loginStore.loginStatus?.status === 'waiting') {
-    loginStore.loginStatus = null
-  }
-
   await fetchLogins()
-
-  // 恢复当前登录器的登录方式选择
-  if (loginStore.currentLogin) {
-    const detail = await loginStore.fetchLoginDetail(loginStore.currentLogin.name)
-    if (detail && detail.qrcode_types && detail.qrcode_types.length > 0) {
-      const savedQrType = sessionStorage.getItem(`login_qr_type_${loginStore.currentLogin.name}`)
-      if (savedQrType && detail.qrcode_types.includes(savedQrType)) {
-        selectedQrType.value = savedQrType
-      } else {
-        selectedQrType.value = detail.qrcode_types[0]
-      }
-    } else {
-      selectedQrType.value = 'default'
-    }
-  }
 })
 
-// 组件失活时（切换到其他标签页，使用 keep-alive 时触发）
-onDeactivated(() => {
-  // 保存当前登录方式选择
-  if (currentLogin.value && selectedQrType.value) {
-    sessionStorage.setItem(`login_qr_type_${currentLogin.value.name}`, selectedQrType.value)
-  }
-
-  const currentLoginName = currentLogin.value?.name
-  const wasPolling = polling.value
-
-  stopCountdown()
-  loginStore.stopVerifyPolling()
-
-  // 切换标签页时清理二维码资源
-  if (currentLoginName && wasPolling) {
-    loginStore.cleanupQrcodeResources(currentLoginName).catch(() => {})
-  }
-})
-
-// 组件卸载时（页面真正销毁，如关闭浏览器标签页）
+// 组件卸载时
 onUnmounted(() => {
-  const currentLoginName = currentLogin.value?.name
-  const hasQrcode = !!qrcode.value
-
   stopCountdown()
   loginStore.stopVerifyPolling()
 
-  if (currentLoginName && hasQrcode) {
-    loginStore.cleanupQrcodeResources(currentLoginName).catch(() => {})
+  // 清理二维码资源
+  if (currentLogin.value && qrcode.value) {
+    loginStore.cleanupQrcodeResources(currentLogin.value.name).catch(() => {})
   }
-  // 页面卸载时重置所有状态
+
+  // 重置状态
   loginStore.qrcode = null
   loginStore.loginStatus = null
 })
