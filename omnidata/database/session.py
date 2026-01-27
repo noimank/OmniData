@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from omnidata.core.config import settings
+# from omnidata.core.config import settings
 from omnidata.database.models import Base
 
 
@@ -20,8 +20,7 @@ async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 def _get_database_path() -> Path:
     """获取数据库文件路径"""
-    db_path = settings.db.db_path
-    path = Path(db_path)
+    path = Path(__file__).parent.parent.parent / "data" / "omnidata.db"
     # 确保目录存在
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
@@ -86,7 +85,7 @@ async def close_db() -> None:
         try:
             await asyncio.wait_for(_engine.dispose(), timeout=3.0)
             logger.info("Database engine closed")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Database close timeout, proceeding with cleanup")
         except asyncio.CancelledError:
             logger.debug("Database close cancelled during shutdown")

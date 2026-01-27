@@ -93,11 +93,6 @@ class LoginConfig:
     check_timeout: int = 30  # 单次检查的超时时间（秒）
 
 
-@dataclass
-class DatabaseConfig:
-    """数据库配置"""
-
-    db_path: str = "data/omnidata.db"  # SQLite 数据库文件路径
 
 
 class Settings(BaseSettings):
@@ -112,7 +107,6 @@ class Settings(BaseSettings):
     browser: BrowserConfig = field(default_factory=BrowserConfig)
     redis: RedisConfig = field(default_factory=RedisConfig)
     login: LoginConfig = field(default_factory=LoginConfig)
-    db: DatabaseConfig = field(default_factory=DatabaseConfig)
 
     class Config:
         env_prefix = "OMNIDATA_"
