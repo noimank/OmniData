@@ -76,7 +76,7 @@ export interface QrcodeResponse {
 }
 
 export interface LoginStatus {
-  status: 'waiting' | 'success' | 'failed' | 'not_logged_in' | 'error'
+  status: 'waiting' | 'success' | 'failed' | 'not_logged_in'
   message: string
   login_name?: string
 }

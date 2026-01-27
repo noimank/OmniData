@@ -67,7 +67,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
                 return qr_code
 
             else:
-                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{self.get_qrcode_types()}")
+                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}")
 
         except Exception as e:
             logger.error(f"Failed to get eastmoney qrcode: {e}")

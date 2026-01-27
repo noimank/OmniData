@@ -114,15 +114,10 @@ export const useLoginStore = defineStore('login', () => {
   const cleanupQrcodeResources = async (loginName: string) => {
     try {
       const result = await api.cleanupQrcodeResources(loginName)
-      if (result.success) {
-        console.log(`Successfully cleaned up QR code resources for ${loginName}`)
-      } else {
-        console.warn(`Failed to cleanup QR code resources for ${loginName}: ${result.message}`)
-      }
       qrcode.value = null
       return result.success
     } catch (error) {
-      console.error('Failed to cleanup QR code resources:', error)
+      console.warn(`Failed to cleanup QR code resources for ${loginName}:`, error)
       qrcode.value = null
       return false
     }

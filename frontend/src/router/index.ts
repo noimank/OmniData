@@ -46,7 +46,7 @@ const router = createRouter({
   routes
 })
 
-// 导航守卫 - 仅设置页面标题
+// 导航守卫 - 设置页面标题
 router.beforeEach((to, _from, next) => {
   document.title = `${to.meta.title || 'OmniData'} - 管理平台`
   next()

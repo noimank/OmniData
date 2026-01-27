@@ -268,7 +268,7 @@ class LoginRegister:
         获取所有登录器信息，包含登录状态（并发优化版本）
 
         使用 asyncio.Semaphore 控制并发数，避免顺序等待导致的性能问题。
-        优先使用缓存状态，减少 is_login() 调用。
+        使用 get_login_status() 获取缓存状态，不触发实际验证。
         """
         from omnidata.core.config import settings
 

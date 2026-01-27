@@ -1,24 +1,5 @@
 <template>
   <div class="login-manage-page">
-    <!-- 加载进度提示 -->
-    <el-alert
-      v-if="loading"
-      title="正在检查登录状态..."
-      type="info"
-      :closable="false"
-      show-icon
-      class="loading-alert"
-    >
-      <template #default>
-        <div class="loading-info">
-          <span>并发检查中，请稍候...</span>
-          <el-text type="info" size="small">
-            预计需要几秒钟时间
-          </el-text>
-        </div>
-      </template>
-    </el-alert>
-
     <el-row :gutter="20">
       <!-- 左侧：登录器列表 -->
       <el-col :span="8">
@@ -236,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { useLoginStore } from '@/stores/login'
 import {
   Refresh,
@@ -273,10 +254,12 @@ let countdownTimer: number | null = null
 // 是否可以开始登录（只有未登录状态才可以，或二维码已过期）
 const canStartLogin = computed(() => {
   if (!loginStatus.value) return true
-  // 二维码过期或未登录/失败状态都可以触发登录
-  return qrcodeExpired.value ||
-         loginStatus.value.status === 'not_logged_in' ||
-         loginStatus.value.status === 'failed'
+  // waiting 状态说明正在等待扫码，不允许重新开始
+  if (loginStatus.value.status === 'waiting') return false
+  // success 状态已登录，不允许
+  if (loginStatus.value.status === 'success') return false
+  // 其他状态（not_logged_in、failed）都可以触发登录
+  return true
 })
 
 // 格式化倒计时
@@ -337,9 +320,12 @@ watch(polling, (newVal, oldVal) => {
   // 轮询停止时
   if (!newVal && oldVal) {
     stopCountdown()
-    // 如果不是成功状态，重置为未登录
-    if (loginStatus.value?.status !== 'success') {
-      loginStore.loginStatus = { status: 'not_logged_in', message: '未登录' }
+    // 如果不是成功状态，自动重置为未登录状态，允许重新登录
+    if (loginStatus.value && loginStatus.value.status !== 'success') {
+      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+      statusCache.value[currentLogin.value?.name || ''] = notLoggedInStatus
+      loginStore.loginStatus = notLoggedInStatus
+      qrcodeExpired.value = false
     }
   }
 })
@@ -359,6 +345,10 @@ const fetchLogins = async () => {
       statusCache.value[login.name] = login.login_status
     }
   })
+  // 如果当前没有选中登录器但有登录状态，尝试从缓存同步
+  if (!currentLogin.value && loginStatus.value) {
+    // 这种情况不应该发生，但确保状态一致
+  }
 }
 
 const handleSelectLogin = async (login: LoginInfo | null) => {
@@ -409,30 +399,37 @@ const handleStartLogin = async () => {
     return
   }
 
-  // 先检查登录状态
-  const currentStatus = await loginStore.checkStatus(currentLogin.value.name)
-  if (!currentStatus) {
-    ElMessage.error('检查登录状态失败')
-    return
+  // 实时检查登录状态，而不是使用缓存
+  try {
+    const realTimeStatus = await loginStore.checkStatus(currentLogin.value.name)
+
+    if (!realTimeStatus) {
+      ElMessage.error('无法获取登录状态，请重试')
+      return
+    }
+
+    // 更新状态缓存
+    statusCache.value[currentLogin.value.name] = realTimeStatus
+    loginStore.loginStatus = realTimeStatus
+
+    // 如果已登录，不允许再次登录
+    if (realTimeStatus.status === 'success') {
+      ElMessage.warning('当前已登录，请先清除登录状态')
+      return
+    }
+
+    // 只有未登录状态才能获取二维码
+    if (realTimeStatus.status !== 'not_logged_in' && realTimeStatus.status !== 'failed') {
+      ElMessage.warning(realTimeStatus.message || '当前状态不允许登录')
+      return
+    }
+
+    // 确认未登录后，获取二维码
+    await handleGetQrcode()
+  } catch (error: any) {
+    console.error('检查登录状态失败:', error)
+    ElMessage.error(error.message || '检查登录状态失败')
   }
-
-  // 更新状态缓存和 store
-  statusCache.value[currentLogin.value.name] = currentStatus
-  loginStore.loginStatus = currentStatus
-
-  // 如果已登录，不允许再次登录
-  if (currentStatus.status === 'success') {
-    ElMessage.warning('当前已登录，请先清除登录状态')
-    return
-  }
-
-  // 检查是否允许开始登录
-  if (!canStartLogin.value) {
-    ElMessage.warning(currentStatus.message || '当前状态不允许登录')
-    return
-  }
-
-  await handleGetQrcode()
 }
 
 const handleGetQrcode = async () => {
@@ -482,10 +479,25 @@ const handleCancelLogin = async () => {
     } catch (error) {
       console.error('清理二维码资源失败:', error)
     }
+
+    // 重新获取登录状态，确保与后端同步
+    const detail = await loginStore.fetchLoginDetail(currentLogin.value.name)
+    if (detail?.login_status) {
+      loginStore.loginStatus = detail.login_status
+      statusCache.value[currentLogin.value.name] = detail.login_status
+    } else {
+      // 如果后端返回 null，设置默认未登录状态
+      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+      statusCache.value[currentLogin.value.name] = notLoggedInStatus
+      loginStore.loginStatus = notLoggedInStatus
+    }
+  } else {
+    // 如果没有选中登录器，也重置本地状态
+    const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+    loginStore.loginStatus = notLoggedInStatus
   }
 
-  // 重置前端状态
-  loginStore.loginStatus = { status: 'not_logged_in', message: '未登录' }
+  qrcodeExpired.value = false
   ElMessage.info('已取消登录')
 }
 
@@ -503,11 +515,12 @@ const handleClearSession = async () => {
     const success = await loginStore.clearSession(currentLogin.value.name)
     if (success) {
       ElMessage.success('登录状态已清除')
-      // 直接设置为未登录状态
+      // 重置所有状态，允许重新登录
+      loginStore.qrcode = null
       const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
       statusCache.value[currentLogin.value.name] = notLoggedInStatus
       loginStore.loginStatus = notLoggedInStatus
-      loginStore.qrcode = null
+      qrcodeExpired.value = false
     } else {
       ElMessage.error('清除失败')
     }
@@ -555,21 +568,24 @@ const getAlertType = (status?: string) => {
   return 'info'
 }
 
+// 组件激活时（从 keep-alive 恢复或首次挂载）
+onActivated(async () => {
+  // 刷新登录器列表，获取最新状态
+  await fetchLogins()
+})
+
+// 组件挂载时（仅首次）
 onMounted(async () => {
   // 清理可能残留的轮询状态（从上一次页面访问留下来的）
-  // 如果上次用户在轮询中离开页面，polling 可能还是 true
   if (loginStore.polling) {
     loginStore.stopVerifyPolling()
   }
-  // 清理二维码（只有轮询时才有二维码，如果用户离开页面说明没完成登录）
   if (loginStore.qrcode) {
     loginStore.qrcode = null
   }
-  // 清理 waiting 状态（说明上次没有完成登录就离开了）
   if (loginStore.loginStatus?.status === 'waiting') {
     loginStore.loginStatus = null
   }
-  // 注意：保留 success 状态，因为已登录的用户状态需要保留
 
   await fetchLogins()
 
@@ -577,7 +593,6 @@ onMounted(async () => {
   if (loginStore.currentLogin) {
     const detail = await loginStore.fetchLoginDetail(loginStore.currentLogin.name)
     if (detail && detail.qrcode_types && detail.qrcode_types.length > 0) {
-      // 尝试从 sessionStorage 恢复之前的选择
       const savedQrType = sessionStorage.getItem(`login_qr_type_${loginStore.currentLogin.name}`)
       if (savedQrType && detail.qrcode_types.includes(savedQrType)) {
         selectedQrType.value = savedQrType
@@ -590,41 +605,44 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
+// 组件失活时（切换到其他标签页，使用 keep-alive 时触发）
+onDeactivated(() => {
   // 保存当前登录方式选择
   if (currentLogin.value && selectedQrType.value) {
     sessionStorage.setItem(`login_qr_type_${currentLogin.value.name}`, selectedQrType.value)
   }
 
-  // 在停止轮询之前，先保存状态
   const currentLoginName = currentLogin.value?.name
-  const isPolling = polling.value
+  const wasPolling = polling.value
 
   stopCountdown()
   loginStore.stopVerifyPolling()
 
-  // 页面卸载时清理二维码资源
-  if (currentLoginName && isPolling) {
-    loginStore.cleanupQrcodeResources(currentLoginName)
-    // 重置前端状态（只有在轮询中时才重置，说明用户还没完成登录）
-    loginStore.qrcode = null
-    loginStore.loginStatus = null
+  // 切换标签页时清理二维码资源
+  if (currentLoginName && wasPolling) {
+    loginStore.cleanupQrcodeResources(currentLoginName).catch(() => {})
   }
+})
+
+// 组件卸载时（页面真正销毁，如关闭浏览器标签页）
+onUnmounted(() => {
+  const currentLoginName = currentLogin.value?.name
+  const hasQrcode = !!qrcode.value
+
+  stopCountdown()
+  loginStore.stopVerifyPolling()
+
+  if (currentLoginName && hasQrcode) {
+    loginStore.cleanupQrcodeResources(currentLoginName).catch(() => {})
+  }
+  // 页面卸载时重置所有状态
+  loginStore.qrcode = null
+  loginStore.loginStatus = null
 })
 </script>
 
 <style scoped lang="scss">
 .login-manage-page {
-  .loading-alert {
-    margin-bottom: 20px;
-
-    .loading-info {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-  }
-
   .card-header {
     display: flex;
     justify-content: space-between;
