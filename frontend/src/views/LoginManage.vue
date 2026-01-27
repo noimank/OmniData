@@ -26,7 +26,6 @@
           <template #header>
             <div class="card-header">
               <span>登录器列表</span>
-              <el-button :icon="Refresh" @click="fetchLogins" :loading="loading" circle />
             </div>
           </template>
 
@@ -48,6 +47,17 @@
                 <el-tag :type="getLoginStatusType(row.name)" size="small">
                   {{ getLoginStatusText(row.name) }}
                 </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="70" align="center">
+              <template #default="{ row }">
+                <el-button
+                  :icon="Refresh"
+                  circle
+                  size="small"
+                  :loading="refreshingLogin === row.name"
+                  @click="handleRefreshLogin(row)"
+                />
               </template>
             </el-table-column>
           </el-table>
@@ -252,6 +262,7 @@ const loginStatus = computed(() => loginStore.loginStatus)
 const polling = computed(() => loginStore.polling)
 const loading = computed(() => loginStore.loading)
 const qrcodeLoading = ref(false)
+const refreshingLogin = ref<string | null>(null)
 
 const selectedQrType = ref('')
 const statusCache = ref<Record<string, LoginStatus>>({})
@@ -394,10 +405,33 @@ const handleSelectLogin = async (login: LoginInfo | null) => {
 }
 
 const handleStartLogin = async () => {
-  if (!currentLogin.value || !canStartLogin.value) {
-    ElMessage.warning('当前状态不允许登录')
+  if (!currentLogin.value) {
     return
   }
+
+  // 先检查登录状态
+  const currentStatus = await loginStore.checkStatus(currentLogin.value.name)
+  if (!currentStatus) {
+    ElMessage.error('检查登录状态失败')
+    return
+  }
+
+  // 更新状态缓存和 store
+  statusCache.value[currentLogin.value.name] = currentStatus
+  loginStore.loginStatus = currentStatus
+
+  // 如果已登录，不允许再次登录
+  if (currentStatus.status === 'success') {
+    ElMessage.warning('当前已登录，请先清除登录状态')
+    return
+  }
+
+  // 检查是否允许开始登录
+  if (!canStartLogin.value) {
+    ElMessage.warning(currentStatus.message || '当前状态不允许登录')
+    return
+  }
+
   await handleGetQrcode()
 }
 
@@ -492,6 +526,27 @@ const getLoginStatusText = (loginName: string) => {
   const status = statusCache.value[loginName]?.status || loginStatus.value?.status
   if (status === 'success') return '已登录'
   return '未登录'
+}
+
+// 刷新单个登录器的状态
+const handleRefreshLogin = async (login: LoginInfo) => {
+  refreshingLogin.value = login.name
+  try {
+    const status = await loginStore.checkStatus(login.name)
+    if (status) {
+      statusCache.value[login.name] = status
+      // 如果是当前选中的登录器，同时更新 store 中的状态
+      if (currentLogin.value?.name === login.name) {
+        loginStore.loginStatus = status
+      }
+      ElMessage.success(`${login.platform} 状态已刷新`)
+    }
+  } catch (error) {
+    console.error('刷新登录状态失败:', error)
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshingLogin.value = null
+  }
 }
 
 const getAlertType = (status?: string) => {

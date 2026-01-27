@@ -5,6 +5,7 @@
 import asyncio
 import logging
 from abc import abstractmethod
+from asyncio import Lock
 from typing import Any, Literal
 
 from playwright.async_api import Page
@@ -76,6 +77,9 @@ class BaseQRLogin(BaseHelper):
     _qr_context: Any = None
     _qr_page: Page | None = None
 
+    # 登录状态缓存（用于减少 is_login() 调用）
+    _login_status: QRLoginState   = QRLoginState(status='not_logged_in', message="默认未登录状态")
+
     def __init__(self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None):
         super().__init__(browser_context_pool, config)
 
@@ -142,6 +146,24 @@ class BaseQRLogin(BaseHelper):
         """
         raise NotImplementedError
 
+    def set_login_status(self, status_info: QRLoginState) -> None:
+        """
+        设置登录状态缓存
+
+        Args:
+            status_info: 登录状态信息
+        """
+        self._login_status = status_info
+
+    def get_login_status(self) -> QRLoginState:
+        """
+        获取缓存的登录状态
+
+        Returns:
+            缓存的登录状态，如果没有缓存则返回 None
+        """
+        return self._login_status
+
     async def close(self) -> None:
         """清理资源"""
 
@@ -174,4 +196,5 @@ class BaseQRLogin(BaseHelper):
             "version": cls.version,
             "author": cls.author,
             "platform": cls.platform,
+            'login_status':  cls._login_status
         }

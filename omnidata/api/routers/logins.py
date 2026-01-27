@@ -130,6 +130,8 @@ async def get_login_status(login_name: str):
 
         # 调用登录器的 is_login 方法实际验证登录状态
         status_info = await login.is_login()
+        # 更新缓存
+        login.set_login_status(status_info)
         return success_response(status_info.model_dump(), "获取登录状态成功")
 
     except LoginNotFoundError as e:
@@ -137,6 +139,56 @@ async def get_login_status(login_name: str):
     except Exception as e:
         logger.error(f"Error getting login status: {e}")
         return error_response(f"获取登录状态失败: {str(e)}")
+
+
+@router.get("/{login_name}/status/cached")
+async def get_cached_login_status(login_name: str):
+    """
+    快速获取缓存的登录状态（不调用 is_login）
+
+    Args:
+        login_name: 登录器名称
+
+    Returns:
+        缓存的登录状态，如果没有缓存则返回 error
+    """
+    try:
+        register = get_login_register()
+        cached_status = register.get_login_status_cached(login_name)
+
+        if cached_status is None:
+            return error_response("暂无缓存的登录状态，请等待后台刷新或手动刷新")
+
+        return success_response(cached_status, "获取缓存登录状态成功")
+
+    except LoginNotFoundError as e:
+        return error_response(f"登录器不存在: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error getting cached login status: {e}")
+        return error_response(f"获取缓存登录状态失败: {str(e)}")
+
+
+@router.post("/{login_name}/status/refresh")
+async def refresh_login_status(login_name: str):
+    """
+    强制刷新登录状态（调用 is_login）
+
+    Args:
+        login_name: 登录器名称
+
+    Returns:
+        刷新后的登录状态
+    """
+    try:
+        register = get_login_register()
+        status_info = await register.refresh_login_status(login_name)
+        return success_response(status_info, "刷新登录状态成功")
+
+    except LoginNotFoundError as e:
+        return error_response(f"登录器不存在: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error refreshing login status: {e}")
+        return error_response(f"刷新登录状态失败: {str(e)}")
 
 
 @router.delete("/{login_name}/session")

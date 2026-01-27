@@ -120,6 +120,15 @@ class LoginRegister:
                         async with semaphore:
                             try:
                                 await instance.refresh_login_state()
+                                # 刷新成功后调用 is_login() 获取状态并缓存
+                                try:
+                                    from omnidata.core.config import settings
+                                    status_info = await asyncio.wait_for(
+                                        instance.is_login(), timeout=settings.login.check_timeout
+                                    )
+                                    instance.set_login_status(status_info)
+                                except Exception as status_error:
+                                    logger.warning(f"Failed to get login status after refresh for {login_name}: {status_error}")
                                 await instance.close()
                                 # logger.debug(f"Refreshed {login_name} at second {current_second}")
                             except Exception as e:
@@ -259,6 +268,7 @@ class LoginRegister:
         获取所有登录器信息，包含登录状态（并发优化版本）
 
         使用 asyncio.Semaphore 控制并发数，避免顺序等待导致的性能问题。
+        优先使用缓存状态，减少 is_login() 调用。
         """
         from omnidata.core.config import settings
 
@@ -272,19 +282,8 @@ class LoginRegister:
             """检查单个登录器的状态"""
             async with semaphore:  # 限制并发数
                 info = login_class.get_info()
-                try:
-                    instance = self.get_login_instance(login_name)
-                    # 添加超时控制
-                    status_info = await asyncio.wait_for(
-                        instance.is_login(), timeout=settings.login.check_timeout
-                    )
-                    info["login_status"] = status_info.model_dump()
-                except TimeoutError:
-                    logger.warning(f"Timeout checking login status for {login_name}")
-                    info["login_status"] = {"status": "error", "message": "检查超时"}
-                except Exception as e:
-                    logger.warning(f"Failed to get login status for {info.get('name')}: {e}")
-                    info["login_status"] = {"status": "error", "message": str(e)}
+                instance = self.get_login_instance(login_name)
+                info["login_status"] = instance.get_login_status().model_dump()
                 return info
 
         # 创建所有任务
@@ -317,7 +316,7 @@ class LoginRegister:
 
         # 获取登录状态
         try:
-            status_info = await login.is_login()
+            status_info =  login.get_login_status()
             info["login_status"] = status_info.model_dump()
         except Exception as e:
             logger.warning(f"Failed to get login status for {login_name}: {e}")
