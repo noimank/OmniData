@@ -190,5 +190,14 @@ class TestEastMoneySpider:
         print(res)
 
 
+    async def test_run20(self, browser_pool):
+        spider_name = "eastmoney_fast_news"
+        params = {"page_size": 20, "fast_column": "101,102"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
+
 
 
