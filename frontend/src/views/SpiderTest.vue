@@ -30,12 +30,16 @@
             </el-select>
           </div>
 
-          <!-- 爬虫选择 -->
+          <!-- 爬虫选择（支持搜索） -->
           <el-select
             v-model="selectedSpiderName"
-            placeholder="请选择爬虫"
+            placeholder="请选择爬虫，支持搜索"
             @change="handleSpiderChange"
             style="width: 100%; margin-bottom: 20px"
+            filterable
+            :filter-method="filterSpiders"
+            :loading="loading"
+            clearable
           >
             <el-option
               v-for="spider in filteredSpiders"
@@ -69,6 +73,19 @@
                 :label="schema.title || key"
                 :required="spiderSchema.required?.includes(key)"
               >
+                <!-- 参数描述提示 -->
+                <template #label>
+                  <span>{{ schema.title || key }}</span>
+                  <el-tooltip
+                    v-if="schema.description"
+                    :content="schema.description"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <el-icon class="param-tooltip"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </template>
+
                 <!-- 枚举类型 -->
                 <el-select
                   v-if="schema.enum"
@@ -240,7 +257,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSpiderStore } from '@/stores/spider'
 import type { SpiderInfo, ParamSchema } from '@/api/types'
-import { Refresh, Loading, VideoPlay, Delete } from '@element-plus/icons-vue'
+import { Refresh, Loading, VideoPlay, Delete, QuestionFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 const spiderStore = useSpiderStore()
@@ -255,6 +272,7 @@ const schemaLoading = ref(false)
 
 // 平台筛选相关
 const selectedPlatform = ref('')
+const searchKeyword = ref('')
 
 // 获取所有平台列表（去重并排序）
 const platforms = computed(() => {
@@ -267,13 +285,32 @@ const platforms = computed(() => {
   return Array.from(platformSet).sort()
 })
 
-// 根据选中的平台过滤爬虫列表
+// 根据选中的平台和关键词过滤爬虫列表
 const filteredSpiders = computed(() => {
-  if (!selectedPlatform.value) {
-    return spiders.value
+  let result = spiders.value
+
+  // 平台筛选
+  if (selectedPlatform.value) {
+    result = result.filter((spider: SpiderInfo) => spider.platform === selectedPlatform.value)
   }
-  return spiders.value.filter((spider: SpiderInfo) => spider.platform === selectedPlatform.value)
+
+  // 关键词筛选
+  if (searchKeyword.value) {
+    const keyword = searchKeyword.value.toLowerCase()
+    result = result.filter((spider: SpiderInfo) =>
+      spider.name.toLowerCase().includes(keyword) ||
+      spider.description?.toLowerCase().includes(keyword) ||
+      spider.platform?.toLowerCase().includes(keyword)
+    )
+  }
+
+  return result
 })
+
+// 搜索方法（供 el-select filter-method 使用）
+const filterSpiders = (keyword: string) => {
+  searchKeyword.value = keyword
+}
 
 const selectedSpiderName = ref('')
 const spiderParams = ref<Record<string, any>>({})
@@ -283,8 +320,9 @@ const fetchSpiders = async () => {
 }
 
 const handlePlatformChange = () => {
-  // 切换平台时清空选中的爬虫
+  // 切换平台时清空选中的爬虫和搜索关键词
   selectedSpiderName.value = ''
+  searchKeyword.value = ''
   spiderStore.setCurrentSpider(null)
 }
 
@@ -393,6 +431,17 @@ onMounted(() => {
     margin: 0 0 16px 0;
     font-size: 14px;
     color: #606266;
+  }
+
+  .param-tooltip {
+    margin-left: 4px;
+    color: #909399;
+    cursor: pointer;
+    vertical-align: middle;
+
+    &:hover {
+      color: #409eff;
+    }
   }
 
   .schema-loading {
