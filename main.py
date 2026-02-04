@@ -8,7 +8,8 @@ OmniData 主入口模块
 import argparse
 import asyncio
 import logging
-
+from dotenv import load_dotenv
+load_dotenv()
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -21,10 +22,8 @@ logger = logging.getLogger(__name__)
 
 async def list_spiders():
     """列出所有爬虫"""
-    from omnidata.core import get_browser_pool, get_spider_register
-
-    browser_pool = await get_browser_pool()
-    register = await get_spider_register(browser_pool=browser_pool)
+    from omnidata.core.spider_register import get_spider_register
+    register =  get_spider_register()
 
     spiders = register.list_spider_info()
 
@@ -45,10 +44,8 @@ async def list_spiders():
 async def run_spider(name: str, params: dict | str):
     """运行指定爬虫"""
     import json
-    from omnidata.core import get_browser_pool, get_spider_register
-
-    browser_pool = await get_browser_pool()
-    register = await get_spider_register(browser_pool=browser_pool)
+    from omnidata.core.spider_register import get_spider_register
+    register = get_spider_register()
 
     # 如果参数是 JSON 字符串，解析为字典
     if isinstance(params, str):
@@ -73,6 +70,15 @@ async def run_spider(name: str, params: dict | str):
 
 async def main_async(args):
     """异步主函数"""
+    from omnidata.core.browser_context_pool import set_browser_context_pool, BrowserContextPool
+    from omnidata.core.spider_register import SpiderRegister, set_spider_register
+
+    browser_pool = BrowserContextPool()
+    set_browser_context_pool(browser_pool)
+    register = SpiderRegister(browser_pool)
+    set_spider_register(register)
+    await register.initialize()
+
     if args.list:
         await list_spiders()
     elif args.run:
