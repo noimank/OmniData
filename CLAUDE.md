@@ -34,6 +34,7 @@ uv add <package>                     # Add runtime dependency
 uv run playwright install chromium   # Install Chromium
 uv run python main.py                # Start API server (default: http://0.0.0.0:8380)
 uv run python main.py --list         # List all spiders
+uv run python main.py --run example_hello       # Run spider for local testing
 uv run pytest                        # Run tests
 uv run black omnidata/               # Format code
 uv run ruff check omnidata/          # Lint code
@@ -61,10 +62,8 @@ omnidata/
 │   └── config.py                  # Configuration management
 ├── data_sources/                  # Spider/login implementations (auto-discovered)
 │   ├── example/                   # Example spiders
-│   ├── bilibili/                  # Bilibili (spiders + login)
-│   ├── eastmoney/                 # EastMoney (spiders + login)
-│   ├── ths_10jqka/                # Tonghuashun 10jqka (login)
-│   └── ths_iwencai/               # Tonghuashun iwencai (login)
+│   ├── bilibili/                  # Bilibili spiders
+│   └── eastmoney/                 # EastMoney spiders
 ├── database/                      # SQLAlchemy + SQLite
 │   ├── models.py                  # ORM models (SpiderAudit, MCPService, etc.)
 │   └── session.py                 # Async session management
@@ -152,31 +151,6 @@ class MySpider(BaseWebSpider):
             )
 ```
 
-## QR Login Template
-
-```python
-from omnidata.core.base_qr_login import BaseQRLogin, QRLoginState, QRCode
-
-class MyLogin(BaseQRLogin):
-    name = "my_login"      # Redis namespace
-    platform = "MyPlatform"
-
-    async def get_qrcode_types(self) -> list[str]:
-        return ["微信", "App"]
-
-    async def get_qrcode(self, qr_type: str) -> QRCode:
-        # Use self._qr_page and self._qr_context
-        ...
-
-    async def verify_login_state(self) -> QRLoginState:
-        # Poll login completion with self._qr_page
-        ...
-
-    async def is_login(self) -> QRLoginState:
-        # Check login status with separate context
-        ...
-```
-
 ## Configuration
 
 Environment-based via `pydantic-settings`:
@@ -202,9 +176,6 @@ OMNIDATA_DB__PATH=omnidata.db
 - `GET /spiders` - List spiders
 - `POST /spiders/run` - Run spider
 - `POST /spiders/run-batch` - Batch run with concurrency
-- `GET /logins` - List logins
-- `POST /logins/{name}/qrcode` - Get QR code
-- `POST /logins/{name}/verify` - Verify login
 - `GET /monitor/browser-pool` - Context pool stats
 
 ### Audit
