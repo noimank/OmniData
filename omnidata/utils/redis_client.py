@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 _redis: Redis | None = None
 _pool: ConnectionPool | None = None
-_lock: "asyncio.Lock" = None
 
 
 async def get_redis() -> Redis:
@@ -24,19 +23,14 @@ async def get_redis() -> Redis:
     Returns:
         Redis: Redis 客户端实例
     """
-    global _redis, _pool, _lock
+    global _redis
 
-    if _lock is None:
-        _lock = asyncio.Lock()
-
-    async with _lock:
-        if _redis is None:
-            await _init_redis()
-
-        return _redis
+    if _redis is None:
+        raise RuntimeError("Redis client not initialized")
+    return _redis
 
 
-async def _init_redis() -> None:
+async def init_redis() -> None:
     """初始化 Redis 连接"""
     global _redis, _pool
 

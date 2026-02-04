@@ -72,6 +72,9 @@ async def main_async(args):
     """异步主函数"""
     from omnidata.core.browser_context_pool import set_browser_context_pool, BrowserContextPool
     from omnidata.core.spider_register import SpiderRegister, set_spider_register
+    from omnidata.utils.redis_client import  init_redis
+    # 初始化 Redis 客户端
+    await init_redis()
 
     browser_pool = BrowserContextPool()
     set_browser_context_pool(browser_pool)

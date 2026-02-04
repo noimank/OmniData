@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized")
 
+        # 初始化 Redis 连接池
+        from omnidata.utils.redis_client import init_redis
+        await init_redis()
+
         # 阶段 2: 初始化浏览器上下文池
         from omnidata.core.browser_context_pool import BrowserContextPool
         browser_context_pool = BrowserContextPool()
