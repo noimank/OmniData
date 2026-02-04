@@ -34,7 +34,7 @@ class SpiderRegister:
         初始化爬虫注册器
 
         Args:
-            browser_pool: 浏览器上下文池实例
+            browser_context_pool: 浏览器上下文池实例
         """
         self._data_sources_dir = Path(__file__).parent.parent.joinpath("data_sources")
         self._browser_context_pool = browser_context_pool
@@ -48,7 +48,7 @@ class SpiderRegister:
             return
 
         if self._browser_context_pool is None:
-            self._browser_context_pool = await get_browser_context_pool()
+            self._browser_context_pool =  get_browser_context_pool()
 
         await self._discover_spiders()
         self._is_initialized = True
