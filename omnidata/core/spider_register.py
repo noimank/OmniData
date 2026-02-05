@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .base_web_spider import BaseWebSpider
+from .base_web_spider import BaseWebSpider, SpiderResult
 from .browser_context_pool import BrowserContextPool, get_browser_context_pool
 from .exceptions import SpiderNotFoundError, SpiderRegistrationError
 
@@ -252,7 +252,7 @@ class SpiderRegister:
         self,
         spider_name: str,
         params: dict[str, Any],
-    ) -> Any:
+    ) -> SpiderResult:
         """
         运行指定的爬虫
 
@@ -274,7 +274,7 @@ class SpiderRegister:
         spider_name: str,
         params_list: list[dict[str, Any]],
         max_concurrency: int = 3,
-    ) -> list[Any]:
+    ) -> list[SpiderResult]:
         """
         批量运行指定的爬虫
 
