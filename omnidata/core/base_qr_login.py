@@ -77,11 +77,13 @@ class BaseQRLogin(BaseHelper):
     _qr_context: Any = None
     _qr_page: Page | None = None
 
-    # 登录状态缓存（用于减少 is_login() 调用）
-    _login_status: QRLoginState   = QRLoginState(status='not_logged_in', message="默认未登录状态")
+    # 登录状态缓存（实例变量，在 __init__ 中初始化）
+    _login_status: QRLoginState
 
     def __init__(self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None):
         super().__init__(browser_context_pool, config)
+        # 初始化实例变量，避免类变量共享
+        self._login_status = QRLoginState(status='not_logged_in', message="默认未登录状态")
 
     @abstractmethod
     async def refresh_login_state(self) -> None:
@@ -189,12 +191,11 @@ class BaseQRLogin(BaseHelper):
 
     @classmethod
     def get_info(cls) -> dict[str, Any]:
-        """获取登录器信息"""
+        """获取登录器基本信息（类方法）"""
         return {
             "name": cls.name or cls.__name__,
             "description": cls.description,
             "version": cls.version,
             "author": cls.author,
             "platform": cls.platform,
-            'login_status':  cls._login_status
         }
