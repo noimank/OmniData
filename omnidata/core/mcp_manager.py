@@ -22,8 +22,8 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool
 from starlette.routing import Mount
 
-from omnidata.core.spider_register import SpiderRegister
 from omnidata.core.exceptions import InitializationError
+from omnidata.core.spider_register import SpiderRegister, get_spider_register
 from omnidata.utils.mcp_utils import generate_tool_description
 
 logger = logging.getLogger(__name__)
@@ -536,13 +536,31 @@ class MCPManager:
         return wrapper
 
 
-# 全局 MCP 管理器实例
+# MCP 管理器缓存（由于需要 FastAPI app 参数，使用可变缓存）
 _mcp_manager: MCPManager | None = None
+
+
+def create_mcp_manager(app: FastAPI) -> MCPManager:
+    """
+    创建并设置 MCP 管理器实例
+
+    使用模块级缓存实现单例模式。
+
+    Args:
+        app: FastAPI 应用实例
+
+    Returns:
+        MCPManager: MCP 管理器实例
+    """
+    global _mcp_manager
+    spider_register = get_spider_register()
+    _mcp_manager = MCPManager(spider_register, app)
+    return _mcp_manager
 
 
 def get_mcp_manager() -> MCPManager:
     """
-    获取全局 MCP 管理器实例（同步，无锁）
+    获取全局 MCP 管理器实例
 
     Returns:
         MCPManager: MCP 管理器实例
@@ -554,17 +572,14 @@ def get_mcp_manager() -> MCPManager:
     if _mcp_manager is None:
         raise InitializationError(
             "MCPManager not initialized. "
-            "Ensure main.py lifespan startup completes before calling this function."
+            "Use create_mcp_manager(app) in lifespan first."
         )
     return _mcp_manager
 
 
-def set_mcp_manager(instance: MCPManager) -> None:
-    """
-    设置全局 MCP 管理器实例（由 main.py lifespan 调用）
-
-    Args:
-        instance: MCP 管理器实例
-    """
+async def close_mcp_manager() -> None:
+    """关闭 MCP 管理器并清理所有服务"""
     global _mcp_manager
-    _mcp_manager = instance
+    if _mcp_manager is not None:
+        await _mcp_manager.cleanup_all_services()
+        _mcp_manager = None

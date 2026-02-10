@@ -70,16 +70,17 @@ async def run_spider(name: str, params: dict | str):
 
 async def main_async(args):
     """异步主函数"""
-    from omnidata.core.browser_context_pool import set_browser_context_pool, BrowserContextPool
-    from omnidata.core.spider_register import SpiderRegister, set_spider_register
-    from omnidata.utils.redis_client import  init_redis
+    from omnidata.core.browser_context_pool import get_browser_context_pool
+    from omnidata.core.spider_register import get_spider_register, close_spider_register
+    from omnidata.utils.redis_client import init_redis
     # 初始化 Redis 客户端
     await init_redis()
 
-    browser_pool = BrowserContextPool()
-    set_browser_context_pool(browser_pool)
-    register = SpiderRegister(browser_pool)
-    set_spider_register(register)
+    # 使用 LRU 单例模式获取实例
+    browser_pool = get_browser_context_pool()
+    await browser_pool.initialize()
+
+    register = get_spider_register()
     await register.initialize()
 
     if args.list:
@@ -87,6 +88,10 @@ async def main_async(args):
     elif args.run:
         params = args.params if args.params else {}
         await run_spider(args.run, params)
+
+    # 清理
+    await close_spider_register()
+    await browser_pool.shutdown()
 
 
 def main():

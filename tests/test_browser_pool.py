@@ -11,7 +11,6 @@ import pytest
 from omnidata.core.browser_context_pool import (
     BrowserContextPool,
     close_browser_context_pool,
-    set_browser_context_pool,
     get_browser_context_pool,
 )
 from omnidata.core.config import BrowserConfig

@@ -8,7 +8,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 import pytest
 
 from omnidata.core.browser_context_pool import BrowserContextPool
-from omnidata.core import set_login_register, login_register
+from omnidata.core import get_login_register, login_register, close_login_register
 from omnidata.core.config import settings
 
 
@@ -19,13 +19,9 @@ async def browser_pool():
     pool = BrowserContextPool(settings.browser)
     await pool.initialize()
 
-    # 初始化登录注册器
-    from omnidata.core.login_register import LoginRegister
-    login_reg = LoginRegister(pool)
-    await login_reg.initialize()
-    set_login_register(login_reg)
-
     yield pool
+    # 清理
+    await close_login_register()
     await pool.shutdown()
 
 

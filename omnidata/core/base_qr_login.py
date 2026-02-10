@@ -2,10 +2,8 @@
 二维码登录基类模块
 """
 
-import asyncio
 import logging
 from abc import abstractmethod
-from asyncio import Lock
 from typing import Any, Literal
 
 from playwright.async_api import Page

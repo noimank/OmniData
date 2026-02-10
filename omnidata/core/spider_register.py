@@ -9,6 +9,7 @@ import inspect
 import logging
 import os
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -303,47 +304,28 @@ class SpiderRegister:
         return self._is_initialized
 
 
-# 全局爬虫注册器实例
-_spider_register: SpiderRegister | None = None
 
 
+@lru_cache(maxsize=1)
 def get_spider_register() -> SpiderRegister:
     """
-    获取全局爬虫注册器实例（同步，无锁）
+    获取全局爬虫注册器实例（LRU 单例模式）
+
+    使用 @lru_cache 实现线程安全的单例模式。
+    自动注入 BrowserContextPool 依赖。
 
     Returns:
         SpiderRegister: 爬虫注册器实例
-
-    Raises:
-        SpiderRegistrationError: 未初始化
     """
-    global _spider_register
-    if _spider_register is None:
-        raise SpiderRegistrationError(
-            "SpiderRegister not initialized. "
-            "Ensure main.py lifespan startup completes before calling this function."
-        )
-    return _spider_register
-
-
-def set_spider_register(instance: SpiderRegister) -> None:
-    """
-    设置全局爬虫注册器实例（由 main.py lifespan 调用）
-
-    Args:
-        instance: 爬虫注册器实例
-    """
-    global _spider_register
-    _spider_register = instance
+    browser_context_pool = get_browser_context_pool()
+    return SpiderRegister(browser_context_pool)
 
 
 async def close_spider_register() -> None:
-    """关闭全局爬虫注册器"""
-    global _spider_register
-
-    if _spider_register is not None:
-        await _spider_register.shutdown()
-        _spider_register = None
+    """关闭全局爬虫注册器并清除缓存"""
+    spider_reg = get_spider_register()
+    await spider_reg.shutdown()
+    get_spider_register.cache_clear()
 
 
 # 便捷访问器（用于非异步上下文）
@@ -356,11 +338,4 @@ def spider_register() -> SpiderRegister:
     Returns:
         SpiderRegister: 爬虫注册器实例
     """
-    global _spider_register
-
-    if _spider_register is None:
-        raise SpiderRegistrationError(
-            "Spider register not initialized. Use await get_spider_register() first."
-        )
-
-    return _spider_register
+    return get_spider_register()

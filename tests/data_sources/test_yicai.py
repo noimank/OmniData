@@ -8,7 +8,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 import pytest
 
 from omnidata.core.browser_context_pool import BrowserContextPool
-from omnidata.core import set_spider_register, spider_register
+from omnidata.core import get_spider_register, spider_register, close_spider_register
 from omnidata.core.config import  BrowserConfig
 
 @pytest.fixture
@@ -19,12 +19,12 @@ async def browser_pool():
     await pool.initialize()
 
     # 初始化爬虫注册器
-    from omnidata.core.spider_register import SpiderRegister
-    spider_reg = SpiderRegister(pool)
+    spider_reg = get_spider_register()
     await spider_reg.initialize()
-    set_spider_register(spider_reg)
 
     yield pool
+    # 清理
+    await close_spider_register()
     await pool.shutdown()
 
 

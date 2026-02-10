@@ -10,12 +10,13 @@ import inspect
 import logging
 import os
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from .base_qr_login import BaseQRLogin, QRCode
 from .browser_context_pool import BrowserContextPool, get_browser_context_pool
-from .exceptions import LoginNotFoundError, LoginRegistrationError
+from .exceptions import LoginNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -333,45 +334,28 @@ class LoginRegister:
         return self._is_initialized
 
 
-_login_register: LoginRegister | None = None
 
 
+@lru_cache(maxsize=1)
 def get_login_register() -> LoginRegister:
     """
-    获取全局登录注册器实例（同步，无锁）
+    获取全局登录注册器实例（LRU 单例模式）
+
+    使用 @lru_cache 实现线程安全的单例模式。
+    自动注入 BrowserContextPool 依赖。
 
     Returns:
         LoginRegister: 登录注册器实例
-
-    Raises:
-        LoginRegistrationError: 未初始化
     """
-    global _login_register
-    if _login_register is None:
-        raise LoginRegistrationError(
-            "LoginRegister not initialized. "
-            "Ensure main.py lifespan startup completes before calling this function."
-        )
-    return _login_register
-
-
-def set_login_register(instance: LoginRegister) -> None:
-    """
-    设置全局登录注册器实例（由 main.py lifespan 调用）
-
-    Args:
-        instance: 登录注册器实例
-    """
-    global _login_register
-    _login_register = instance
+    browser_context_pool = get_browser_context_pool()
+    return LoginRegister(browser_context_pool)
 
 
 async def close_login_register() -> None:
-    global _login_register
-
-    if _login_register is not None:
-        await _login_register.shutdown()
-        _login_register = None
+    """关闭全局登录注册器并清除缓存"""
+    login_reg = get_login_register()
+    await login_reg.shutdown()
+    get_login_register.cache_clear()
 
 
 # 便捷访问器（用于非异步上下文）
@@ -384,11 +368,4 @@ def login_register() -> LoginRegister:
     Returns:
         LoginRegister: 登录注册器实例
     """
-    global _login_register
-
-    if _login_register is None:
-        raise LoginRegistrationError(
-            "Login register not initialized. Use await get_spider_register() first."
-        )
-
-    return _login_register
+    return get_login_register()

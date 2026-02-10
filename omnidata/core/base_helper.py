@@ -3,19 +3,20 @@
 提供 BaseWebSpider 和 BaseQRLogin 的公共方法
 """
 
-import json
 import logging
 from abc import ABC
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, Route
+from playwright.async_api import BrowserContext, Page, Route
+
+from omnidata.utils.anti_detection_scripts import get_anti_scripts_by_names
 from omnidata.utils.redis_client import get_redis
 
 from .browser_context_pool import BrowserContextPool
 from .exceptions import BrowserPoolError
-from omnidata.utils.anti_detection_scripts import get_anti_scripts_by_names
+
 logger = logging.getLogger(__name__)
 
 

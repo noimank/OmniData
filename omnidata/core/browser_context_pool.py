@@ -12,14 +12,16 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from omnidata.core.config import BrowserConfig, settings
 from omnidata.core.exceptions import BrowserPoolError
-from omnidata.utils.redis_client import get_redis
 from omnidata.utils.anti_detection_scripts import get_anti_scripts_by_names
+from omnidata.utils.redis_client import get_redis
+
 logger = logging.getLogger(__name__)
 
 
@@ -583,44 +585,23 @@ class BrowserContextPool:
                 logger.debug(f"Context cleaned up: namespace={metadata.namespace}")
 
 
-# 全局实例
-_pool: BrowserContextPool | None = None
 
 
+@lru_cache(maxsize=1)
 def get_browser_context_pool() -> BrowserContextPool:
     """
-    获取全局 BrowserContextPool 实例（同步，无锁）
+    获取全局 BrowserContextPool 实例（LRU 单例模式）
+
+    使用 @lru_cache 实现线程安全的单例模式。
 
     Returns:
         BrowserContextPool: 浏览器上下文池实例
-
-    Raises:
-        BrowserPoolError: 未初始化
     """
-    global _pool
-    if _pool is None:
-        raise BrowserPoolError(
-            "BrowserContextPool not initialized. "
-            "Ensure main.py lifespan startup completes before calling this function."
-        )
-    return _pool
-
-
-def set_browser_context_pool(instance: BrowserContextPool) -> None:
-    """
-    设置全局 BrowserContextPool 实例（由 main.py lifespan 调用）
-
-    Args:
-        instance: 浏览器上下文池实例
-    """
-    global _pool
-    _pool = instance
+    return BrowserContextPool()
 
 
 async def close_browser_context_pool() -> None:
-    """关闭全局 BrowserContextPool 实例"""
-    global _pool
-
-    if _pool is not None:
-        await _pool.shutdown()
-        _pool = None
+    """关闭全局 BrowserContextPool 实例并清除缓存"""
+    pool = get_browser_context_pool()
+    await pool.shutdown()
+    get_browser_context_pool.cache_clear()
