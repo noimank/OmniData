@@ -2,6 +2,22 @@
 
 一个基于 Playwright 和 FastAPI 的可扩展网页爬虫框架，提供浏览器池管理、自动注册和高度可扩展的架构。
 
+## ?? 文档
+
+**完整文档：[https://noimank.github.io/OmniData](https://noimank.github.io/OmniData)**
+
+### 本地构建文档
+
+```bash
+# 安装文档依赖
+uv sync --group dev
+
+# 启动本地文档服务器
+uv run mkdocs serve
+
+# 访问 http://localhost:8000
+```
+
 ## 技术栈
 
 - **FastAPI** 0.128.0 - Web 框架

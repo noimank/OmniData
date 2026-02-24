@@ -1,0 +1,132 @@
+# MkDocs 配置文件 - OmniData 文档
+# 文档主题: Material for MkDocs
+
+site_name: OmniData
+site_description: 基于 Playwright 和 FastAPI 的可扩展网页爬虫框架
+site_author: noimank
+copyright: Copyright &copy; 2026 noimank
+
+# 仓库信息
+repo_url: https://github.com/noimank/OmniData
+repo_name: noimank/OmniData
+
+# 主题配置
+theme:
+  name: material
+  language: zh
+  palette:
+    # 浅色模式
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    # 深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+
+  # 功能特性
+  features:
+    - navigation.instant        # 即时加载
+    - navigation.tracking       # URL 跟踪
+    - navigation.tabs           # 顶部标签页
+    - navigation.sections       # 侧边栏分组
+    - navigation.expand         # 默认展开当前章节
+    - navigation.indexes        # 为每个章节创建索引页
+    - navigation.top            # 返回顶部按钮
+    - search.suggest            # 搜索建议
+    - search.highlight          # 搜索结果高亮
+    - search.share              # 分享搜索结果
+    - toc.follow                # 目录跟随滚动
+    - content.code.copy         # 代码块复制按钮
+    - content.tabs.sync         # 同步标签页
+
+  # 图标配置
+  icon:
+    logo: material/spider-web
+    repo: fontawesome/brands/github
+
+# 插件配置
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+      separator: '[\s\-\.]+'
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: date
+
+# Markdown 扩展
+markdown_extensions:
+  - admonition                   # 提示框
+  - attr_list                    # 属性列表
+  - md_in_html                   # HTML 内 Markdown
+  - tables                       # 表格
+  - toc:
+      permalink: true            # 永久链接锚点
+
+  # PyMdown 扩展
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences          # 代码块围栏
+  - pymdownx.inlinehilite        # 行内代码高亮
+  - pymdownx.details             # 可折叠提示框
+  - pymdownx.snippets            # 代码片段包含
+
+# 额外配置
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/noimank/OmniData
+      name: GitHub
+
+# 侧边栏导航结构
+nav:
+  - 首页: index.md
+  - 系统架构:
+      - architecture/overview.md
+      - architecture/browser-pool.md
+      - architecture/spider-lifecycle.md
+      - architecture/mcp-integration.md
+      - architecture/database.md
+  - 开发指南:
+      - development/getting-started.md
+      - development/creating-spider.md
+      - development/adding-login.md
+      - development/testing.md
+      - development/deployment.md
+      - development/configuration.md
+  - 数据源:
+      - datasources/index.md
+      - 东方财富: datasources/eastmoney/index.md
+      - Bilibili: datasources/bilibili/index.md
+      - 财联社: datasources/cls/index.md
+      - 富途牛牛: datasources/futunn/index.md
+      - 和讯网: datasources/hexun/index.md
+      - 金融界: datasources/jrj/index.md
+      - 21财经: datasources/21jingji/index.md
+      - 第一财经: datasources/yicai/index.md
+      - 华尔街见闻: datasources/wallstreetcn/index.md
+      - 新浪财经: datasources/sina/index.md
+      - 同花顺10jqka: datasources/ths_10jqka/index.md
+      - 同花顺问财: datasources/ths_iwencai/index.md
+      - 示例: datasources/example/index.md
+  - API 参考:
+      - api/spiders.md
+      - api/mcp.md
+      - api/monitoring.md
+  - 常见问题: faq.md
