@@ -8,18 +8,18 @@ OmniData 支持 15+ 个数据源平台，提供 30+ 个数据接口。
 
 | 平台 | 接口数 | 类别 |
 | :--- | :---: | :--- |
-| [东方财富](eastmoney/) | 19 | 金融行情 |
-| [Bilibili](bilibili/) | 1 | 视频 |
-| [财联社](cls/) | 1 | 全球新闻 |
-| [富途牛牛](futunn/) | 1 | 快讯 |
-| [和讯网](hexun/) | 1 | 7x24 快讯 |
-| [金融界](jrj/) | 1 | 快讯 |
-| [21财经](21jingji/) | 1 | 快讯 |
-| [第一财经](yicai/) | 1 | 快讯 |
-| [华尔街见闻](wallstreetcn/) | 1 | 全球快讯 |
-| [新浪财经](sina/) | 1 | 国际新闻 |
-| [同花顺](ths_10jqka/) | 1 | 资讯 |
-| [同花顺问财](ths_iwencai/) | 1 | 智能搜索 |
+| [东方财富](eastmoney/index.md) | 19 | 金融行情 |
+| [Bilibili](bilibili/index.md) | 1 | 视频 |
+| [财联社](cls/index.md) | 1 | 全球新闻 |
+| [富途牛牛](futunn/index.md) | 1 | 快讯 |
+| [和讯网](hexun/index.md) | 1 | 7x24 快讯 |
+| [金融界](jrj/index.md) | 1 | 快讯 |
+| [21财经](21jingji/index.md) | 1 | 快讯 |
+| [第一财经](yicai/index.md) | 1 | 快讯 |
+| [华尔街见闻](wallstreetcn/index.md) | 1 | 全球快讯 |
+| [新浪财经](sina/index.md) | 1 | 国际新闻 |
+| [同花顺](ths_10jqka/index.md) | 1 | 资讯 |
+| [同花顺问财](ths_iwencai/index.md) | 1 | 智能搜索 |
 
 ---
 

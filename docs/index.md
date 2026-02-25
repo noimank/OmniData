@@ -115,7 +115,7 @@ curl http://localhost:8380/spiders
 | 新浪财经 | 1 | 国际新闻 |
 | 同花顺 | 2 | 资讯/问财 |
 
-查看 [完整数据源列表](datasources/)。
+查看 [完整数据源列表](datasources/index.md)。
 
 ---
 
@@ -145,7 +145,7 @@ omnidata/
 └── frontend/          # Vue 3 前端
 ```
 
-详见 [系统架构](architecture/)。
+详见 [系统架构](architecture/index.md)。
 
 ---
 
@@ -181,10 +181,10 @@ curl -X POST http://localhost:8380/api/v1/mcp-services \
 
 ## 更多资源
 
-- [系统架构](architecture/) - 了解框架设计
-- [开发指南](development/) - 开始开发自己的爬虫
-- [数据源](datasources/) - 查看所有支持的数据源
-- [API 参考](api/) - API 详细文档
+- [系统架构](architecture/index.md) - 了解框架设计
+- [开发指南](development/index.md) - 开始开发自己的爬虫
+- [数据源](datasources/index.md) - 查看所有支持的数据源
+- [API 参考](api/index.md) - API 详细文档
 - [常见问题](faq.md) - 常见问题解答
 
 ---
