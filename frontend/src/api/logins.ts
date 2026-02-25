@@ -32,16 +32,12 @@ export const checkLoginStatus = (loginName: string) => {
   return request.get<LoginStatus>(`/v1/logins/${loginName}/status`)
 }
 
-// 清除登录状态
+// 清除登录状态（返回 data 部分，只包含 login_name）
 export const clearLoginSession = (loginName: string) => {
-  return request.delete<{ success: boolean; message: string; login_name: string }>(
-    `/v1/logins/${loginName}/session`
-  )
+  return request.delete<{ login_name: string }>(`/v1/logins/${loginName}/session`)
 }
 
-// 清理二维码资源
+// 清理二维码资源（返回 data 部分，只包含 login_name）
 export const cleanupQrcodeResources = (loginName: string) => {
-  return request.post<{ success: boolean; message: string; login_name: string }>(
-    `/v1/logins/${loginName}/cleanup`
-  )
+  return request.post<{ login_name: string }>(`/v1/logins/${loginName}/cleanup`)
 }

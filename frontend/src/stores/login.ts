@@ -98,12 +98,11 @@ export const useLoginStore = defineStore('login', () => {
   // 清除登录状态
   const clearSession = async (loginName: string) => {
     try {
-      const result = await api.clearLoginSession(loginName)
-      if (result.success) {
-        loginStatus.value = null
-        qrcode.value = null
-      }
-      return result.success
+      await api.clearLoginSession(loginName)
+      // 拦截器在 success=false 时会抛出异常，执行到这里说明成功
+      loginStatus.value = null
+      qrcode.value = null
+      return true
     } catch (error) {
       console.error('Failed to clear login session:', error)
       return false
@@ -113,9 +112,10 @@ export const useLoginStore = defineStore('login', () => {
   // 清理二维码资源
   const cleanupQrcodeResources = async (loginName: string) => {
     try {
-      const result = await api.cleanupQrcodeResources(loginName)
+      await api.cleanupQrcodeResources(loginName)
       qrcode.value = null
-      return result.success
+      // 拦截器在 success=false 时会抛出异常，执行到这里说明成功
+      return true
     } catch (error) {
       console.warn(`Failed to cleanup QR code resources for ${loginName}:`, error)
       qrcode.value = null

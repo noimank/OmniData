@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from omnidata.api.responses import success_response, error_response
 from omnidata.core import get_login_register
+from omnidata.core.browser_context_pool import get_browser_context_pool
 from omnidata.core.exceptions import LoginNotFoundError, LoginRegistrationError
 from omnidata.utils import get_redis
 
@@ -146,6 +147,11 @@ async def clear_login_session(login_name: str):
     """
     清除登录状态
 
+    完整的清除操作包括：
+    1. 删除 Redis 中的 context state（持久化状态）
+    2. 从 BrowserContextPool 中移除 context（内存缓存）
+    3. 重置登录器实例的 _login_status 缓存
+
     Args:
         login_name: 登录器名称
 
@@ -153,11 +159,26 @@ async def clear_login_session(login_name: str):
         操作结果
     """
     try:
-        # 清除 Redis 中的 context state
+        # 1. 清除 Redis 中的 context state
         redis = await get_redis()
         key = f"omnidata:context_state:{login_name}"
         await redis.delete(key)
 
+        # 2. 从 BrowserContextPool 中移除 context（关闭并删除内存中的 context）
+        pool = get_browser_context_pool()
+        await pool.remove_context(login_name)
+
+        # 3. 重置登录器实例的 _login_status 缓存
+        try:
+            register = get_login_register()
+            login = register.get_login_instance(login_name)
+            from omnidata.core.base_qr_login import QRLoginState
+            login.set_login_status(QRLoginState(status="not_logged_in", message="登录状态已清除"))
+        except LoginNotFoundError:
+            # 登录器不存在，忽略
+            pass
+
+        logger.info(f"Login session cleared: {login_name}")
         return success_response({"login_name": login_name}, "登录状态已清除")
 
     except Exception as e:
