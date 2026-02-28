@@ -43,7 +43,8 @@ dev = [
     "ruff>=0.3.0",
     "mypy>=1.9.0",
     "akshare>=1.18.12",
-    # 文档工具
+]
+doc = [
     "mkdocs>=1.6.0",
     "mkdocs-material>=9.5.0",
     "mkdocs-minify-plugin>=0.8.0",
