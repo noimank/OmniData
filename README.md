@@ -89,7 +89,29 @@ OmniData 是一个企业级的可扩展网页爬虫框架，基于 Playwright �
 - Redis 5.0+ (可选，用于状态持久化)
 - SQLite (内置) 或 MySQL
 
-### 安装
+### Docker 部署（推荐）
+
+使用 Docker 一键运行完整的 OmniData 服务，包含前端、后端、Redis 和 Nginx。
+
+```bash
+# 拉取并运行
+docker run -d \
+  --name omnidata \
+  -p 80:80 \
+  -e TZ=Asia/Shanghai \
+  -v ./data:/app/data -v ./logs:/var/log/supervisor \
+  --restart unless-stopped \
+  noimankdocker/omnidata:latest
+```
+
+项目使用sqlite存储数据，建议将数据挂载到本地，防止容器重建导致数据丢失
+
+访问服务：
+- 前端界面：`http://localhost`
+- API 文档：`http://localhost:8000/docs`
+
+
+### 本地开发安装
 
 ```bash
 # 克隆项目
