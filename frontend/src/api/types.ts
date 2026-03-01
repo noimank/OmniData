@@ -106,7 +106,6 @@ export interface SpiderResult {
   success: boolean
   data: any
   message: string | null
-  error: string | null
   started_at: string
   completed_at: string | null
   duration_seconds: number

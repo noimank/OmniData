@@ -15,8 +15,10 @@ export const useSpiderStore = defineStore('spider', () => {
   const fetchSpiders = async () => {
     try {
       loading.value = true
-      const result = await api.getSpiders()
-      spiders.value = result.spiders
+      const response = await api.getSpiders()
+      if (response.data) {
+        spiders.value = response.data.spiders
+      }
     } catch (error) {
       console.error('Failed to fetch spiders:', error)
     } finally {
@@ -27,10 +29,13 @@ export const useSpiderStore = defineStore('spider', () => {
   // 获取爬虫详情
   const fetchSpiderInfo = async (spiderName: string) => {
     try {
-      const info = await api.getSpiderInfo(spiderName)
-      const index = spiders.value.findIndex((s) => s.name === spiderName)
-      if (index !== -1) {
-        spiders.value[index] = info
+      const response = await api.getSpiderInfo(spiderName)
+      const info = response.data
+      if (info) {
+        const index = spiders.value.findIndex((s) => s.name === spiderName)
+        if (index !== -1) {
+          spiders.value[index] = info
+        }
       }
       return info
     } catch (error) {
@@ -43,9 +48,9 @@ export const useSpiderStore = defineStore('spider', () => {
   const fetchSpiderSchema = async (spiderName: string) => {
     try {
       loading.value = true
-      const schema = await api.getSpiderSchema(spiderName)
-      spiderSchema.value = schema
-      return schema
+      const response = await api.getSpiderSchema(spiderName)
+      spiderSchema.value = response.data
+      return response.data
     } catch (error) {
       console.error('Failed to fetch spider schema:', error)
       return null
@@ -77,12 +82,12 @@ export const useSpiderStore = defineStore('spider', () => {
   ) => {
     try {
       running.value = true
-      const result = await api.runSpiderBatch({
+      const response = await api.runSpiderBatch({
         spider_name: spiderName,
         params_list: paramsList,
         max_concurrency: maxConcurrency
       })
-      return result.results
+      return response.results
     } catch (error) {
       console.error('Failed to run spider batch:', error)
       return []
@@ -94,8 +99,8 @@ export const useSpiderStore = defineStore('spider', () => {
   // 验证参数
   const validateParams = async (spiderName: string, params: Record<string, any>) => {
     try {
-      const result = await api.validateSpiderParams(spiderName, { params })
-      return result
+      const response = await api.validateSpiderParams(spiderName, { params })
+      return response.data
     } catch (error) {
       console.error('Failed to validate params:', error)
       return { valid: false, errors: [String(error)], warnings: [] }

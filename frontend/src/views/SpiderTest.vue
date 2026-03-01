@@ -229,9 +229,9 @@
 
             <!-- 错误信息 -->
             <el-alert
-              v-if="!executionResult.success && executionResult.error"
+              v-if="!executionResult.success && executionResult.message"
               type="error"
-              :title="executionResult.error"
+              :title="executionResult.message"
               :closable="false"
               class="mb-20"
             />
@@ -362,8 +362,9 @@ const handleRunSpider = async () => {
 
   // 先进行参数验证
   const validationResult = await spiderStore.validateParams(selectedSpiderName.value, spiderParams.value)
-  if (!validationResult.valid) {
-    ElMessage.error(`参数验证失败：${validationResult.errors.join('；')}`)
+  if (!validationResult || !validationResult.valid) {
+    const errors = validationResult?.errors || ['验证失败']
+    ElMessage.error(`参数验证失败：${errors.join('；')}`)
     return
   }
 

@@ -25,7 +25,8 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     try {
       loading.value = true
       error.value = null
-      stats.value = await api.getAuditStats()
+      const response = await api.getAuditStats()
+      stats.value = response.data
       return stats.value
     } catch (err: any) {
       error.value = err.message || '获取统计信息失败'
@@ -42,10 +43,12 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await api.getAuditRecords(queryParams.value)
-      records.value = result.items || []
-      totalRecords.value = result.count
-      return result
+      const response = await api.getAuditRecords(queryParams.value)
+      if (response.data) {
+        records.value = response.data.items || []
+        totalRecords.value = response.data.count
+      }
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取审计记录失败'
       console.error('Failed to fetch audit records:', err)
@@ -80,7 +83,8 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
 
   const fetchPlatforms = async () => {
     try {
-      platforms.value = await api.getAuditPlatforms()
+      const response = await api.getAuditPlatforms()
+      platforms.value = response.data || []
       return platforms.value
     } catch (err: any) {
       console.error('Failed to fetch platforms:', err)
@@ -90,7 +94,8 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
 
   const fetchSpiders = async (platform?: string) => {
     try {
-      spiders.value = await api.getAuditSpiders(platform)
+      const response = await api.getAuditSpiders(platform)
+      spiders.value = response.data || []
       return spiders.value
     } catch (err: any) {
       console.error('Failed to fetch spiders:', err)
@@ -132,10 +137,10 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await api.cleanupAuditRecords(days)
+      const response = await api.cleanupAuditRecords(days)
       // 刷新数据
       await Promise.all([fetchStats(), fetchRecords()])
-      return result.count
+      return response.data?.count || 0
     } catch (err: any) {
       error.value = err.message || '清理记录失败'
       console.error('Failed to cleanup audit records:', err)

@@ -76,12 +76,12 @@ async def run_spider(request: SpiderRunRequest):
         request: 运行请求，包含 spider_name 和 params
 
     Returns:
-        爬虫执行结果
+        爬虫执行结果（SpiderResult）
     """
     try:
         register = spider_register()
         result = await register.run_spider(request.spider_name, request.params)
-        return success_response(result.to_dict(), "爬虫执行成功")
+        return result.to_dict()
     except SpiderNotFoundError as e:
         return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:
@@ -107,10 +107,7 @@ async def run_spider_batch(request: SpiderRunBatchRequest):
             request.params_list,
             request.max_concurrency,
         )
-        return success_response(
-            {"count": len(results), "results": [r.to_dict() for r in results]},
-            f"批量执行成功，共 {len(results)} 个任务",
-        )
+        return {"count": len(results), "results": [r.to_dict() for r in results]}
     except SpiderNotFoundError as e:
         return error_response(f"爬虫不存在: {str(e)}")
     except Exception as e:

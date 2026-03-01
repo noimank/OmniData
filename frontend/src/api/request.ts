@@ -15,17 +15,17 @@ const instance = axios.create({
 // 响应拦截器
 instance.interceptors.response.use(
   (response) => {
-    // 处理统一响应格式
-    const { success, message, data } = response.data
+    const responseData = response.data
 
-    // 如果 success 为 false，抛出错误
-    if (!success) {
-      ElMessage.error(message || '请求失败')
+    // 统一处理：如果 success 为 false，抛出错误
+    if (responseData && responseData.success === false) {
+      const message = responseData.message || '请求失败'
+      ElMessage.error(message)
       return Promise.reject(new Error(message))
     }
 
-    // 返回 data 部分
-    return data
+    // 直接返回完整响应数据
+    return responseData
   },
   (error: AxiosError<any>) => {
     // 处理错误响应
@@ -57,3 +57,4 @@ async function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<T
 }
 
 export default { request, get, post, put, delete: del }
+export { instance as axiosInstance }

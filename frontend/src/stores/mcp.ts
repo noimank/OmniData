@@ -31,9 +31,9 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.listSpiderPrompts(params)
-      spiderPrompts.value = result
-      return result
+      const response = await mcpApi.listSpiderPrompts(params)
+      spiderPrompts.value = response.data || []
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取提示词列表失败'
       console.error('Failed to fetch spider prompts:', err)
@@ -47,8 +47,8 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.getSpiderPrompt(promptId)
-      return result
+      const response = await mcpApi.getSpiderPrompt(promptId)
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取提示词详情失败'
       console.error('Failed to get spider prompt:', err)
@@ -62,9 +62,11 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.createSpiderPrompt(data)
-      spiderPrompts.value.push(result)
-      return result
+      const response = await mcpApi.createSpiderPrompt(data)
+      if (response.data) {
+        spiderPrompts.value.push(response.data)
+      }
+      return response.data
     } catch (err: any) {
       error.value = err.message || '创建提示词失败'
       console.error('Failed to create spider prompt:', err)
@@ -78,12 +80,14 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.updateSpiderPrompt(promptId, data)
-      const index = spiderPrompts.value.findIndex((p) => p.id === promptId)
-      if (index !== -1) {
-        spiderPrompts.value[index] = result
+      const response = await mcpApi.updateSpiderPrompt(promptId, data)
+      if (response.data) {
+        const index = spiderPrompts.value.findIndex((p) => p.id === promptId)
+        if (index !== -1) {
+          spiderPrompts.value[index] = response.data
+        }
       }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '更新提示词失败'
       console.error('Failed to update spider prompt:', err)
@@ -113,15 +117,17 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.setSpiderPromptAsDefault(promptId)
-      // 更新本地状态：重置同 Spider 的其他版本，设置新默认
-      const spiderName = result.spider_name
-      spiderPrompts.value.forEach(p => {
-        if (p.spider_name === spiderName) {
-          p.is_default = (p.id === promptId)
-        }
-      })
-      return result
+      const response = await mcpApi.setSpiderPromptAsDefault(promptId)
+      if (response.data) {
+        // 更新本地状态：重置同 Spider 的其他版本，设置新默认
+        const spiderName = response.data.spider_name
+        spiderPrompts.value.forEach(p => {
+          if (p.spider_name === spiderName) {
+            p.is_default = (p.id === promptId)
+          }
+        })
+      }
+      return response.data
     } catch (err: any) {
       error.value = err.message || '设置默认版本失败'
       console.error('Failed to set spider prompt as default:', err)
@@ -137,9 +143,9 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.listMcpServices(isActive)
-      services.value = result
-      return result
+      const response = await mcpApi.listMcpServices(isActive)
+      services.value = response.data || []
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取服务列表失败'
       console.error('Failed to fetch services:', err)
@@ -153,9 +159,9 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.getMcpService(serviceId)
-      currentService.value = result
-      return result
+      const response = await mcpApi.getMcpService(serviceId)
+      currentService.value = response.data
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取服务详情失败'
       console.error('Failed to fetch service:', err)
@@ -169,9 +175,11 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.createMcpService(data)
-      services.value.push(result)
-      return result
+      const response = await mcpApi.createMcpService(data)
+      if (response.data) {
+        services.value.push(response.data)
+      }
+      return response.data
     } catch (err: any) {
       error.value = err.message || '创建服务失败'
       console.error('Failed to create service:', err)
@@ -185,15 +193,17 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.updateMcpService(serviceId, data)
-      const index = services.value.findIndex((s) => s.id === serviceId)
-      if (index !== -1) {
-        services.value[index] = result
+      const response = await mcpApi.updateMcpService(serviceId, data)
+      if (response.data) {
+        const index = services.value.findIndex((s) => s.id === serviceId)
+        if (index !== -1) {
+          services.value[index] = response.data
+        }
+        if (currentService.value?.id === serviceId) {
+          currentService.value = response.data
+        }
       }
-      if (currentService.value?.id === serviceId) {
-        currentService.value = result
-      }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '更新服务失败'
       console.error('Failed to update service:', err)
@@ -226,15 +236,17 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.activateMcpService(serviceId)
-      const index = services.value.findIndex((s) => s.id === serviceId)
-      if (index !== -1) {
-        services.value[index] = result
+      const response = await mcpApi.activateMcpService(serviceId)
+      if (response.data) {
+        const index = services.value.findIndex((s) => s.id === serviceId)
+        if (index !== -1) {
+          services.value[index] = response.data
+        }
+        if (currentService.value?.id === serviceId) {
+          currentService.value = response.data
+        }
       }
-      if (currentService.value?.id === serviceId) {
-        currentService.value = result
-      }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '激活服务失败'
       console.error('Failed to activate service:', err)
@@ -248,15 +260,17 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.deactivateMcpService(serviceId)
-      const index = services.value.findIndex((s) => s.id === serviceId)
-      if (index !== -1) {
-        services.value[index] = result
+      const response = await mcpApi.deactivateMcpService(serviceId)
+      if (response.data) {
+        const index = services.value.findIndex((s) => s.id === serviceId)
+        if (index !== -1) {
+          services.value[index] = response.data
+        }
+        if (currentService.value?.id === serviceId) {
+          currentService.value = response.data
+        }
       }
-      if (currentService.value?.id === serviceId) {
-        currentService.value = result
-      }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '停用服务失败'
       console.error('Failed to deactivate service:', err)
@@ -272,9 +286,9 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.listTools(serviceId)
-      serviceTools.value = result
-      return result
+      const response = await mcpApi.listTools(serviceId)
+      serviceTools.value = response.data || []
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取工具列表失败'
       console.error('Failed to fetch service tools:', err)
@@ -288,9 +302,11 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.addTool(serviceId, data)
-      serviceTools.value.push(result)
-      return result
+      const response = await mcpApi.addTool(serviceId, data)
+      if (response.data) {
+        serviceTools.value.push(response.data)
+      }
+      return response.data
     } catch (err: any) {
       error.value = err.message || '添加工具失败'
       console.error('Failed to add tool:', err)
@@ -325,8 +341,8 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.getToolPromptVersion(serviceId, toolId)
-      return result
+      const response = await mcpApi.getToolPromptVersion(serviceId, toolId)
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取工具提示词版本失败'
       console.error('Failed to get tool prompt version:', err)
@@ -344,14 +360,16 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.setToolPromptVersion(serviceId, toolId, data)
-      // 更新工具列表中的版本信息
-      const toolIndex = serviceTools.value.findIndex((t) => t.id === toolId)
-      if (toolIndex !== -1) {
-        serviceTools.value[toolIndex].selected_prompt_version = result.current_version
-        serviceTools.value[toolIndex].current_prompt_description = result.current_description
+      const response = await mcpApi.setToolPromptVersion(serviceId, toolId, data)
+      if (response.data) {
+        // 更新工具列表中的版本信息
+        const toolIndex = serviceTools.value.findIndex((t) => t.id === toolId)
+        if (toolIndex !== -1) {
+          serviceTools.value[toolIndex].selected_prompt_version = response.data.current_version
+          serviceTools.value[toolIndex].current_prompt_description = response.data.current_description
+        }
       }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '设置提示词版本失败'
       console.error('Failed to set tool prompt version:', err)
@@ -368,14 +386,16 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.clearToolPromptVersion(serviceId, toolId)
-      // 更新工具列表
-      const toolIndex = serviceTools.value.findIndex((t) => t.id === toolId)
-      if (toolIndex !== -1) {
-        serviceTools.value[toolIndex].selected_prompt_version = null
-        serviceTools.value[toolIndex].current_prompt_description = result.current_description
+      const response = await mcpApi.clearToolPromptVersion(serviceId, toolId)
+      if (response.data) {
+        // 更新工具列表
+        const toolIndex = serviceTools.value.findIndex((t) => t.id === toolId)
+        if (toolIndex !== -1) {
+          serviceTools.value[toolIndex].selected_prompt_version = null
+          serviceTools.value[toolIndex].current_prompt_description = response.data.current_description
+        }
       }
-      return result
+      return response.data
     } catch (err: any) {
       error.value = err.message || '清除提示词版本失败'
       console.error('Failed to clear tool prompt version:', err)
@@ -391,9 +411,9 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.listAvailableSpiders()
-      availableSpiders.value = result
-      return result
+      const response = await mcpApi.listAvailableSpiders()
+      availableSpiders.value = response.data || []
+      return response.data
     } catch (err: any) {
       error.value = err.message || '获取 Spider 列表失败'
       console.error('Failed to fetch available spiders:', err)
@@ -407,8 +427,8 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       loading.value = true
       error.value = null
-      const result = await mcpApi.listAvailableSpidersForPrompts()
-      return result
+      const response = await mcpApi.listAvailableSpidersForPrompts()
+      return response.data || []
     } catch (err: any) {
       error.value = err.message || '获取 Spider 列表失败'
       console.error('Failed to fetch available spiders for prompts:', err)

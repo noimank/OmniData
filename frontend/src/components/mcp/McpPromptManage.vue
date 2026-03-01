@@ -127,7 +127,7 @@ const loadServiceTools = async () => {
   loadingTools.value = true
   try {
     const tools = await mcpStore.fetchServiceTools(selectedServiceId.value)
-    serviceTools.value = tools
+    serviceTools.value = tools || []
   } catch (err: any) {
     console.error('Failed to load service tools:', err)
     serviceTools.value = []

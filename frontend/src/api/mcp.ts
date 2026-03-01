@@ -12,6 +12,7 @@ import type {
   ToolPromptVersionResponse,
   ToolPromptVersionUpdate,
   SpiderInfoForMcp,
+  ApiResponse
 } from './types'
 
 const MCP_BASE = '/v1/mcp-services'
@@ -22,103 +23,103 @@ const SPIDER_PROMPT_BASE = '/v1/spider-prompts'
 export async function listSpiderPrompts(params?: {
   spider_name?: string
   is_default?: boolean
-}): Promise<SpiderPrompt[]> {
+}): Promise<ApiResponse<SpiderPrompt[]>> {
   const query = new URLSearchParams()
   if (params?.spider_name !== undefined) query.append('spider_name', params.spider_name)
   if (params?.is_default !== undefined) query.append('is_default', String(params.is_default))
   const queryString = query.toString()
-  return request.get<SpiderPrompt[]>(`${SPIDER_PROMPT_BASE}${queryString ? `?${queryString}` : ''}`)
+  return request.get<ApiResponse<SpiderPrompt[]>>(`${SPIDER_PROMPT_BASE}${queryString ? `?${queryString}` : ''}`)
 }
 
-export async function getSpiderPrompt(promptId: number): Promise<SpiderPrompt> {
-  return request.get<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/${promptId}`)
+export async function getSpiderPrompt(promptId: number): Promise<ApiResponse<SpiderPrompt>> {
+  return request.get<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}/${promptId}`)
 }
 
-export async function createSpiderPrompt(data: SpiderPromptCreate): Promise<SpiderPrompt> {
-  return request.post<SpiderPrompt>(`${SPIDER_PROMPT_BASE}`, data)
+export async function createSpiderPrompt(data: SpiderPromptCreate): Promise<ApiResponse<SpiderPrompt>> {
+  return request.post<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}`, data)
 }
 
-export async function updateSpiderPrompt(promptId: number, data: SpiderPromptUpdate): Promise<SpiderPrompt> {
-  return request.put<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/${promptId}`, data)
+export async function updateSpiderPrompt(promptId: number, data: SpiderPromptUpdate): Promise<ApiResponse<SpiderPrompt>> {
+  return request.put<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}/${promptId}`, data)
 }
 
-export async function deleteSpiderPrompt(promptId: number): Promise<void> {
-  return request.delete<void>(`${SPIDER_PROMPT_BASE}/${promptId}`)
+export async function deleteSpiderPrompt(promptId: number): Promise<ApiResponse<void>> {
+  return request.delete<ApiResponse<void>>(`${SPIDER_PROMPT_BASE}/${promptId}`)
 }
 
-export async function setSpiderPromptAsDefault(promptId: number): Promise<SpiderPrompt> {
-  return request.put<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/${promptId}/set-default`)
+export async function setSpiderPromptAsDefault(promptId: number): Promise<ApiResponse<SpiderPrompt>> {
+  return request.put<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}/${promptId}/set-default`)
 }
 
-export async function getSpiderPromptUsage(promptId: number): Promise<PromptUsageInfo> {
-  return request.get<PromptUsageInfo>(`${SPIDER_PROMPT_BASE}/${promptId}/usage`)
+export async function getSpiderPromptUsage(promptId: number): Promise<ApiResponse<PromptUsageInfo>> {
+  return request.get<ApiResponse<PromptUsageInfo>>(`${SPIDER_PROMPT_BASE}/${promptId}/usage`)
 }
 
 // Per-Spider 提示词端点
 
-export async function listSpiderPromptsByName(spiderName: string): Promise<SpiderPrompt[]> {
-  return request.get<SpiderPrompt[]>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/prompts`)
+export async function listSpiderPromptsByName(spiderName: string): Promise<ApiResponse<SpiderPrompt[]>> {
+  return request.get<ApiResponse<SpiderPrompt[]>>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/prompts`)
 }
 
 export async function createSpiderPromptForSpider(
   spiderName: string,
   data: Omit<SpiderPromptCreate, 'spider_name'>
-): Promise<SpiderPrompt> {
-  return request.post<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/prompts`, data)
+): Promise<ApiResponse<SpiderPrompt>> {
+  return request.post<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/prompts`, data)
 }
 
-export async function getSpiderDefaultPrompt(spiderName: string): Promise<SpiderPrompt> {
-  return request.get<SpiderPrompt>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/default-prompt`)
+export async function getSpiderDefaultPrompt(spiderName: string): Promise<ApiResponse<SpiderPrompt>> {
+  return request.get<ApiResponse<SpiderPrompt>>(`${SPIDER_PROMPT_BASE}/spiders/${spiderName}/default-prompt`)
 }
 
 // 获取所有可用的 Spider 列表（用于提示词管理）
-export async function listAvailableSpidersForPrompts(): Promise<SpiderInfoForMcp[]> {
-  return request.get<SpiderInfoForMcp[]>(`${SPIDER_PROMPT_BASE}/spiders/available`)
+export async function listAvailableSpidersForPrompts(): Promise<ApiResponse<SpiderInfoForMcp[]>> {
+  return request.get<ApiResponse<SpiderInfoForMcp[]>>(`${SPIDER_PROMPT_BASE}/spiders/available`)
 }
 
 // ============== 服务 CRUD ==============
 
-export async function listMcpServices(isActive?: boolean): Promise<McpService[]> {
+export async function listMcpServices(isActive?: boolean): Promise<ApiResponse<McpService[]>> {
   const params = isActive !== undefined ? `?is_active=${isActive}` : ''
-  return request.get<McpService[]>(`${MCP_BASE}${params}`)
+  return request.get<ApiResponse<McpService[]>>(`${MCP_BASE}${params}`)
 }
 
-export async function getMcpService(serviceId: number): Promise<McpService> {
-  return request.get<McpService>(`${MCP_BASE}/${serviceId}`)
+export async function getMcpService(serviceId: number): Promise<ApiResponse<McpService>> {
+  return request.get<ApiResponse<McpService>>(`${MCP_BASE}/${serviceId}`)
 }
 
-export async function createMcpService(data: McpServiceCreate): Promise<McpService> {
-  return request.post<McpService>(`${MCP_BASE}`, data)
+export async function createMcpService(data: McpServiceCreate): Promise<ApiResponse<McpService>> {
+  return request.post<ApiResponse<McpService>>(`${MCP_BASE}`, data)
 }
 
-export async function updateMcpService(serviceId: number, data: McpServiceUpdate): Promise<McpService> {
-  return request.put<McpService>(`${MCP_BASE}/${serviceId}`, data)
+export async function updateMcpService(serviceId: number, data: McpServiceUpdate): Promise<ApiResponse<McpService>> {
+  return request.put<ApiResponse<McpService>>(`${MCP_BASE}/${serviceId}`, data)
 }
 
-export async function deleteMcpService(serviceId: number): Promise<void> {
-  return request.delete<void>(`${MCP_BASE}/${serviceId}`)
+export async function deleteMcpService(serviceId: number): Promise<ApiResponse<void>> {
+  return request.delete<ApiResponse<void>>(`${MCP_BASE}/${serviceId}`)
 }
 
-export async function activateMcpService(serviceId: number): Promise<McpService> {
-  return request.put<McpService>(`${MCP_BASE}/${serviceId}/activate`, {})
+export async function activateMcpService(serviceId: number): Promise<ApiResponse<McpService>> {
+  return request.put<ApiResponse<McpService>>(`${MCP_BASE}/${serviceId}/activate`, {})
 }
 
-export async function deactivateMcpService(serviceId: number): Promise<McpService> {
-  return request.put<McpService>(`${MCP_BASE}/${serviceId}/deactivate`, {})
+export async function deactivateMcpService(serviceId: number): Promise<ApiResponse<McpService>> {
+  return request.put<ApiResponse<McpService>>(`${MCP_BASE}/${serviceId}/deactivate`, {})
 }
 
 // ============== 工具管理 ==============
 
-export async function listTools(serviceId: number): Promise<McpTool[]> {
-  return request.get<McpTool[]>(`${MCP_BASE}/${serviceId}/tools`)
+export async function listTools(serviceId: number): Promise<ApiResponse<McpTool[]>> {
+  return request.get<ApiResponse<McpTool[]>>(`${MCP_BASE}/${serviceId}/tools`)
 }
 
-export async function addTool(serviceId: number, data: McpToolCreate): Promise<McpTool> {
-  return request.post<McpTool>(`${MCP_BASE}/${serviceId}/tools`, data)
+export async function addTool(serviceId: number, data: McpToolCreate): Promise<ApiResponse<McpTool>> {
+  return request.post<ApiResponse<McpTool>>(`${MCP_BASE}/${serviceId}/tools`, data)
 }
 
-export async function removeTool(serviceId: number, toolId: number): Promise<void> {
-  return request.delete<void>(`${MCP_BASE}/${serviceId}/tools/${toolId}`)
+export async function removeTool(serviceId: number, toolId: number): Promise<ApiResponse<void>> {
+  return request.delete<ApiResponse<void>>(`${MCP_BASE}/${serviceId}/tools/${toolId}`)
 }
 
 // ============== 工具提示词版本管理 ==============
@@ -126,27 +127,27 @@ export async function removeTool(serviceId: number, toolId: number): Promise<voi
 export async function getToolPromptVersion(
   serviceId: number,
   toolId: number
-): Promise<ToolPromptVersionResponse> {
-  return request.get<ToolPromptVersionResponse>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`)
+): Promise<ApiResponse<ToolPromptVersionResponse>> {
+  return request.get<ApiResponse<ToolPromptVersionResponse>>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`)
 }
 
 export async function setToolPromptVersion(
   serviceId: number,
   toolId: number,
   data: ToolPromptVersionUpdate
-): Promise<ToolPromptVersionResponse> {
-  return request.put<ToolPromptVersionResponse>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`, data)
+): Promise<ApiResponse<ToolPromptVersionResponse>> {
+  return request.put<ApiResponse<ToolPromptVersionResponse>>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`, data)
 }
 
 export async function clearToolPromptVersion(
   serviceId: number,
   toolId: number
-): Promise<ToolPromptVersionResponse> {
-  return request.delete<ToolPromptVersionResponse>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`)
+): Promise<ApiResponse<ToolPromptVersionResponse>> {
+  return request.delete<ApiResponse<ToolPromptVersionResponse>>(`${MCP_BASE}/${serviceId}/tools/${toolId}/prompt-version`)
 }
 
 // ============== Spider 信息 ==============
 
-export async function listAvailableSpiders(): Promise<SpiderInfoForMcp[]> {
-  return request.get<SpiderInfoForMcp[]>(`${MCP_BASE}/spiders/available`)
+export async function listAvailableSpiders(): Promise<ApiResponse<SpiderInfoForMcp[]>> {
+  return request.get<ApiResponse<SpiderInfoForMcp[]>>(`${MCP_BASE}/spiders/available`)
 }

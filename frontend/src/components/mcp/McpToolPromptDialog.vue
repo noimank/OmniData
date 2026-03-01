@@ -271,7 +271,7 @@ const loadAvailableVersions = async () => {
 
   try {
     const prompts = await mcpStore.fetchSpiderPrompts({ spider_name: props.tool.spider_name })
-    availableVersions.value = prompts
+    availableVersions.value = prompts || []
   } catch (err: any) {
     ElMessage.error(err.message || '加载可用版本失败')
   }

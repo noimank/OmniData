@@ -12,7 +12,8 @@ export const useMonitorStore = defineStore('monitor', () => {
   // 获取浏览器上下文池状态
   const fetchContextPool = async () => {
     try {
-      contextPool.value = await api.getBrowserContextPool()
+      const response = await api.getBrowserContextPool()
+      contextPool.value = response.data
     } catch (error) {
       console.error('Failed to fetch context pool stats:', error)
     }
@@ -21,7 +22,8 @@ export const useMonitorStore = defineStore('monitor', () => {
   // 获取系统资源
   const fetchSystemResource = async () => {
     try {
-      systemResource.value = await api.getSystemResource()
+      const response = await api.getSystemResource()
+      systemResource.value = response.data
     } catch (error) {
       console.error('Failed to fetch system resource:', error)
     }
@@ -30,7 +32,8 @@ export const useMonitorStore = defineStore('monitor', () => {
   // 获取 Context 列表
   const fetchContextList = async () => {
     try {
-      contextList.value = await api.getContextList()
+      const response = await api.getContextList()
+      contextList.value = response.data || []
     } catch (error) {
       console.error('Failed to fetch context list:', error)
     }

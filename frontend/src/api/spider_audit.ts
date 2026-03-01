@@ -3,20 +3,21 @@ import type {
   SpiderAuditQuery,
   SpiderAuditResponse,
   SpiderAuditStats,
+  ApiResponse
 } from './types'
 
 /**
  * 获取审计统计信息
  */
-export function getAuditStats(): Promise<SpiderAuditStats> {
-  return request.get<SpiderAuditStats>('/v1/spider-audit/stats')
+export function getAuditStats(): Promise<ApiResponse<SpiderAuditStats>> {
+  return request.get<ApiResponse<SpiderAuditStats>>('/v1/spider-audit/stats')
 }
 
 /**
  * 获取审计记录列表（分页）
  */
-export function getAuditRecords(params: SpiderAuditQuery): Promise<SpiderAuditResponse> {
-  return request.get<SpiderAuditResponse>('/v1/spider-audit/records', {
+export function getAuditRecords(params: SpiderAuditQuery): Promise<ApiResponse<SpiderAuditResponse>> {
+  return request.get<ApiResponse<SpiderAuditResponse>>('/v1/spider-audit/records', {
     params: {
       spider_name: params.spider_name,
       platform: params.platform,
@@ -32,15 +33,15 @@ export function getAuditRecords(params: SpiderAuditQuery): Promise<SpiderAuditRe
 /**
  * 获取平台列表
  */
-export function getAuditPlatforms(): Promise<string[]> {
-  return request.get<string[]>('/v1/spider-audit/platforms')
+export function getAuditPlatforms(): Promise<ApiResponse<string[]>> {
+  return request.get<ApiResponse<string[]>>('/v1/spider-audit/platforms')
 }
 
 /**
  * 获取爬虫列表
  */
-export function getAuditSpiders(platform?: string): Promise<string[]> {
-  return request.get<string[]>('/v1/spider-audit/spiders', {
+export function getAuditSpiders(platform?: string): Promise<ApiResponse<string[]>> {
+  return request.get<ApiResponse<string[]>>('/v1/spider-audit/spiders', {
     params: platform ? { platform } : undefined,
   })
 }
@@ -48,15 +49,15 @@ export function getAuditSpiders(platform?: string): Promise<string[]> {
 /**
  * 删除单条审计记录
  */
-export function deleteAuditRecord(recordId: number): Promise<{ id: number }> {
-  return request.delete<{ id: number }>(`/v1/spider-audit/records/${recordId}`)
+export function deleteAuditRecord(recordId: number): Promise<ApiResponse<{ id: number }>> {
+  return request.delete<ApiResponse<{ id: number }>>(`/v1/spider-audit/records/${recordId}`)
 }
 
 /**
  * 清理指定天数之前的审计记录
  */
-export function cleanupAuditRecords(days: number = 30): Promise<{ count: number }> {
-  return request.delete<{ count: number }>('/v1/spider-audit/cleanup', {
+export function cleanupAuditRecords(days: number = 30): Promise<ApiResponse<{ count: number }>> {
+  return request.delete<ApiResponse<{ count: number }>>('/v1/spider-audit/cleanup', {
     params: { days },
   })
 }

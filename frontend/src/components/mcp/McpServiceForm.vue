@@ -250,7 +250,7 @@ const initForm = () => {
 
 const loadServiceTools = async (serviceId: number) => {
   const tools = await mcpStore.fetchServiceTools(serviceId)
-  selectedSpiderNames.value = tools.map((t) => t.spider_name)
+  selectedSpiderNames.value = (tools || []).map((t) => t.spider_name)
 }
 
 const handleClose = () => {

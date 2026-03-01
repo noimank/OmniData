@@ -15,8 +15,10 @@ export const useLoginStore = defineStore('login', () => {
   const fetchLogins = async () => {
     try {
       loading.value = true
-      const result = await api.getLogins()
-      logins.value = result.logins
+      const response = await api.getLogins()
+      if (response.data) {
+        logins.value = response.data.logins
+      }
     } catch (error) {
       console.error('Failed to fetch logins:', error)
     } finally {
@@ -27,15 +29,18 @@ export const useLoginStore = defineStore('login', () => {
   // 获取登录器详情
   const fetchLoginDetail = async (loginName: string) => {
     try {
-      const detail = await api.getLoginDetail(loginName)
-      const index = logins.value.findIndex((l) => l.name === loginName)
-      if (index !== -1) {
-        // 使用 Object.assign 保持引用不变，只更新属性
-        Object.assign(logins.value[index], detail)
-      }
-      // 如果 currentLogin 指向的是同一个登录器，也需要更新
-      if (currentLogin.value && currentLogin.value.name === loginName) {
-        Object.assign(currentLogin.value, detail)
+      const response = await api.getLoginDetail(loginName)
+      const detail = response.data
+      if (detail) {
+        const index = logins.value.findIndex((l) => l.name === loginName)
+        if (index !== -1) {
+          // 使用 Object.assign 保持引用不变，只更新属性
+          Object.assign(logins.value[index], detail)
+        }
+        // 如果 currentLogin 指向的是同一个登录器，也需要更新
+        if (currentLogin.value && currentLogin.value.name === loginName) {
+          Object.assign(currentLogin.value, detail)
+        }
       }
       return detail
     } catch (error) {
