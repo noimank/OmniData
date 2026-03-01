@@ -43,6 +43,10 @@
 [![股票搜索](https://img.shields.io/badge/股票搜索-brightgreen)](eastmoney_search.md)
 [![快讯](https://img.shields.io/badge/快讯-ff5722)](eastmoney_fast_news.md)
 
+### 智能选股
+
+[![条件选股](https://img.shields.io/badge/条件选股-9c27b0)](eastmoney_stock_selection.md)
+
 ---
 
 ## 特点
