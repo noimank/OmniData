@@ -105,6 +105,12 @@ async def verify_login(login_name: str):
         register = get_login_register()
         login = register.get_login_instance(login_name)
         status_info = await login.verify_login_state()
+
+        # 登录成功或失败时，更新登录器的状态缓存
+        if status_info.status in ("success", "failed"):
+            login.set_login_status(status_info)
+            logger.info(f"Login status updated for {login_name}: {status_info.status}")
+
         return success_response(status_info.model_dump(), "验证登录状态成功")
 
     except LoginNotFoundError as e:
