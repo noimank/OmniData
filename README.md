@@ -1,7 +1,7 @@
 # OmniData
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.128+-green.svg)](https://fastapi.tiangolo.com/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.57+-blue.svg)](https://playwright.dev/)
 
@@ -18,9 +18,9 @@ OmniData 是一个企业级的可扩展网页爬虫框架，基于 Playwright �
 - **浏览器自动化**: 基于 Playwright 实现完整的浏览器自动化能力，支持 Headers、Cookie、LocalStorage 等全流程控制
 - **LRU 单例模式**: 核心组件使用 LRU 缓存实现线程安全单例，优化资源管理
 - **Context 池化**: 单 Browser 多 Context 架构，Context 自动复用与回收，显著降低内存占用
-- **自动注册机制**: 扫描 `data_sources/` 目录自动发现爬虫和登录器，零配置启动
+- **自动注册机制**: 扫描 `data_sources/` 目录自动发现爬虫和登录器，轻松拓展爬虫任务，零配置启动
 - **Redis 状态持久化**: cookies 和 localStorage 自动持久化到 Redis，支持登录态长期保持
-- **MCP 协议集成**: 完整实现 MCP (Model Context Protocol) 协议，支持 HTTP/SSE 传输
+- **MCP 协议集成**: 完整实现 MCP (Model Context Protocol) 协议，支持 HTTP/SSE 传输，自由选择任意多个爬虫接口任意组成多个mcp服务
 - **智能登录管理**: 二维码登录支持、定时刷新机制、并发状态检查
 
 ---
