@@ -3,8 +3,8 @@ import type {
   LoginListResponse,
   LoginInfo,
   QrcodeRequest,
-  QrcodeResponse,
-  LoginStatus,
+  QrcodeData,
+  LoginStatusData,
   ApiResponse
 } from './types'
 
@@ -18,19 +18,19 @@ export const getLoginDetail = (loginName: string): Promise<ApiResponse<LoginInfo
   return request.get<ApiResponse<LoginInfo>>(`/v1/logins/${loginName}`)
 }
 
-// 获取二维码（QrcodeResponse 本身就是完整响应格式，不需要包装）
-export const getQrcode = (loginName: string, data: QrcodeRequest): Promise<QrcodeResponse> => {
-  return request.post<QrcodeResponse>(`/v1/logins/${loginName}/qrcode`, data)
+// 获取二维码（数据嵌套在 ApiResponse.data 中）
+export const getQrcode = (loginName: string, data: QrcodeRequest): Promise<ApiResponse<QrcodeData>> => {
+  return request.post<ApiResponse<QrcodeData>>(`/v1/logins/${loginName}/qrcode`, data)
 }
 
-// 验证登录状态（轮询）(LoginStatus 本身就是完整响应格式)
-export const verifyLogin = (loginName: string): Promise<LoginStatus> => {
-  return request.post<LoginStatus>(`/v1/logins/${loginName}/verify`)
+// 验证登录状态（轮询）（数据嵌套在 ApiResponse.data 中）
+export const verifyLogin = (loginName: string): Promise<ApiResponse<LoginStatusData>> => {
+  return request.post<ApiResponse<LoginStatusData>>(`/v1/logins/${loginName}/verify`)
 }
 
-// 检查登录状态（LoginStatus 本身就是完整响应格式）
-export const checkLoginStatus = (loginName: string): Promise<LoginStatus> => {
-  return request.get<LoginStatus>(`/v1/logins/${loginName}/status`)
+// 检查登录状态（数据嵌套在 ApiResponse.data 中）
+export const checkLoginStatus = (loginName: string): Promise<ApiResponse<LoginStatusData>> => {
+  return request.get<ApiResponse<LoginStatusData>>(`/v1/logins/${loginName}/status`)
 }
 
 // 清除登录状态

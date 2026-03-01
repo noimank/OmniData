@@ -11,7 +11,6 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
   const platforms = ref<string[]>([])
   const spiders = ref<string[]>([])
   const loading = ref<boolean>(false)
-  const error = ref<string | null>(null)
 
   // 查询参数
   const queryParams = ref<SpiderAuditQuery>({
@@ -24,12 +23,10 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
   const fetchStats = async () => {
     try {
       loading.value = true
-      error.value = null
       const response = await api.getAuditStats()
       stats.value = response.data
       return stats.value
     } catch (err: any) {
-      error.value = err.message || '获取统计信息失败'
       console.error('Failed to fetch audit stats:', err)
       throw err
     } finally {
@@ -42,7 +39,6 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
   const fetchRecords = async () => {
     try {
       loading.value = true
-      error.value = null
       const response = await api.getAuditRecords(queryParams.value)
       if (response.data) {
         records.value = response.data.items || []
@@ -50,7 +46,6 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
       }
       return response.data
     } catch (err: any) {
-      error.value = err.message || '获取审计记录失败'
       console.error('Failed to fetch audit records:', err)
       throw err
     } finally {
@@ -103,29 +98,17 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     }
   }
 
-  // ========== 辅助方法 ==========
-
-  const clearError = () => {
-    error.value = null
-  }
-
-  const refresh = async () => {
-    await Promise.all([fetchStats(), fetchRecords()])
-  }
-
   // ========== 删除和清理 ==========
 
   const deleteRecord = async (recordId: number) => {
     try {
       loading.value = true
-      error.value = null
       await api.deleteAuditRecord(recordId)
       // 从本地列表中移除
       records.value = records.value.filter((r) => r.id !== recordId)
       totalRecords.value = Math.max(0, totalRecords.value - 1)
       return true
     } catch (err: any) {
-      error.value = err.message || '删除记录失败'
       console.error('Failed to delete audit record:', err)
       throw err
     } finally {
@@ -136,18 +119,20 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
   const cleanupOldRecords = async (days: number = 30) => {
     try {
       loading.value = true
-      error.value = null
       const response = await api.cleanupAuditRecords(days)
       // 刷新数据
       await Promise.all([fetchStats(), fetchRecords()])
       return response.data?.count || 0
     } catch (err: any) {
-      error.value = err.message || '清理记录失败'
       console.error('Failed to cleanup audit records:', err)
       throw err
     } finally {
       loading.value = false
     }
+  }
+
+  const refresh = async () => {
+    await Promise.all([fetchStats(), fetchRecords()])
   }
 
   return {
@@ -158,7 +143,6 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     platforms,
     spiders,
     loading,
-    error,
     queryParams,
 
     // 方法
@@ -168,7 +152,6 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     resetQueryParams,
     fetchPlatforms,
     fetchSpiders,
-    clearError,
     refresh,
     deleteRecord,
     cleanupOldRecords,

@@ -106,3 +106,36 @@ omnidata/
 | `/api/v1/spiders/run` | POST | 运行爬虫 |
 | `/api/v1/spiders/run-batch` | POST | 批量运行 |
 | `/api/v1/mcp/services` | GET | 列出 MCP 服务 |
+
+## 前端开发规范
+
+### 命令
+
+```bash
+cd frontend
+
+# 开发
+npm run dev
+
+# 类型检查
+npm run type-check
+
+# 构建
+npm run build
+```
+
+### API 层规范
+
+1. **统一响应格式**: 使用 `ApiResponse<T>` 包装（`success`, `message`, `data`）
+2. **函数风格**: 统一使用箭头函数 + 显式返回类型
+   ```typescript
+   export const getXxx = (id: number): Promise<ApiResponse<Xxx>> => {
+     return request.get<ApiResponse<Xxx>>(`/v1/xxx/${id}`)
+   }
+   ```
+3. **例外**: 自包含响应格式（如 `SpiderResult`、`QrcodeResponse`）无需 `ApiResponse` 包装
+
+### Store 层规范
+
+- 错误处理由拦截器统一完成（`request.ts` 中自动 `ElMessage.error()`）
+- Store 只需 `console.error()` 记录日志，无需维护 `error` 状态

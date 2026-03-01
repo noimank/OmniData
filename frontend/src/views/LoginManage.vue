@@ -25,8 +25,8 @@
             <el-table-column prop="platform" label="平台" width="100" />
             <el-table-column label="状态" width="80">
               <template #default="{ row }">
-                <el-tag :type="getLoginStatusType(row.name)" size="small">
-                  {{ getLoginStatusText(row.name) }}
+                <el-tag :type="getLoginStatusDataType(row.name)" size="small">
+                  {{ getLoginStatusDataText(row.name) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -229,7 +229,7 @@ import {
   Select
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { LoginInfo, LoginStatus } from '@/api/types'
+import type { LoginInfo, LoginStatusData } from '@/api/types'
 
 const loginStore = useLoginStore()
 
@@ -246,7 +246,7 @@ const qrcodeLoading = ref(false)
 const refreshingLogin = ref<string | null>(null)
 
 const selectedQrType = ref('')
-const statusCache = ref<Record<string, LoginStatus>>({})
+const statusCache = ref<Record<string, LoginStatusData>>({})
 const countdown = ref(0)
 const qrcodeExpired = ref(false)
 let countdownTimer: number | null = null
@@ -322,7 +322,7 @@ watch(polling, (newVal, oldVal) => {
     stopCountdown()
     // 如果不是成功状态，自动重置为未登录状态，允许重新登录
     if (loginStatus.value && loginStatus.value.status !== 'success') {
-      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+      const notLoggedInStatus: LoginStatusData = { status: 'not_logged_in', message: '未登录' }
       statusCache.value[currentLogin.value?.name || ''] = notLoggedInStatus
       loginStore.loginStatus = notLoggedInStatus
       qrcodeExpired.value = false
@@ -447,8 +447,17 @@ const handleGetQrcode = async () => {
     // 开始倒计时
     startCountdown()
 
-    // 开始轮询验证（不阻塞）
-    loginStore.startVerifyPolling(currentLogin.value.name).catch((error) => {
+    // 开始轮询验证
+    loginStore.startVerifyPolling(currentLogin.value.name).then((status) => {
+      // 轮询成功完成后，更新状态缓存
+      if (status && currentLogin.value) {
+        statusCache.value[currentLogin.value.name] = status
+        // 如果登录成功，显示成功提示
+        if (status.status === 'success') {
+          ElMessage.success('登录成功')
+        }
+      }
+    }).catch((error) => {
       console.error('轮询验证失败:', error)
       stopCountdown()
       qrcodeExpired.value = true
@@ -481,13 +490,13 @@ const handleCancelLogin = async () => {
       statusCache.value[currentLogin.value.name] = detail.login_status
     } else {
       // 如果后端返回 null，设置默认未登录状态
-      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+      const notLoggedInStatus: LoginStatusData = { status: 'not_logged_in', message: '未登录' }
       statusCache.value[currentLogin.value.name] = notLoggedInStatus
       loginStore.loginStatus = notLoggedInStatus
     }
   } else {
     // 如果没有选中登录器，也重置本地状态
-    const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+    const notLoggedInStatus: LoginStatusData = { status: 'not_logged_in', message: '未登录' }
     loginStore.loginStatus = notLoggedInStatus
   }
 
@@ -511,7 +520,7 @@ const handleClearSession = async () => {
       ElMessage.success('登录状态已清除')
       // 重置所有状态，允许重新登录
       loginStore.qrcode = null
-      const notLoggedInStatus: LoginStatus = { status: 'not_logged_in', message: '未登录' }
+      const notLoggedInStatus: LoginStatusData = { status: 'not_logged_in', message: '未登录' }
       statusCache.value[currentLogin.value.name] = notLoggedInStatus
       loginStore.loginStatus = notLoggedInStatus
       qrcodeExpired.value = false
@@ -523,13 +532,13 @@ const handleClearSession = async () => {
   }
 }
 
-const getLoginStatusType = (loginName: string) => {
+const getLoginStatusDataType = (loginName: string) => {
   const status = statusCache.value[loginName]?.status || loginStatus.value?.status
   if (status === 'success') return 'success'
   return 'info'
 }
 
-const getLoginStatusText = (loginName: string) => {
+const getLoginStatusDataText = (loginName: string) => {
   const status = statusCache.value[loginName]?.status || loginStatus.value?.status
   if (status === 'success') return '已登录'
   return '未登录'

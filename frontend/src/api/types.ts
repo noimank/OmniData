@@ -55,7 +55,7 @@ export interface LoginInfo {
   version: string
   author?: string
   qrcode_types?: string[]
-  login_status?: LoginStatus
+  login_status?: LoginStatusData
 }
 
 export interface LoginListResponse {
@@ -67,15 +67,15 @@ export interface QrcodeRequest {
   qr_type: string
 }
 
-export interface QrcodeResponse {
-  success: boolean
+// 二维码数据（嵌套在 ApiResponse.data 中）
+export interface QrcodeData {
   login_name: string
   url: string
   qr_type: string
-  message: string
 }
 
-export interface LoginStatus {
+// 登录状态数据（嵌套在 ApiResponse.data 中）
+export interface LoginStatusData {
   status: 'waiting' | 'success' | 'failed' | 'not_logged_in'
   message: string
   login_name?: string

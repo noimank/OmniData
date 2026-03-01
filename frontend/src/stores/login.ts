@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/logins'
-import type { LoginInfo, QrcodeResponse, LoginStatus } from '@/api/types'
+import type { LoginInfo, QrcodeData, LoginStatusData } from '@/api/types'
 
 export const useLoginStore = defineStore('login', () => {
   const logins = ref<LoginInfo[]>([])
   const currentLogin = ref<LoginInfo | null>(null)
-  const qrcode = ref<QrcodeResponse | null>(null)
-  const loginStatus = ref<LoginStatus | null>(null)
+  const qrcode = ref<QrcodeData | null>(null)
+  const loginStatus = ref<LoginStatusData | null>(null)
   const polling = ref<boolean>(false)
   const loading = ref<boolean>(false)
 
@@ -53,9 +53,9 @@ export const useLoginStore = defineStore('login', () => {
   const fetchQrcode = async (loginName: string, qrType: string) => {
     try {
       loading.value = true
-      const result = await api.getQrcode(loginName, { qr_type: qrType })
-      qrcode.value = result
-      return result
+      const response = await api.getQrcode(loginName, { qr_type: qrType })
+      qrcode.value = response.data
+      return response.data
     } catch (error) {
       console.error('Failed to fetch qrcode:', error)
       return null
@@ -65,15 +65,18 @@ export const useLoginStore = defineStore('login', () => {
   }
 
   // 开始轮询验证登录状态
-  const startVerifyPolling = async (loginName: string) => {
+  const startVerifyPolling = async (loginName: string): Promise<LoginStatusData | null> => {
     polling.value = true
     while (polling.value) {
       try {
-        const status = await api.verifyLogin(loginName)
-        loginStatus.value = status
-        if (status.status === 'success' || status.status === 'failed') {
-          polling.value = false
-          break
+        const response = await api.verifyLogin(loginName)
+        const status = response.data
+        if (status) {
+          loginStatus.value = status
+          if (status.status === 'success' || status.status === 'failed') {
+            polling.value = false
+            return status
+          }
         }
       } catch (error) {
         console.error('Failed to verify login:', error)
@@ -81,6 +84,7 @@ export const useLoginStore = defineStore('login', () => {
       // 等待 2 秒后继续轮询
       await new Promise((resolve) => setTimeout(resolve, 2000))
     }
+    return null
   }
 
   // 停止轮询
@@ -91,9 +95,9 @@ export const useLoginStore = defineStore('login', () => {
   // 检查登录状态
   const checkStatus = async (loginName: string) => {
     try {
-      const status = await api.checkLoginStatus(loginName)
-      loginStatus.value = status
-      return status
+      const response = await api.checkLoginStatus(loginName)
+      loginStatus.value = response.data
+      return response.data
     } catch (error) {
       console.error('Failed to check login status:', error)
       return null
