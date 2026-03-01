@@ -73,8 +73,7 @@ omnidata/
 │   │   └── mcp_utils.py           # MCP 工具
 │   └── api/                     # API 接口
 │       ├── routers/               # 路由
-│       ├── main.py                # FastAPI 应用
-│       └── client.py              # API 客户端
+│       └── main.py              # FastAPI 应用
 ├── frontend/                    # Vue 3 + TypeScript 前端
 ├── docs/                        # MkDocs 文档
 └── tests/                       # 测试目录
@@ -106,6 +105,79 @@ omnidata/
 | `/api/v1/spiders/run` | POST | 运行爬虫 |
 | `/api/v1/spiders/run-batch` | POST | 批量运行 |
 | `/api/v1/mcp/services` | GET | 列出 MCP 服务 |
+
+## 爬虫开发规范
+
+### 基本要求
+
+所有新建爬虫**必须**继承 `omnidata/core/base_web_spider.py` 中的 `BaseWebSpider` 基类。
+
+### 必需属性
+
+```python
+class MySpider(BaseWebSpider):
+    name = "platform_spider_name"  # 唯一标识，格式：数据源_爬虫功能
+    description = "爬虫功能描述"
+    platform = "平台中文名"         # 如 "东方财富"
+    version = "1.0.0"
+    author = "作者名"
+    params_model = MyParams         # Pydantic 参数模型（可选）
+```
+
+### 必需方法
+
+- `async def crawl(self, params) -> SpiderResult`: 爬取逻辑（**必须实现**）
+- `async def postprocess(self, result, params) -> SpiderResult`: 后处理（可选）
+
+### 完整示例
+
+```python
+from pydantic import BaseModel, Field
+from omnidata.core.base_web_spider import BaseWebSpider, SpiderResult
+
+class MyParams(BaseModel):
+    url: str = Field(..., description="目标URL")
+    keyword: str = Field(default="", description="搜索关键词")
+
+class MySpider(BaseWebSpider):
+    name = "eastmoney_news_query"
+    description = "东方财富新闻查询"
+    platform = "东方财富"
+    version = "1.0.0"
+    author = "noimank"
+    params_model = MyParams
+
+    async def crawl(self, params: MyParams) -> SpiderResult:
+       # new_page() 方法会自动管理上下文，无需手动关闭,参数为对应的平台名字，通常为对应data_sources下的文件夹名字
+        async with self.new_page("东方财富") as page:
+            try:
+                await page.goto(params.url)
+                title = await page.title()
+                return SpiderResult(
+                    success=True,
+                    data={"title": title, "url": params.url},
+                )
+            except Exception as e:
+                return SpiderResult(success=False, message=str(e))
+            
+```
+
+### 目录结构
+
+```
+omnidata/data_sources/
+└── {platform}/           # 平台目录（如 eastmoney/）
+    ├── __init__.py
+    ├── spider.py         # 爬虫实现
+    └── login.py          # 登录器（可选）
+```
+
+### 注意事项
+
+1. **命名规范**: `name` 属性格式为 `数据源_功能描述`，如 `eastmoney_news_query`
+2. **资源释放**: 使用 `async with` 管理上下文，确保 page 正确关闭
+3. **返回格式**: `crawl` 方法必须返回 `SpiderResult` 对象
+4. **自动注册**: 放置在 `data_sources/` 目录下会自动被系统发现
 
 ## 前端开发规范
 
