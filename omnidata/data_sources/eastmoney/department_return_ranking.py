@@ -18,13 +18,11 @@ class DepartmentReturnRankingParams(BaseModel):
     """营业部收益率排行参数模型"""
 
     statistics_cycle: Literal["01", "02", "03", "04"] = Field(
-        default="01",
-        description="统计周期：01=近1月，02=近3月，03=近6月，04=近1年"
+        default="01", description="统计周期：01=近1月，02=近3月，03=近6月，04=近1年"
     )
     limit: int = Field(default=50, ge=1, description="获取数据条数")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -84,12 +82,13 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                     }
 
                     # 发送请求
-                    response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                    response = await page.request.get(
+                        self.API_URL, params=request_params, timeout=30000
+                    )
 
                     if response.status != 200:
                         return SpiderResult(
-                            success=False,
-                            message=f"请求失败，状态码：{response.status}"
+                            success=False, message=f"请求失败，状态码：{response.status}"
                         )
 
                     # 获取响应文本
@@ -97,14 +96,15 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
 
                     # 移除 JSONP 回调函数
                     import re
-                    json_match = re.search(r'jQuery\d+_\d+\((.*)\);?', response_text)
+
+                    json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
                     if json_match:
                         json_str = json_match.group(1)
                     elif response_text.startswith("jQuery"):
-                        start_idx = response_text.find('(')
-                        end_idx = response_text.rfind(')')
+                        start_idx = response_text.find("(")
+                        end_idx = response_text.rfind(")")
                         if start_idx != -1 and end_idx != -1:
-                            json_str = response_text[start_idx + 1:end_idx]
+                            json_str = response_text[start_idx + 1 : end_idx]
                         else:
                             json_str = response_text
                     else:
@@ -112,21 +112,18 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
 
                     # 解析 JSON
                     import json
+
                     try:
                         data = json.loads(json_str)
                     except json.JSONDecodeError as e:
-                        return SpiderResult(
-                            success=False,
-                            message=f"解析响应数据失败：{str(e)}"
-                        )
+                        return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                     # 检查返回状态
                     result = data.get("result", {})
                     if not result:
                         if page_number == 1:
                             return SpiderResult(
-                                success=False,
-                                message=f"获取数据失败，请检查统计周期是否正确"
+                                success=False, message=f"获取数据失败，请检查统计周期是否正确"
                             )
                         break
 
@@ -150,11 +147,11 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=[],
-                        message=f"统计周期 {params.statistics_cycle} 无营业部收益率排行数据"
+                        message=f"统计周期 {params.statistics_cycle} 无营业部收益率排行数据",
                     )
 
                 # 截取到指定数量
-                all_data = all_data[:params.limit]
+                all_data = all_data[: params.limit]
 
                 # 解析数据
                 result_data = self._parse_ranking_data(all_data)
@@ -169,7 +166,9 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                 stats_info = {
                     "returned_count": len(result_data),
                     "total_count": total,
-                    "statistics_cycle": cycle_map.get(params.statistics_cycle, params.statistics_cycle),
+                    "statistics_cycle": cycle_map.get(
+                        params.statistics_cycle, params.statistics_cycle
+                    ),
                 }
 
                 # 格式化输出
@@ -180,7 +179,7 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_markdown(),
                         },
-                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
@@ -189,7 +188,7 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_string(),
                         },
-                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
 
                 # 默认返回 dict 格式
@@ -199,14 +198,11 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
                         "stats": stats_info,
                         "records": df.to_dict(orient="records"),
                     },
-                    message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）"
+                    message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_ranking_data(self, data: list) -> list[dict]:
         """
@@ -270,27 +266,37 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
         # 后1日数据
         average_increase_1day = safe_float(item.get("AVERAGE_INCREASE_1DAY"))  # 后1日平均涨幅
         rise_probability_1day = safe_float(item.get("RISE_PROBABILITY_1DAY"))  # 后1日上涨概率
-        total_buyer_saletimes_1day = safe_int(item.get("TOTAL_BUYER_SALESTIMES_1DAY"))  # 后1日上榜次数
+        total_buyer_saletimes_1day = safe_int(
+            item.get("TOTAL_BUYER_SALESTIMES_1DAY")
+        )  # 后1日上榜次数
 
         # 后2日数据
         average_increase_2day = safe_float(item.get("AVERAGE_INCREASE_2DAY"))  # 后2日平均涨幅
         rise_probability_2day = safe_float(item.get("RISE_PROBABILITY_2DAY"))  # 后2日上涨概率
-        total_buyer_saletimes_2day = safe_int(item.get("TOTAL_BUYER_SALESTIMES_2DAY"))  # 后2日上榜次数
+        total_buyer_saletimes_2day = safe_int(
+            item.get("TOTAL_BUYER_SALESTIMES_2DAY")
+        )  # 后2日上榜次数
 
         # 后3日数据
         average_increase_3day = safe_float(item.get("AVERAGE_INCREASE_3DAY"))  # 后3日平均涨幅
         rise_probability_3day = safe_float(item.get("RISE_PROBABILITY_3DAY"))  # 后3日上涨概率
-        total_buyer_saletimes_3day = safe_int(item.get("TOTAL_BUYER_SALESTIMES_3DAY"))  # 后3日上榜次数
+        total_buyer_saletimes_3day = safe_int(
+            item.get("TOTAL_BUYER_SALESTIMES_3DAY")
+        )  # 后3日上榜次数
 
         # 后5日数据
         average_increase_5day = safe_float(item.get("AVERAGE_INCREASE_5DAY"))  # 后5日平均涨幅
         rise_probability_5day = safe_float(item.get("RISE_PROBABILITY_5DAY"))  # 后5日上涨概率
-        total_buyer_saletimes_5day = safe_int(item.get("TOTAL_BUYER_SALESTIMES_5DAY"))  # 后5日上榜次数
+        total_buyer_saletimes_5day = safe_int(
+            item.get("TOTAL_BUYER_SALESTIMES_5DAY")
+        )  # 后5日上榜次数
 
         # 后10日数据
         average_increase_10day = safe_float(item.get("AVERAGE_INCREASE_10DAY"))  # 后10日平均涨幅
         rise_probability_10day = safe_float(item.get("RISE_PROBABILITY_10DAY"))  # 后10日上涨概率
-        total_buyer_saletimes_10day = safe_int(item.get("TOTAL_BUYER_SALESTIMES_10DAY"))  # 后10日上榜次数
+        total_buyer_saletimes_10day = safe_int(
+            item.get("TOTAL_BUYER_SALESTIMES_10DAY")
+        )  # 后10日上榜次数
 
         # 构建返回数据
         result = {

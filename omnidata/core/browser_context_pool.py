@@ -230,7 +230,9 @@ class BrowserContextPool:
                     if key in self._contexts and self._contexts[key] is metadata:
                         await self._close_context(metadata.context)
                         del self._contexts[key]
-                        logger.warning(f"Context removed due to failed verification: namespace={namespace}")
+                        logger.warning(
+                            f"Context removed due to failed verification: namespace={namespace}"
+                        )
 
         # === 阶段2：检查并淘汰（加锁，但只淘汰一次） ===
         if enable_lru:
@@ -260,7 +262,9 @@ class BrowserContextPool:
             return context
 
     @asynccontextmanager
-    async def new_page(self, namespace: str | None = None, anti_crawling_strategy: str | list="advanced") -> AsyncIterator[Page]:
+    async def new_page(
+        self, namespace: str | None = None, anti_crawling_strategy: str | list = "advanced"
+    ) -> AsyncIterator[Page]:
         """
         创建新 Page（自动关闭）
 
@@ -293,7 +297,6 @@ class BrowserContextPool:
             # 自动关闭 page，context 不关闭
             if not page.is_closed():
                 await page.close()
-
 
     async def save_context_state(self, context: BrowserContext, namespace: str) -> None:
         """
@@ -351,9 +354,8 @@ class BrowserContextPool:
 
     def get_stats(self) -> dict[str, Any]:
         """获取池统计信息"""
-        reuse_rate = (
-            self._stats["total_contexts_reused"]
-            / max(1, self._stats["total_contexts_created"] + self._stats["total_contexts_reused"])
+        reuse_rate = self._stats["total_contexts_reused"] / max(
+            1, self._stats["total_contexts_created"] + self._stats["total_contexts_reused"]
         )
 
         return {
@@ -407,7 +409,7 @@ class BrowserContextPool:
             "locale": "zh-CN",
             "timezone_id": "Asia/Shanghai",
             "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-            **kwargs
+            **kwargs,
         }
 
         # 从 Redis 加载 storage_state
@@ -446,8 +448,10 @@ class BrowserContextPool:
                     logger.debug(f"Empty storage state for namespace={namespace}")
                     return None
 
-                logger.debug(f"Storage state loaded: namespace={namespace}, "
-                           f"cookies={len(cookies)}, origins={len(origins)}")
+                logger.debug(
+                    f"Storage state loaded: namespace={namespace}, "
+                    f"cookies={len(cookies)}, origins={len(origins)}"
+                )
                 return state
 
             return None
@@ -488,7 +492,7 @@ class BrowserContextPool:
             # 策略2: 如果 context 中有现有 page，用轻量级 evaluate 检查（约 5-10x 更快）
             pages = context.pages
             if pages:
-                await pages[0].evaluate('() => true')
+                await pages[0].evaluate("() => true")
                 return True
 
             # 策略3: 无现有 page 时，创建临时 page 验证（较少见场景）
@@ -583,8 +587,6 @@ class BrowserContextPool:
                 metadata = self._contexts.pop(key)
                 await self._close_context(metadata.context)
                 logger.debug(f"Context cleaned up: namespace={metadata.namespace}")
-
-
 
 
 @lru_cache(maxsize=1)

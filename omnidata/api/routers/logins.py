@@ -179,6 +179,7 @@ async def clear_login_session(login_name: str):
             register = get_login_register()
             login = register.get_login_instance(login_name)
             from omnidata.core.base_qr_login import QRLoginState
+
             login.set_login_status(QRLoginState(status="not_logged_in", message="登录状态已清除"))
         except LoginNotFoundError:
             # 登录器不存在，忽略

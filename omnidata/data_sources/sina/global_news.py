@@ -33,7 +33,7 @@ class SinaFinanceNewsParams(BaseModel):
     tag_id: int = Field(
         default=0,
         description="标签ID，筛选新闻分类。0=全部, 1=宏观, 3=公司, 4=数据, "
-                    "5=市场, 6=观点, 7=央行, 8=其他, 10=A股, 102=国际",
+        "5=市场, 6=观点, 7=央行, 8=其他, 10=A股, 102=国际",
     )
 
 
@@ -99,15 +99,12 @@ class SinaFinanceNewsSpider(BaseWebSpider):
 
                 # 发送请求
                 response = await page.request.get(
-                    self.API_URL,
-                    params=request_params,
-                    timeout=30000
+                    self.API_URL, params=request_params, timeout=30000
                 )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本（JSONP格式）
@@ -116,17 +113,14 @@ class SinaFinanceNewsSpider(BaseWebSpider):
                 # 解析JSONP响应
                 json_data = self._parse_jsonp(response_text)
                 if json_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败"
-                    )
+                    return SpiderResult(success=False, message="解析响应数据失败")
 
                 # 检查返回状态
                 result_status = json_data.get("result", {}).get("status", {})
                 if result_status.get("code") != 0:
                     return SpiderResult(
                         success=False,
-                        message=f"获取数据失败：{result_status.get('msg', '未知错误')}"
+                        message=f"获取数据失败：{result_status.get('msg', '未知错误')}",
                     )
 
                 # 解析新闻列表
@@ -146,14 +140,11 @@ class SinaFinanceNewsSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻（标签：{tag_name}）"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻（标签：{tag_name}）",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
         """
@@ -167,7 +158,7 @@ class SinaFinanceNewsSpider(BaseWebSpider):
         """
         try:
             # 匹配 jQuery18305328649312153803_1769931049465({...}) 格式
-            match = re.search(r'jQuery\d+_\d+\(({.+})\)', response_text)
+            match = re.search(r"jQuery\d+_\d+\(({.+})\)", response_text)
             if match:
                 json_str = match.group(1)
                 return json.loads(json_str)

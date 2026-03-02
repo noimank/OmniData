@@ -20,12 +20,11 @@ class StockMarginTradingParams(BaseModel):
     stock_code: str = Field(..., description="股票代码，如 601138、000001")
     statistics: Literal["1d", "3d", "5d", "10d"] = Field(
         default="1d",
-        description="统计周期，可选值：1d(1日数据)、3d(3日合计)、5d(5日合计)、10d(10日合计)"
+        description="统计周期，可选值：1d(1日数据)、3d(3日合计)、5d(5日合计)、10d(10日合计)",
     )
     limit: int = Field(default=50, ge=1, le=500, description="获取最近多少个交易日的数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -79,12 +78,13 @@ class StockMarginTradingSpider(BaseWebSpider):
                 }
 
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本
@@ -93,15 +93,16 @@ class StockMarginTradingSpider(BaseWebSpider):
                 # 移除 JSONP 回调函数
                 # 响应格式可能是：datatable1238300({...});
                 import re
-                json_match = re.search(r'datatable\d+\((.*)\);?', response_text)
+
+                json_match = re.search(r"datatable\d+\((.*)\);?", response_text)
                 if json_match:
                     json_str = json_match.group(1)
                 elif response_text.startswith("datatable"):
                     # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find('(')
-                    end_idx = response_text.rfind(')')
+                    start_idx = response_text.find("(")
+                    end_idx = response_text.rfind(")")
                     if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1:end_idx]
+                        json_str = response_text[start_idx + 1 : end_idx]
                     else:
                         json_str = response_text
                 else:
@@ -109,21 +110,18 @@ class StockMarginTradingSpider(BaseWebSpider):
 
                 # 解析 JSON
                 import json
+
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:
-                    return SpiderResult(
-                        success=False,
-                        message=f"解析响应数据失败：{str(e)}"
-                    )
+                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                 # 检查返回状态
                 # API返回格式: {"version": "...", "result": {"data": [...]}}
                 result = data.get("result", {})
                 if not result or not result.get("data"):
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败或股票代码不存在：{params.stock_code}"
+                        success=False, message=f"获取数据失败或股票代码不存在：{params.stock_code}"
                     )
 
                 # 解析数据
@@ -134,7 +132,11 @@ class StockMarginTradingSpider(BaseWebSpider):
                 df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
 
                 # 获取股票名称
-                stock_name = result_data[0].get("股票名称", params.stock_code) if result_data else params.stock_code
+                stock_name = (
+                    result_data[0].get("股票名称", params.stock_code)
+                    if result_data
+                    else params.stock_code
+                )
 
                 # 构建统计周期显示名称
                 statistics_name = self._get_statistics_name(params.statistics)
@@ -144,27 +146,24 @@ class StockMarginTradingSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=df.to_markdown(),
-                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据"
+                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=df.to_string(),
-                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据"
+                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=df.to_dict(orient="records"),
-                    message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据"
+                    message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _get_statistics_name(self, statistics: str) -> str:
         """获取统计周期显示名称"""

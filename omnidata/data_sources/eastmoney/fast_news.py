@@ -27,8 +27,8 @@ class EastmoneyFastNewsParams(BaseModel):
     fast_column: str = Field(
         default="102",
         description="快讯栏目代码，多个用逗号分割，如 '102,110,111'。"
-                    "101=焦点, 102=全球财经, 103=上市公司, 110=必读, 111=港股, "
-                    "112=外汇, 113=期货, 114=期权, 115=债券, 116=基金, 117=数据",
+        "101=焦点, 102=全球财经, 103=上市公司, 110=必读, 111=港股, "
+        "112=外汇, 113=期货, 114=期权, 115=债券, 116=基金, 117=数据",
     )
 
 
@@ -82,8 +82,7 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本（JSONP格式）
@@ -92,16 +91,13 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
                 # 解析JSONP响应
                 json_data = self._parse_jsonp(response_text)
                 if json_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败"
-                    )
+                    return SpiderResult(success=False, message="解析响应数据失败")
 
                 # 检查返回状态
                 if json_data.get("code") != "1":
                     return SpiderResult(
                         success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}"
+                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
                     )
 
                 # 解析新闻列表
@@ -114,14 +110,11 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
         """
@@ -135,13 +128,15 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         """
         try:
             # 匹配 jQuery18305328649312153803_1769931049465({...}) 格式
-            match = re.search(r'jQuery\d+_\d+\(({.+})\)', response_text)
+            match = re.search(r"jQuery\d+_\d+\(({.+})\)", response_text)
             if match:
                 json_str = match.group(1)
                 import json
+
                 return json.loads(json_str)
             # 如果直接是JSON格式
             import json
+
             return json.loads(response_text)
         except Exception as e:
             return None

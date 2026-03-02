@@ -2,7 +2,6 @@
 测试浏览器上下文池模块
 """
 
-
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -182,7 +181,7 @@ class TestContextStatePersistence:
         """测试加载不存在的状态"""
         mock_redis.get = AsyncMock(return_value=None)
 
-        with patch("omnidata.core.browser_context_pool.get_redis", return_value= mock_redis):
+        with patch("omnidata.core.browser_context_pool.get_redis", return_value=mock_redis):
             # 不应该抛出异常
             context = await browser_pool.get_context(namespace="nonexistent")
             assert context is not None

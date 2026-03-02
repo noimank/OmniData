@@ -96,15 +96,12 @@ class WallstreetcnGlobalNewsSpider(BaseWebSpider):
 
                 # 发送请求
                 response = await page.request.get(
-                    self.API_URL,
-                    params=request_params,
-                    timeout=30000
+                    self.API_URL, params=request_params, timeout=30000
                 )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应JSON
@@ -114,7 +111,7 @@ class WallstreetcnGlobalNewsSpider(BaseWebSpider):
                 if json_data.get("code") != 20000:
                     return SpiderResult(
                         success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}"
+                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
                     )
 
                 # 解析新闻列表
@@ -128,7 +125,7 @@ class WallstreetcnGlobalNewsSpider(BaseWebSpider):
                             "total": 0,
                             "news_list": [],
                         },
-                        message="暂无新闻数据"
+                        message="暂无新闻数据",
                     )
 
                 parsed_news = [self._parse_news_item(item) for item in news_list]
@@ -141,14 +138,11 @@ class WallstreetcnGlobalNewsSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

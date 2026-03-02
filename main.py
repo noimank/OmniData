@@ -5,10 +5,12 @@ OmniData 主入口模块
     python main.py              # 启动 API 服务
     python main.py --list       # 列出所有爬虫
 """
+
 import argparse
 import asyncio
 import logging
 from dotenv import load_dotenv
+
 load_dotenv()
 # 配置日志
 logging.basicConfig(
@@ -23,7 +25,8 @@ logger = logging.getLogger(__name__)
 async def list_spiders():
     """列出所有爬虫"""
     from omnidata.core.spider_register import get_spider_register
-    register =  get_spider_register()
+
+    register = get_spider_register()
 
     spiders = register.list_spider_info()
 
@@ -45,6 +48,7 @@ async def run_spider(name: str, params: dict | str):
     """运行指定爬虫"""
     import json
     from omnidata.core.spider_register import get_spider_register
+
     register = get_spider_register()
 
     # 如果参数是 JSON 字符串，解析为字典
@@ -61,6 +65,7 @@ async def run_spider(name: str, params: dict | str):
 
     if result.success:
         import json
+
         print(f"Data: {json.dumps(result.data, ensure_ascii=False, indent=2)}")
     else:
         print(f"Error: {result.message}")
@@ -73,6 +78,7 @@ async def main_async(args):
     from omnidata.core.browser_context_pool import get_browser_context_pool
     from omnidata.core.spider_register import get_spider_register, close_spider_register
     from omnidata.utils.redis_client import init_redis
+
     # 初始化 Redis 客户端
     await init_redis()
 

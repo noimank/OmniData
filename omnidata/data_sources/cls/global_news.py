@@ -65,19 +65,20 @@ class CLSNewsSpider(BaseWebSpider):
                 await page.wait_for_load_state("domcontentloaded")
 
                 # 解析页面中的 JSON 数据
-                json_data = await page.evaluate("""() => {
+                json_data = await page.evaluate(
+                    """() => {
                     try {
                         return JSON.parse(document.body.innerText);
                     } catch (e) {
                         return { error: -1, msg: String(e) };
                     }
-                }""")
+                }"""
+                )
 
                 # 检查返回状态
                 if json_data.get("error") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('msg', '未知错误')}"
+                        success=False, message=f"获取数据失败：{json_data.get('msg', '未知错误')}"
                     )
 
                 # 解析新闻列表
@@ -107,14 +108,11 @@ class CLSNewsSpider(BaseWebSpider):
                         "total": len(news_data),
                         "news_list": news_data,
                     },
-                    message=f"成功获取 {len(news_data)} 条快讯新闻（筛选：{filter_type}）"
+                    message=f"成功获取 {len(news_data)} 条快讯新闻（筛选：{filter_type}）",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

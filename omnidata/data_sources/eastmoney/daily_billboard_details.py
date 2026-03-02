@@ -18,12 +18,15 @@ from omnidata.core import BaseWebSpider, SpiderResult
 class DailyBillboardDetailsParams(BaseModel):
     """龙虎榜详情参数模型"""
 
-    start_date: str = Field(default="", description="开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天")
-    end_date: str = Field(default="", description="结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天")
+    start_date: str = Field(
+        default="", description="开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天"
+    )
+    end_date: str = Field(
+        default="", description="结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天"
+    )
     limit: int = Field(default=100, ge=1, le=1000, description="获取数据条数，最多1000条")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -91,8 +94,7 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                     datetime.strptime(end_date, "%Y-%m-%d")
                 except ValueError:
                     return SpiderResult(
-                        success=False,
-                        message="日期格式错误，请使用 YYYY-MM-DD 格式，如 2026-01-14"
+                        success=False, message="日期格式错误，请使用 YYYY-MM-DD 格式，如 2026-01-14"
                     )
 
                 # 构建过滤条件
@@ -120,12 +122,13 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                     }
 
                     # 发送请求
-                    response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                    response = await page.request.get(
+                        self.API_URL, params=request_params, timeout=30000
+                    )
 
                     if response.status != 200:
                         return SpiderResult(
-                            success=False,
-                            message=f"请求失败，状态码：{response.status}"
+                            success=False, message=f"请求失败，状态码：{response.status}"
                         )
 
                     # 获取响应文本
@@ -133,14 +136,15 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
 
                     # 移除 JSONP 回调函数
                     import re
-                    json_match = re.search(r'jQuery\d+_\d+\((.*)\);?', response_text)
+
+                    json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
                     if json_match:
                         json_str = json_match.group(1)
                     elif response_text.startswith("jQuery"):
-                        start_idx = response_text.find('(')
-                        end_idx = response_text.rfind(')')
+                        start_idx = response_text.find("(")
+                        end_idx = response_text.rfind(")")
                         if start_idx != -1 and end_idx != -1:
-                            json_str = response_text[start_idx + 1:end_idx]
+                            json_str = response_text[start_idx + 1 : end_idx]
                         else:
                             json_str = response_text
                     else:
@@ -148,21 +152,18 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
 
                     # 解析 JSON
                     import json
+
                     try:
                         data = json.loads(json_str)
                     except json.JSONDecodeError as e:
-                        return SpiderResult(
-                            success=False,
-                            message=f"解析响应数据失败：{str(e)}"
-                        )
+                        return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                     # 检查返回状态
                     result = data.get("result", {})
                     if not result:
                         if page_number == 1:
                             return SpiderResult(
-                                success=False,
-                                message=f"获取数据失败，请检查日期范围是否正确"
+                                success=False, message=f"获取数据失败，请检查日期范围是否正确"
                             )
                         break
 
@@ -186,11 +187,11 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=[],
-                        message=f"指定日期范围 {start_date} 至 {end_date} 无龙虎榜数据"
+                        message=f"指定日期范围 {start_date} 至 {end_date} 无龙虎榜数据",
                     )
 
                 # 截取到指定数量
-                all_data = all_data[:params.limit]
+                all_data = all_data[: params.limit]
 
                 # 解析数据
                 result_data = self._parse_billboard_data(all_data)
@@ -214,7 +215,7 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_markdown(),
                         },
-                        message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
@@ -223,7 +224,7 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_string(),
                         },
-                        message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
 
                 # 默认返回 dict 格式
@@ -233,13 +234,10 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                         "stats": stats_info,
                         "records": df.to_dict(orient="records"),
                     },
-                    message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）"
+                    message=f"成功获取龙虎榜数据（共 {len(result_data)} 条，总计 {total} 条）",
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_billboard_data(self, data: list) -> list[dict]:
         """
@@ -296,7 +294,9 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
             return str(value)
 
         # 基础信息
-        trade_date_str = item.get("TRADE_DATE", "")[:10] if item.get("TRADE_DATE") else ""  # 上榜日期
+        trade_date_str = (
+            item.get("TRADE_DATE", "")[:10] if item.get("TRADE_DATE") else ""
+        )  # 上榜日期
         security_code = safe_str(item.get("SECURITY_CODE"))  # 股票代码
         secucode = safe_str(item.get("SECUCODE"))  # 证券代码
         security_name = safe_str(item.get("SECURITY_NAME_ABBR"))  # 股票名称

@@ -113,6 +113,7 @@ class LoginRegister:
                     # 并发刷新（但限制并发数）
                     # 使用现有配置中的 check_concurrency 作为并发限制
                     from omnidata.core.config import settings
+
                     concurrency = settings.login.check_concurrency
 
                     semaphore = asyncio.Semaphore(concurrency)
@@ -124,12 +125,15 @@ class LoginRegister:
                                 # 刷新成功后调用 is_login() 获取状态并缓存
                                 try:
                                     from omnidata.core.config import settings
+
                                     status_info = await asyncio.wait_for(
                                         instance.is_login(), timeout=settings.login.check_timeout
                                     )
                                     instance.set_login_status(status_info)
                                 except Exception as status_error:
-                                    logger.warning(f"Failed to get login status after refresh for {login_name}: {status_error}")
+                                    logger.warning(
+                                        f"Failed to get login status after refresh for {login_name}: {status_error}"
+                                    )
                                 await instance.close()
                                 # logger.debug(f"Refreshed {login_name} at second {current_second}")
                             except Exception as e:
@@ -181,8 +185,7 @@ class LoginRegister:
         # 并发销毁所有登录实例
         if self._instances:
             tasks = [
-                destroy_single(name, instance)
-                for name, instance in list(self._instances.items())
+                destroy_single(name, instance) for name, instance in list(self._instances.items())
             ]
             await asyncio.gather(*tasks)
 
@@ -317,7 +320,7 @@ class LoginRegister:
 
         # 获取登录状态
         try:
-            status_info =  login.get_login_status()
+            status_info = login.get_login_status()
             info["login_status"] = status_info.model_dump()
         except Exception as e:
             logger.warning(f"Failed to get login status for {login_name}: {e}")
@@ -332,8 +335,6 @@ class LoginRegister:
     @property
     def is_initialized(self) -> bool:
         return self._is_initialized
-
-
 
 
 @lru_cache(maxsize=1)

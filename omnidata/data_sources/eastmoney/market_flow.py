@@ -20,8 +20,7 @@ class MarketFlowParams(BaseModel):
 
     limit: int = Field(default=1, ge=0, le=120, description="获取最近多少个交易日的资金流数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -95,19 +94,13 @@ class MarketFlowSpider(BaseWebSpider):
 
                 # 检查是否成功获取数据
                 if "api_response" not in captured_data:
-                    return SpiderResult(
-                        success=False,
-                        message="获取数据失败：未拦截到 API 响应"
-                    )
+                    return SpiderResult(success=False, message="获取数据失败：未拦截到 API 响应")
 
                 data = captured_data["api_response"]
 
                 # 解析返回数据
                 if data.get("rc") != 0 or not data.get("data"):
-                    return SpiderResult(
-                        success=False,
-                        message="获取数据失败"
-                    )
+                    return SpiderResult(success=False, message="获取数据失败")
 
                 # 获取数据内容
                 klines = data["data"].get("klines", [])
@@ -146,23 +139,35 @@ class MarketFlowSpider(BaseWebSpider):
                         small_net_amount = self._safe_float(kline[2])  # 净额（元）
                         small_net_ratio = self._safe_float(kline[7])  # 净占比（百分比）
 
-                        data_list.append({
-                            "日期": date_str,
-                            "上证收盘价": sh_close,
-                            "上证涨跌幅(%)": sh_change,
-                            "深证收盘价": sz_close,
-                            "深证涨跌幅(%)": sz_change,
-                            "主力净流入净额(亿元)": round(main_net_amount / 100000000, 2),  # 转换为亿元
-                            "主力净流入净占比(%)": main_net_ratio,
-                            "超大单净流入净额(亿元)": round(super_large_net_amount / 100000000, 2),  # 转换为亿元
-                            "超大单净流入净占比(%)": super_large_net_ratio,
-                            "大单净流入净额(亿元)": round(large_net_amount / 100000000, 2),  # 转换为亿元
-                            "大单净流入净占比(%)": large_net_ratio,
-                            "中单净流入净额(亿元)": round(medium_net_amount / 100000000, 2),  # 转换为亿元
-                            "中单净流入净占比(%)": medium_net_ratio,
-                            "小单净流入净额(亿元)": round(small_net_amount / 100000000, 2),  # 转换为亿元
-                            "小单净流入净占比(%)": small_net_ratio,
-                        })
+                        data_list.append(
+                            {
+                                "日期": date_str,
+                                "上证收盘价": sh_close,
+                                "上证涨跌幅(%)": sh_change,
+                                "深证收盘价": sz_close,
+                                "深证涨跌幅(%)": sz_change,
+                                "主力净流入净额(亿元)": round(
+                                    main_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "主力净流入净占比(%)": main_net_ratio,
+                                "超大单净流入净额(亿元)": round(
+                                    super_large_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "超大单净流入净占比(%)": super_large_net_ratio,
+                                "大单净流入净额(亿元)": round(
+                                    large_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "大单净流入净占比(%)": large_net_ratio,
+                                "中单净流入净额(亿元)": round(
+                                    medium_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "中单净流入净占比(%)": medium_net_ratio,
+                                "小单净流入净额(亿元)": round(
+                                    small_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "小单净流入净占比(%)": small_net_ratio,
+                            }
+                        )
 
                 # 转换为 DataFrame
                 df = pd.DataFrame(data_list)
@@ -178,10 +183,7 @@ class MarketFlowSpider(BaseWebSpider):
                 if params.data_format == "string":
                     result_data = df.to_string()
 
-                return SpiderResult(
-                    success=True,
-                    data=result_data
-                )
+                return SpiderResult(success=True, data=result_data)
         except Exception as e:
             return SpiderResult(success=False, message=f"获取数据失败: {str(e)}")
 
@@ -203,7 +205,7 @@ class MarketFlowSpider(BaseWebSpider):
             start_idx = text.find("(")
             end_idx = text.rfind(")")
             if start_idx > 0 and end_idx > start_idx:
-                json_text = text[start_idx + 1:end_idx]
+                json_text = text[start_idx + 1 : end_idx]
                 return json.loads(json_text)
             return None
         except Exception:

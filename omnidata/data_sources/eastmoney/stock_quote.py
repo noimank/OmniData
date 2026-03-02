@@ -18,7 +18,8 @@ class StockQuoteParams(BaseModel):
 
     stock_code: str = Field(
         ...,
-        min_length=6, max_length=6,
+        min_length=6,
+        max_length=6,
         description="股票代码，6位数字，例如：000001(平安银行)、000002(万科A)、600000(浦发银行)",
     )
 
@@ -60,7 +61,7 @@ class StockQuoteSpider(BaseWebSpider):
                 # 根据股票代码自动判断市场ID
                 # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
                 stock_code = params.stock_code
-                if stock_code.startswith("6") or stock_code.startswith('5'):
+                if stock_code.startswith("6") or stock_code.startswith("5"):
                     market_id = "1"  # 上海
                 # elif stock_code.startswith("8") or stock_code.startswith("9"):
                 #     market_id = "2"  # 北交所
@@ -77,12 +78,13 @@ class StockQuoteSpider(BaseWebSpider):
                     "secid": secid,
                 }
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 解析响应
@@ -91,8 +93,7 @@ class StockQuoteSpider(BaseWebSpider):
                 # 检查返回状态
                 if data.get("rc") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('msg', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                     )
 
                 # 检查是否有数据 (新API直接返回data对象)
@@ -100,7 +101,7 @@ class StockQuoteSpider(BaseWebSpider):
                 if not quote_data or not isinstance(quote_data, dict):
                     return SpiderResult(
                         success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确"
+                        message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确",
                     )
 
                 # 解析数据
@@ -109,14 +110,11 @@ class StockQuoteSpider(BaseWebSpider):
                 return SpiderResult(
                     success=True,
                     data=result_data,
-                    message=f"成功获取 {params.stock_code} 的行情报价数据"
+                    message=f"成功获取 {params.stock_code} 的行情报价数据",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_quote(self, item: dict) -> dict:
         """
@@ -174,33 +172,33 @@ class StockQuoteSpider(BaseWebSpider):
         # 买卖五价
         # 卖五到卖一（价格从高到低）
         f31 = safe_float(item.get("f31"))  # 卖五价
-        f32 = safe_int(item.get("f32"))    # 卖五量
+        f32 = safe_int(item.get("f32"))  # 卖五量
         f33 = safe_float(item.get("f33"))  # 卖四价
-        f34 = safe_int(item.get("f34"))    # 卖四量
+        f34 = safe_int(item.get("f34"))  # 卖四量
         f35 = safe_float(item.get("f35"))  # 卖三价
-        f36 = safe_int(item.get("f36"))    # 卖三量
+        f36 = safe_int(item.get("f36"))  # 卖三量
         f37 = safe_float(item.get("f37"))  # 卖二价
-        f38 = safe_int(item.get("f38"))    # 卖二量
+        f38 = safe_int(item.get("f38"))  # 卖二量
         f39 = safe_float(item.get("f39"))  # 卖一价
-        f40 = safe_int(item.get("f40"))    # 卖一量
+        f40 = safe_int(item.get("f40"))  # 卖一量
 
         # 买一到买五（价格从高到低）
         f19 = safe_float(item.get("f19"))  # 买一价
-        f20 = safe_int(item.get("f20"))    # 买一量
+        f20 = safe_int(item.get("f20"))  # 买一量
         f17 = safe_float(item.get("f17"))  # 买二价
-        f18 = safe_int(item.get("f18"))    # 买二量
+        f18 = safe_int(item.get("f18"))  # 买二量
         f15 = safe_float(item.get("f15"))  # 买三价
-        f16 = safe_int(item.get("f16"))    # 买三量
+        f16 = safe_int(item.get("f16"))  # 买三量
         f13 = safe_float(item.get("f13"))  # 买四价
-        f14 = safe_int(item.get("f14"))    # 买四量
+        f14 = safe_int(item.get("f14"))  # 买四量
         f11 = safe_float(item.get("f11"))  # 买五价
-        f12 = safe_int(item.get("f12"))    # 买五量
+        f12 = safe_int(item.get("f12"))  # 买五量
 
         # 市值相关
         f116 = safe_float(item.get("f116"))  # 总市值(元)
         f117 = safe_float(item.get("f117"))  # 流通市值(元)
-        f84 = safe_float(item.get("f84"))    # 总股本(股)
-        f85 = safe_float(item.get("f85"))    # 流通股(股)
+        f84 = safe_float(item.get("f84"))  # 总股本(股)
+        f85 = safe_float(item.get("f85"))  # 流通股(股)
 
         # 市盈率/市净率
         f183 = safe_float(item.get("f183"))  # 总营收
@@ -225,7 +223,7 @@ class StockQuoteSpider(BaseWebSpider):
             "证券代码": f57,
             "证券名称": f58,
             "最新价": round(f43, 2),
-            "换手(%)": safe_float(item.get("f168")) ,
+            "换手(%)": safe_float(item.get("f168")),
             "涨跌额": round(f169, 2),
             "涨跌幅": round(f170, 2),
             "今开": round(f45, 2),
@@ -242,10 +240,10 @@ class StockQuoteSpider(BaseWebSpider):
             "市盈率(动态)": round(f184, 2),
             # "市盈率(静态)": round(f185, 2),
             "市净率": round(f186, 2),
-            "总营收(亿元)": round(f183  / 100000000, 2),
+            "总营收(亿元)": round(f183 / 100000000, 2),
             "涨停价": round(f51, 2),
             "跌停价": round(f52, 2),
-            "外盘(万元)": round(safe_float(item.get("f49")) / 10000, 2) ,
+            "外盘(万元)": round(safe_float(item.get("f49")) / 10000, 2),
             "内盘(万元)": round(safe_float(item.get("f161")) / 10000, 2),
             "所属行业": f127,
             "所属板块": f128,

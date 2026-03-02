@@ -41,7 +41,9 @@ async def get_audit_stats():
             today_result = await session.execute(
                 select(
                     func.count(SpiderAudit.id).label("total"),
-                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label("success_count"),
+                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
+                        "success_count"
+                    ),
                 ).where(SpiderAudit.started_at >= today)
             )
             today_row = today_result.one()
@@ -58,7 +60,9 @@ async def get_audit_stats():
                 select(
                     SpiderAudit.platform,
                     func.count(SpiderAudit.id).label("count"),
-                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label("success_count"),
+                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
+                        "success_count"
+                    ),
                 )
                 .where(SpiderAudit.started_at >= today)
                 .group_by(SpiderAudit.platform)
@@ -66,19 +70,23 @@ async def get_audit_stats():
             )
             platform_stats = []
             for row in platform_result:
-                platform_stats.append({
-                    "platform": row.platform,
-                    "count": row.count,
-                    "success_count": row.success_count or 0,
-                    "failure_count": row.count - (row.success_count or 0),
-                })
+                platform_stats.append(
+                    {
+                        "platform": row.platform,
+                        "count": row.count,
+                        "success_count": row.success_count or 0,
+                        "failure_count": row.count - (row.success_count or 0),
+                    }
+                )
 
             # 最近7天成功率
             week_ago = now - timedelta(days=7)
             week_result = await session.execute(
                 select(
                     func.count(SpiderAudit.id).label("total"),
-                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label("success_count"),
+                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
+                        "success_count"
+                    ),
                 ).where(SpiderAudit.started_at >= week_ago)
             )
             week_row = week_result.one()
@@ -96,7 +104,9 @@ async def get_audit_stats():
                 hour_result = await session.execute(
                     select(
                         func.count(SpiderAudit.id).label("count"),
-                        func.sum(case((SpiderAudit.success == True, 1), else_=0)).label("success_count"),
+                        func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
+                            "success_count"
+                        ),
                     ).where(
                         and_(
                             SpiderAudit.started_at >= hour_start,
@@ -107,12 +117,14 @@ async def get_audit_stats():
                 hour_row = hour_result.one()
                 hour_count = hour_row.count or 0
                 hour_success = hour_row.success_count or 0
-                hourly_stats.append({
-                    "hour": hour_start.strftime("%H:00"),
-                    "count": hour_count,
-                    "success_count": hour_success,
-                    "failure_count": hour_count - hour_success,
-                })
+                hourly_stats.append(
+                    {
+                        "hour": hour_start.strftime("%H:00"),
+                        "count": hour_count,
+                        "success_count": hour_success,
+                        "failure_count": hour_count - hour_success,
+                    }
+                )
             # 反转列表，从最远的时间到最近
             hourly_stats.reverse()
 
@@ -121,7 +133,9 @@ async def get_audit_stats():
                 select(
                     SpiderAudit.spider_name,
                     func.count(SpiderAudit.id).label("count"),
-                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label("success_count"),
+                    func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
+                        "success_count"
+                    ),
                 )
                 .where(SpiderAudit.started_at >= today)
                 .group_by(SpiderAudit.spider_name)
@@ -130,12 +144,14 @@ async def get_audit_stats():
             )
             spider_ranking = []
             for row in spider_result:
-                spider_ranking.append({
-                    "spider_name": row.spider_name,
-                    "count": row.count,
-                    "success_count": row.success_count or 0,
-                    "failure_count": row.count - (row.success_count or 0),
-                })
+                spider_ranking.append(
+                    {
+                        "spider_name": row.spider_name,
+                        "count": row.count,
+                        "success_count": row.success_count or 0,
+                        "failure_count": row.count - (row.success_count or 0),
+                    }
+                )
 
             # 最近失败记录（最近10条）
             recent_failures_result = await session.execute(
@@ -146,26 +162,31 @@ async def get_audit_stats():
             )
             recent_failures = []
             for record in recent_failures_result.scalars().all():
-                recent_failures.append({
-                    "id": record.id,
-                    "spider_name": record.spider_name,
-                    "platform": record.platform,
-                    "error_message": record.error_message,
-                    "started_at": record.started_at.isoformat(),
-                    "duration_seconds": record.duration_seconds,
-                })
+                recent_failures.append(
+                    {
+                        "id": record.id,
+                        "spider_name": record.spider_name,
+                        "platform": record.platform,
+                        "error_message": record.error_message,
+                        "started_at": record.started_at.isoformat(),
+                        "duration_seconds": record.duration_seconds,
+                    }
+                )
 
-            return success_response({
-                "today_count": today_count,
-                "today_success_count": today_success_count,
-                "today_failure_count": today_failure_count,
-                "total_count": total_count,
-                "platform_stats": platform_stats,
-                "recent_success_rate": round(recent_success_rate, 2),
-                "hourly_stats": hourly_stats,
-                "spider_ranking": spider_ranking,
-                "recent_failures": recent_failures,
-            }, "获取审计统计成功")
+            return success_response(
+                {
+                    "today_count": today_count,
+                    "today_success_count": today_success_count,
+                    "today_failure_count": today_failure_count,
+                    "total_count": total_count,
+                    "platform_stats": platform_stats,
+                    "recent_success_rate": round(recent_success_rate, 2),
+                    "hourly_stats": hourly_stats,
+                    "spider_ranking": spider_ranking,
+                    "recent_failures": recent_failures,
+                },
+                "获取审计统计成功",
+            )
 
     except Exception as e:
         logger.error(f"Error getting audit stats: {e}")
@@ -237,20 +258,24 @@ async def get_audit_records(
             # 转换为响应格式
             items = []
             for record in records:
-                items.append({
-                    "id": record.id,
-                    "spider_name": record.spider_name,
-                    "platform": record.platform,
-                    "spider_version": record.spider_version,
-                    "success": record.success,
-                    "error_message": record.error_message,
-                    "started_at": record.started_at.isoformat(),
-                    "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-                    "duration_seconds": record.duration_seconds,
-                    "params": record.params,
-                    "metadata": record.result_metadata,
-                    "created_at": record.created_at.isoformat(),
-                })
+                items.append(
+                    {
+                        "id": record.id,
+                        "spider_name": record.spider_name,
+                        "platform": record.platform,
+                        "spider_version": record.spider_version,
+                        "success": record.success,
+                        "error_message": record.error_message,
+                        "started_at": record.started_at.isoformat(),
+                        "completed_at": (
+                            record.completed_at.isoformat() if record.completed_at else None
+                        ),
+                        "duration_seconds": record.duration_seconds,
+                        "params": record.params,
+                        "metadata": record.result_metadata,
+                        "created_at": record.created_at.isoformat(),
+                    }
+                )
 
             return paginated_success_response(items, total_count, "获取审计记录成功")
 
@@ -282,9 +307,7 @@ async def get_audit_platforms():
 
 
 @router.get("/spiders")
-async def get_audit_spiders(
-    platform: str | None = Query(None, description="平台名称")
-):
+async def get_audit_spiders(platform: str | None = Query(None, description="平台名称")):
     """
     获取所有有审计记录的爬虫列表
 
@@ -314,7 +337,9 @@ async def get_audit_spiders(
 
 
 @router.delete("/cleanup")
-async def cleanup_audit_records(days: int = Query(30, ge=1, le=365, description="保留最近多少天的记录")):
+async def cleanup_audit_records(
+    days: int = Query(30, ge=1, le=365, description="保留最近多少天的记录")
+):
     """
     清理指定天数之前的审计记录
 
@@ -339,11 +364,10 @@ async def cleanup_audit_records(days: int = Query(30, ge=1, le=365, description=
                 return success_response({"count": 0}, "没有需要清理的记录")
 
             # 执行删除
-            await session.execute(
-                select(SpiderAudit).where(SpiderAudit.created_at < cutoff_time)
-            )
+            await session.execute(select(SpiderAudit).where(SpiderAudit.created_at < cutoff_time))
             # 使用 delete 语句
             from sqlalchemy import delete as sql_delete
+
             await session.execute(
                 sql_delete(SpiderAudit).where(SpiderAudit.created_at < cutoff_time)
             )
@@ -369,9 +393,7 @@ async def delete_audit_record(record_id: int):
     try:
         async with get_db_session() as session:
             # 查询记录
-            record = await session.execute(
-                select(SpiderAudit).where(SpiderAudit.id == record_id)
-            )
+            record = await session.execute(select(SpiderAudit).where(SpiderAudit.id == record_id))
             record_obj = record.scalar_one_or_none()
 
             if not record_obj:

@@ -23,26 +23,26 @@ class StockDailyKlineParams(BaseModel):
 
     stock_code: str = Field(
         ...,
-        min_length=6, max_length=6,
-        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)、516920（芯片ETF）"
+        min_length=6,
+        max_length=6,
+        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)、516920（芯片ETF）",
     )
     start_date: str = Field(
         default="19900101",
         pattern=r"^\d{8}$",
-        description="开始日期，格式：yyyyMMdd，例如：20200101，默认19900101"
+        description="开始日期，格式：yyyyMMdd，例如：20200101，默认19900101",
     )
     end_date: str = Field(
         default="20500101",
         pattern=r"^\d{8}$",
-        description="结束日期，格式：yyyyMMdd，例如：20251231，默认20500101"
+        description="结束日期，格式：yyyyMMdd，例如：20251231，默认20500101",
     )
     adjust_type: Literal["qfq", "hfq", "none"] = Field(
         default="qfq",
-        description="复权类型，可选值：qfq(前复权)、hfq(后复权)、none(不复权)，默认前复权"
+        description="复权类型，可选值：qfq(前复权)、hfq(后复权)、none(不复权)，默认前复权",
     )
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -82,7 +82,7 @@ class StockDailyKlineSpider(BaseWebSpider):
         Returns:
             随机回调函数名，例如：jQuery112304786753408034462_1768642295465
         """
-        random_part = ''.join([str(random.randint(0, 9)) for _ in range(18)])
+        random_part = "".join([str(random.randint(0, 9)) for _ in range(18)])
         timestamp = str(int(time.time() * 1000))
         return f"jQuery{random_part}_{timestamp}"
 
@@ -125,14 +125,14 @@ class StockDailyKlineSpider(BaseWebSpider):
                     "_": str(int(time.time() * 1000)),  # 添加时间戳参数
                 }
 
-
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本
@@ -141,15 +141,15 @@ class StockDailyKlineSpider(BaseWebSpider):
                 # 移除 JSONP 回调函数
                 # 响应格式：jQuery{random}_{timestamp}({...});
                 # 例如：jQuery112304786753408034462_1768642295465({...});
-                json_match = re.search(r'jQuery[\d_]+\((.*)\);?', response_text)
+                json_match = re.search(r"jQuery[\d_]+\((.*)\);?", response_text)
                 if json_match:
                     json_str = json_match.group(1)
                 elif response_text.startswith("jQuery"):
                     # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find('(')
-                    end_idx = response_text.rfind(')')
+                    start_idx = response_text.find("(")
+                    end_idx = response_text.rfind(")")
                     if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1:end_idx]
+                        json_str = response_text[start_idx + 1 : end_idx]
                     else:
                         json_str = response_text
                 else:
@@ -157,19 +157,16 @@ class StockDailyKlineSpider(BaseWebSpider):
 
                 # 解析 JSON
                 import json
+
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:
-                    return SpiderResult(
-                        success=False,
-                        message=f"解析响应数据失败：{str(e)}"
-                    )
+                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                 # 检查返回状态
                 if data.get("rc") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('rt', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('rt', '未知错误')}"
                     )
 
                 # 检查是否有数据
@@ -177,7 +174,7 @@ class StockDailyKlineSpider(BaseWebSpider):
                 if not kline_data or not kline_data.get("klines"):
                     return SpiderResult(
                         success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确"
+                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确",
                     )
 
                 # 解析数据
@@ -198,27 +195,24 @@ class StockDailyKlineSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=df.to_markdown(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=df.to_string(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=df.to_dict(orient="records"),
-                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条"
+                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _get_adjust_name(self, adjust_type: str) -> str:
         """获取复权类型显示名称"""

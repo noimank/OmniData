@@ -1,6 +1,7 @@
 """
 Bilibili 二维码登录模块
 """
+
 import logging
 
 from omnidata.core import BaseQRLogin, QRLoginState, QRCode
@@ -54,20 +55,35 @@ class EastmoneyQRLogin(BaseQRLogin):
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
             # 点击同意
-            await self._qr_page.locator("#frame_login").content_frame.locator("#mobile_login_content img").first.click()
+            await self._qr_page.locator("#frame_login").content_frame.locator(
+                "#mobile_login_content img"
+            ).first.click()
 
             #  获取二维码图片URL
-            qr_code_src = await self._qr_page.locator("#frame_login").content_frame.locator("#qrcode").get_attribute(
-                "src")
+            qr_code_src = (
+                await self._qr_page.locator("#frame_login")
+                .content_frame.locator("#qrcode")
+                .get_attribute("src")
+            )
             if qr_code_src.startswith("//"):
                 qr_code_src = "https:" + qr_code_src
 
-            return QRCode(url=qr_code_src, qr_type="东方财富官方", success=True, message="东方财富官方二维码成功")
+            return QRCode(
+                url=qr_code_src,
+                qr_type="东方财富官方",
+                success=True,
+                message="东方财富官方二维码成功",
+            )
         except Exception as e:
             logger.error(f"Failed to get Bilibili qrcode: {e}")
             # 出错就关闭，防止资源泄露
             await self.close()
-            return QRCode(url="", qr_type="东方财富官方", success=False, message=f"东方财富官方二维码失败: {e}")
+            return QRCode(
+                url="",
+                qr_type="东方财富官方",
+                success=False,
+                message=f"东方财富官方二维码失败: {e}",
+            )
 
     async def get_weixin_qr_code(self) -> QRCode:
         self._qr_context = await self.browser_context_pool.get_context("eastmoney")
@@ -79,21 +95,27 @@ class EastmoneyQRLogin(BaseQRLogin):
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=2000)
             # 点击同意
-            await self._qr_page.locator("#frame_login").content_frame.locator("#mobile_login_content img").first.click()
+            await self._qr_page.locator("#frame_login").content_frame.locator(
+                "#mobile_login_content img"
+            ).first.click()
             # 点击微信登录按钮
             weixin_btn = self._qr_page.locator("#frame_login").content_frame.locator("#btn_wx")
             # 等待出现微信登录按钮
             await weixin_btn.wait_for(timeout=2000)
             await weixin_btn.click()
             # 等待页面加载完成
-            weixin_qr_img = self._qr_page.locator(".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp")
+            weixin_qr_img = self._qr_page.locator(
+                ".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp"
+            )
             # 等待出现二维码
             await weixin_qr_img.wait_for(timeout=2000)
-            qr_code_src = await weixin_qr_img.get_by_role('img').first.get_attribute('src')
+            qr_code_src = await weixin_qr_img.get_by_role("img").first.get_attribute("src")
             # 补齐完整的url
             if qr_code_src.startswith("/"):
                 qr_code_src = "https://open.weixin.qq.com" + qr_code_src
-            return QRCode(url=qr_code_src, qr_type="微信", success=True, message="获取微信二维码成功")
+            return QRCode(
+                url=qr_code_src, qr_type="微信", success=True, message="获取微信二维码成功"
+            )
 
         except Exception as e:
             logger.error(f"Failed to get Weixin qrcode: {e}")
@@ -124,7 +146,10 @@ class EastmoneyQRLogin(BaseQRLogin):
                 return qr_code
 
             else:
-                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}")
+                return QRCode(
+                    success=False,
+                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                )
 
         except Exception as e:
             logger.error(f"Failed to get eastmoney qrcode: {e}")
@@ -141,11 +166,14 @@ class EastmoneyQRLogin(BaseQRLogin):
 
         """
         if not self._qr_page:
-            return QRLoginState(status="failed", message="QR code page not initialized, please call get_qrcode first")
+            return QRLoginState(
+                status="failed",
+                message="QR code page not initialized, please call get_qrcode first",
+            )
 
         try:
             current_url = self._qr_page.url
-            #登录完成后会跳转到：https://passport2.eastmoney.com/pub/BasicInfo
+            # 登录完成后会跳转到：https://passport2.eastmoney.com/pub/BasicInfo
             if "BasicInfo" not in current_url:
                 return QRLoginState(status="waiting", message="正在登录中..........")
             # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
@@ -188,5 +216,4 @@ class EastmoneyQRLogin(BaseQRLogin):
 
                 return QRLoginState(status="not_logged_in", message="未登录东方财富")
         except Exception as e:
-                return QRLoginState(status="not_logged_in", message="未登录东方财富")
-
+            return QRLoginState(status="not_logged_in", message="未登录东方财富")

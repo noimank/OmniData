@@ -14,19 +14,19 @@ from omnidata.core import BaseWebSpider, SpiderResult
 
 class ConceptSectorFlowParams(BaseModel):
     """概念板块资金流参数模型"""
+
     limit: int = Field(default=100, ge=1, le=500, description="获取数据条数，最多500条")
     rank_type: Literal["今日", "5日", "10日"] = Field(
-        default="今日",
-        description="排行类型：今日、5日、10日"
+        default="今日", description="排行类型：今日、5日、10日"
     )
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回格式：json, dict, markdown, string"
+        default="json", description="返回格式：json, dict, markdown, string"
     )
 
 
 class ConceptSectorFlowSpider(BaseWebSpider):
     """概念板块资金流 Spider"""
+
     name = "eastmoney_concept_sector_flow"
     description = "获取概念板块资金流向排行数据，支持今日、5日、10日排行查询"
     version = "1.0.0"
@@ -70,18 +70,22 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                 current_num = 0
 
                 while True:
-                    response = await page.request.get(self.API_URL, params={
-                        "fid": config["fid"],
-                        "po": "1",  # 1=降序，-1=升序
-                        "pz": str(page_size),
-                        "pn": str(page_num),
-                        "np": "1",
-                        "fltt": "2",
-                        "invt": "2",
-                        "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                        "fs": "m:90+t:3",  # t:3 表示概念板块（行业板块是 t:2）
-                        "fields": config["fields"],
-                    }, timeout=30000)
+                    response = await page.request.get(
+                        self.API_URL,
+                        params={
+                            "fid": config["fid"],
+                            "po": "1",  # 1=降序，-1=升序
+                            "pz": str(page_size),
+                            "pn": str(page_num),
+                            "np": "1",
+                            "fltt": "2",
+                            "invt": "2",
+                            "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
+                            "fs": "m:90+t:3",  # t:3 表示概念板块（行业板块是 t:2）
+                            "fields": config["fields"],
+                        },
+                        timeout=30000,
+                    )
                     current_num += page_size
 
                     if response.status == 200:
@@ -101,9 +105,10 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                     if current_num >= params.limit:
                         break
 
-
                 # 解析数据 - 根据 rank_type 动态生成字段
-                data_list = [self._parse_item(item, params.rank_type) for item in all_items[:params.limit]]
+                data_list = [
+                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
+                ]
                 df = pd.DataFrame(data_list)
 
                 result_data = df.to_dict(orient="records")
@@ -115,14 +120,15 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                 return SpiderResult(
                     success=True,
                     data=result_data,
-                    message=f"成功获取 {params.rank_type} 排行 {len(data_list)} 条数据"
+                    message=f"成功获取 {params.rank_type} 排行 {len(data_list)} 条数据",
                 )
 
         except Exception as e:
             return SpiderResult(success=False, message=str(e))
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
-        def safe_float(v): return float(v) if v not in (None, "") else 0.0
+        def safe_float(v):
+            return float(v) if v not in (None, "") else 0.0
 
         # 基础字段
         result = {
@@ -181,6 +187,10 @@ class ConceptSectorFlowSpider(BaseWebSpider):
             result["10日领涨股票"] = item.get("f260", "")
             result["10日领涨股票代码"] = item.get("f261", "")
 
-        result["更新时间"] = datetime.fromtimestamp(item.get("f124", 0)).strftime("%Y-%m-%d %H:%M:%S") if item.get("f124") else ""
+        result["更新时间"] = (
+            datetime.fromtimestamp(item.get("f124", 0)).strftime("%Y-%m-%d %H:%M:%S")
+            if item.get("f124")
+            else ""
+        )
 
         return result

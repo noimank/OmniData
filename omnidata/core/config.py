@@ -93,8 +93,6 @@ class LoginConfig:
     check_timeout: int = 30  # 单次检查的超时时间（秒）
 
 
-
-
 class Settings(BaseSettings):
     """应用配置"""
 

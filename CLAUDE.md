@@ -35,10 +35,9 @@ uv run uvicorn omnidata.api.main:app --reload
 uv run python main.py --list             # 列出所有爬虫
 uv run python main.py --run <name>       # 运行指定爬虫
 
-# 代码质量
-uv run mypy .                            # 类型检查
+# 代码质量（只进行格式化，不进行lint和类型检查）
 uv run black .                           # 格式化
-uv run ruff check .                      # lint
+
 
 # 测试
 uv run pytest tests/ -v --cov=omnidata

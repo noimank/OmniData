@@ -49,7 +49,7 @@ class SpiderRegister:
             return
 
         if self._browser_context_pool is None:
-            self._browser_context_pool =  get_browser_context_pool()
+            self._browser_context_pool = get_browser_context_pool()
 
         await self._discover_spiders()
         self._is_initialized = True
@@ -129,7 +129,6 @@ class SpiderRegister:
         if spider_name in self._spiders:
             logger.warning(f"Spider {spider_name} already registered, skipping")
             return
-
 
         self._spiders[spider_name] = spider_class
         logger.info(f"Registered spider: {spider_name}")
@@ -302,8 +301,6 @@ class SpiderRegister:
     def is_initialized(self) -> bool:
         """是否已初始化"""
         return self._is_initialized
-
-
 
 
 @lru_cache(maxsize=1)

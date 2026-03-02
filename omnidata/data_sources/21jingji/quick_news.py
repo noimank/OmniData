@@ -63,15 +63,12 @@ class JingjiQuickNewsSpider(BaseWebSpider):
 
                 # 发送请求
                 response = await page.request.get(
-                    self.API_URL,
-                    params=request_params,
-                    timeout=30000
+                    self.API_URL, params=request_params, timeout=30000
                 )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本（JSONP格式）
@@ -80,10 +77,7 @@ class JingjiQuickNewsSpider(BaseWebSpider):
                 # 解析 JSONP 格式：提取 callback({...}) 中的 JSON
                 json_data = self._parse_jsonp(text_data)
                 if json_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message=f"响应数据格式异常，无法解析 JSONP"
-                    )
+                    return SpiderResult(success=False, message=f"响应数据格式异常，无法解析 JSONP")
 
                 # 解析新闻列表
                 news_list = json_data.get("list", [])
@@ -96,14 +90,11 @@ class JingjiQuickNewsSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_jsonp(self, text: str) -> dict | None:
         """
@@ -120,6 +111,7 @@ class JingjiQuickNewsSpider(BaseWebSpider):
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 import json
+
                 return json.loads(match.group())
             return None
         except Exception:

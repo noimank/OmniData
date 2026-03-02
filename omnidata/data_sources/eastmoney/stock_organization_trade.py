@@ -20,8 +20,7 @@ class StockOrganizationTradeParams(BaseModel):
     stock_code: str = Field(..., description="股票代码，如 601138、000001")
     limit: int = Field(default=20, ge=1, le=500, description="获取最近多少条数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -74,12 +73,13 @@ class StockOrganizationTradeSpider(BaseWebSpider):
                 }
 
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本
@@ -88,15 +88,16 @@ class StockOrganizationTradeSpider(BaseWebSpider):
                 # 移除 JSONP 回调函数
                 # 响应格式可能是：jQuery112302969637654098247_1768630245694({...});
                 import re
-                json_match = re.search(r'jQuery\d+_\d+\((.*)\);?', response_text)
+
+                json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
                 if json_match:
                     json_str = json_match.group(1)
                 elif response_text.startswith("jQuery"):
                     # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find('(')
-                    end_idx = response_text.rfind(')')
+                    start_idx = response_text.find("(")
+                    end_idx = response_text.rfind(")")
                     if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1:end_idx]
+                        json_str = response_text[start_idx + 1 : end_idx]
                     else:
                         json_str = response_text
                 else:
@@ -104,21 +105,18 @@ class StockOrganizationTradeSpider(BaseWebSpider):
 
                 # 解析 JSON
                 import json
+
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:
-                    return SpiderResult(
-                        success=False,
-                        message=f"解析响应数据失败：{str(e)}"
-                    )
+                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                 # 检查返回状态
                 # API返回格式: {"version": "...", "result": {"data": [...]}}
                 result = data.get("result", {})
                 if not result or not result.get("data"):
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败或股票代码不存在：{params.stock_code}"
+                        success=False, message=f"获取数据失败或股票代码不存在：{params.stock_code}"
                     )
 
                 # 解析数据
@@ -129,34 +127,35 @@ class StockOrganizationTradeSpider(BaseWebSpider):
                 df = df.sort_values("上榜日期", ascending=False).reset_index(drop=True)
 
                 # 获取股票名称
-                stock_name = result_data[0].get("股票名称", params.stock_code) if result_data else params.stock_code
+                stock_name = (
+                    result_data[0].get("股票名称", params.stock_code)
+                    if result_data
+                    else params.stock_code
+                )
 
                 # 格式化输出
                 if params.data_format == "markdown":
                     return SpiderResult(
                         success=True,
                         data=df.to_markdown(),
-                        message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据"
+                        message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=df.to_string(),
-                        message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据"
+                        message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=df.to_dict(orient="records"),
-                    message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据"
+                    message=f"成功获取{stock_name}({params.stock_code})机构买卖统计数据",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_organization_trade_data(self, data: list) -> list[dict]:
         """
@@ -213,7 +212,9 @@ class StockOrganizationTradeSpider(BaseWebSpider):
             return str(value)
 
         # 基础信息
-        trade_date_str = item.get("TRADE_DATE", "")[:10] if item.get("TRADE_DATE") else ""  # 上榜日期
+        trade_date_str = (
+            item.get("TRADE_DATE", "")[:10] if item.get("TRADE_DATE") else ""
+        )  # 上榜日期
         security_code = safe_str(item.get("SECURITY_CODE"))  # 股票代码
         security_name = safe_str(item.get("SECURITY_NAME_ABBR"))  # 股票名称
         market = safe_str(item.get("MARKET"))  # 市场

@@ -30,7 +30,7 @@ from omnidata.core import (
     close_login_register,
     close_spider_register,
 )
-from omnidata.core.mcp_manager import  get_mcp_manager, create_mcp_manager, close_mcp_manager
+from omnidata.core.mcp_manager import get_mcp_manager, create_mcp_manager, close_mcp_manager
 from omnidata.database import init_db
 from omnidata.utils import close_redis
 
@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
 
         # 初始化 Redis 连接池
         from omnidata.utils.redis_client import init_redis
+
         await init_redis()
 
         # 阶段 2: 初始化浏览器上下文池（LRU 单例模式）
@@ -109,7 +110,7 @@ async def lifespan(app: FastAPI):
                                 prompt_result = await session.execute(
                                     select(SpiderPrompt).where(
                                         SpiderPrompt.spider_name == t.spider_name,
-                                        SpiderPrompt.version_name == t.selected_prompt_version
+                                        SpiderPrompt.version_name == t.selected_prompt_version,
                                     )
                                 )
                             else:
@@ -117,7 +118,7 @@ async def lifespan(app: FastAPI):
                                 prompt_result = await session.execute(
                                     select(SpiderPrompt).where(
                                         SpiderPrompt.spider_name == t.spider_name,
-                                        SpiderPrompt.is_default == True
+                                        SpiderPrompt.is_default == True,
                                     )
                                 )
 
@@ -126,7 +127,7 @@ async def lifespan(app: FastAPI):
 
                             tool_configs[t.spider_name] = {
                                 "tool_name": t.tool_name,
-                                "description": description
+                                "description": description,
                             }
 
                         # 重新挂载服务
@@ -140,7 +141,9 @@ async def lifespan(app: FastAPI):
                         )
                         logger.info(f"Restored MCP service: {service.name}")
                     except Exception as e:
-                        logger.error(f"Failed to restore MCP service {service.name}: {e}, deactivating...")
+                        logger.error(
+                            f"Failed to restore MCP service {service.name}: {e}, deactivating..."
+                        )
                         # 自动停用服务以避免数据库与内存状态不一致
                         await session.execute(
                             update(MCPService)
@@ -179,6 +182,7 @@ async def lifespan(app: FastAPI):
 
         # 阶段 2: 关闭数据库（在其他组件清理前关闭，避免连接泄漏）
         from omnidata.database import close_db
+
         try:
             await close_db()
         except Exception as e:

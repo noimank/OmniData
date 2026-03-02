@@ -44,7 +44,7 @@ class SpiderResult:
             "started_at": self.started_at.isoformat(),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "duration_seconds": self.duration_seconds,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -104,7 +104,7 @@ class BaseWebSpider(BaseHelper):
     description: str = ""
     version: str = "1.0.0"
     author: str = ""
-    #平台名称，就统一设置为对应数据源的中文名称
+    # 平台名称，就统一设置为对应数据源的中文名称
     platform: str = "未归类爬虫"
 
     # 参数模型类（子类可以定义）
@@ -192,7 +192,9 @@ class BaseWebSpider(BaseHelper):
             final_result.completed_at = completed_at
             final_result.duration_seconds = (completed_at - started_at).total_seconds()
 
-            logger.info(f"Spider {spider_name} completed successfully in {final_result.duration_seconds:.2f}s")
+            logger.info(
+                f"Spider {spider_name} completed successfully in {final_result.duration_seconds:.2f}s"
+            )
 
             # 5. 记录审计日志
             await self._audit_spider_run(final_result, validated_params)
@@ -252,15 +254,13 @@ class BaseWebSpider(BaseHelper):
             elif isinstance(params, dict):
                 params_json = json.dumps(params, ensure_ascii=False)
             elif hasattr(params, "model_dump"):  # Pydantic 模型
-                params_json = json.dumps(params.model_dump(mode='json'), ensure_ascii=False)
+                params_json = json.dumps(params.model_dump(mode="json"), ensure_ascii=False)
             else:
                 params_json = json.dumps(str(params), ensure_ascii=False)
 
             # 将 metadata 转换为 JSON
             metadata_json = (
-                json.dumps(result.metadata, ensure_ascii=False)
-                if result.metadata
-                else None
+                json.dumps(result.metadata, ensure_ascii=False) if result.metadata else None
             )
 
             async with get_db_session() as session:
@@ -314,12 +314,10 @@ class BaseWebSpider(BaseHelper):
             爬虫元数据字典
         """
 
-
         return {
             "name": cls.name or cls.__name__,
             "description": cls.description,
             "version": cls.version,
             "author": cls.author,
-            "platform": cls.platform
+            "platform": cls.platform,
         }
-

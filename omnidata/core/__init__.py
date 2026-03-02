@@ -35,6 +35,5 @@ __all__ = [
     "login_register",
     "close_login_register",
     "QRLoginState",
-    "QRCode"
-
+    "QRCode",
 ]

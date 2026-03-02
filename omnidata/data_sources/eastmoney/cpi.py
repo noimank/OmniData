@@ -32,7 +32,9 @@ class CPISpider(BaseWebSpider):
     """
 
     name = "eastmoney_china_cpi"
-    description = "获取中国CPI居民消费价格指数月度数据，包括全国、城市、农村的当月同比、环比增长及累计数据"
+    description = (
+        "获取中国CPI居民消费价格指数月度数据，包括全国、城市、农村的当月同比、环比增长及累计数据"
+    )
     version = "1.0.0"
     author = "noimank"
     platform = "东方财富"
@@ -68,12 +70,13 @@ class CPISpider(BaseWebSpider):
                 }
 
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本
@@ -82,10 +85,7 @@ class CPISpider(BaseWebSpider):
                 # 处理JSONP响应
                 # 响应格式：datatable5402973({...});
                 if not text.startswith("datatable5402973("):
-                    return SpiderResult(
-                        success=False,
-                        message=f"响应格式错误：{text[:100]}"
-                    )
+                    return SpiderResult(success=False, message=f"响应格式错误：{text[:100]}")
 
                 import json
 
@@ -100,8 +100,7 @@ class CPISpider(BaseWebSpider):
                 # 检查返回状态
                 if data.get("code") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('message', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('message', '未知错误')}"
                     )
 
                 # 检查是否有数据
@@ -109,24 +108,16 @@ class CPISpider(BaseWebSpider):
                 items = result_data.get("data", [])
 
                 if not items:
-                    return SpiderResult(
-                        success=False,
-                        message="未找到CPI数据"
-                    )
+                    return SpiderResult(success=False, message="未找到CPI数据")
 
                 # 解析数据
                 parsed_data = [self._parse_cpi(item) for item in items]
 
                 return SpiderResult(
-                    success=True,
-                    data=parsed_data,
-                    message=f"成功获取 {len(parsed_data)} 条CPI数据"
+                    success=True, data=parsed_data, message=f"成功获取 {len(parsed_data)} 条CPI数据"
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_cpi(self, item: dict) -> dict:
         """

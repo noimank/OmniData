@@ -18,9 +18,8 @@ class RealtimeStockFundFlowParams(BaseModel):
 
     secid: str = Field(
         ...,
-        description="证券ID，格式：市场ID.代码，例如：1.000001(上证指数)、0.000001(平安银行)、1.516920（芯片ETF）。市场ID：0=深圳，1=上海"
+        description="证券ID，格式：市场ID.代码，例如：1.000001(上证指数)、0.000001(平安银行)、1.516920（芯片ETF）。市场ID：0=深圳，1=上海",
     )
-
 
 
 class RealtimeStockFundFlowSpider(BaseWebSpider):
@@ -66,12 +65,13 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                 }
 
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 解析响应
@@ -80,8 +80,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                 # 检查返回状态
                 if data.get("rc") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('msg', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                     )
 
                 # 检查是否有数据
@@ -89,7 +88,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                 if not diff_data:
                     return SpiderResult(
                         success=False,
-                        message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确"
+                        message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确",
                     )
 
                 # 解析数据
@@ -98,13 +97,10 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                 return SpiderResult(
                     success=True,
                     data=result_data,
-                    message=f"成功获取 {params.secid} 的资金流向数据"
+                    message=f"成功获取 {params.secid} 的资金流向数据",
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_fund_flow(self, item: dict, params: RealtimeStockFundFlowParams) -> dict:
         """

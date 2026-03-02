@@ -43,9 +43,8 @@ class TestLogin:
         # res = await instance.get_qrcode("微信")
         res = await instance.is_login()
 
-
-
         print(res)
+
     async def test_eastmoney(self, browser_pool):
         login_name = "eastmoney"
         register = login_register()
@@ -55,6 +54,7 @@ class TestLogin:
         res = await instance.is_login()
 
         print(res)
+
     async def test_ths_10jqks(self, browser_pool):
         login_name = "ths_10jqka"
         register = login_register()
@@ -64,6 +64,7 @@ class TestLogin:
         # res = await instance.is_login()
 
         print(res)
+
     async def test_ths_iwencai(self, browser_pool):
         login_name = "ths_iwencai"
         register = login_register()
@@ -73,5 +74,3 @@ class TestLogin:
         # res = await instance.is_login()
 
         print(res)
-
-

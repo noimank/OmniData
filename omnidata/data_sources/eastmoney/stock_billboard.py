@@ -23,23 +23,23 @@ class StockBillboardParams(BaseModel):
 
     stock_code: str = Field(
         ...,
-        min_length=6, max_length=6,
-        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)"
+        min_length=6,
+        max_length=6,
+        description="股票代码，6位数字，例如：000001(平安银行)、600000(浦发银行)",
     )
     start_date: str = Field(
         default="20200101",
         pattern=r"^\d{8}$",
-        description="开始日期，格式：yyyyMMdd，例如：20200101，默认20200101"
+        description="开始日期，格式：yyyyMMdd，例如：20200101，默认20200101",
     )
     end_date: str = Field(
         default="20500101",
         pattern=r"^\d{8}$",
-        description="结束日期，格式：yyyyMMdd，例如：20251231，默认20500101"
+        description="结束日期，格式：yyyyMMdd，例如：20251231，默认20500101",
     )
 
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -72,7 +72,7 @@ class StockBillboardSpider(BaseWebSpider):
         Returns:
             随机回调函数名，例如：jQuery112304786753408034462_1768642295465
         """
-        random_part = ''.join([str(random.randint(0, 9)) for _ in range(18)])
+        random_part = "".join([str(random.randint(0, 9)) for _ in range(18)])
         timestamp = str(int(time.time() * 1000))
         return f"jQuery{random_part}_{timestamp}"
 
@@ -109,7 +109,7 @@ class StockBillboardSpider(BaseWebSpider):
 
                 # 构建 filter 参数
                 # 格式：(SECURITY_CODE="601138")(TRADE_DATE>='2025-01-17')
-                filter_str = f'(SECURITY_CODE="{params.stock_code}")(TRADE_DATE>=\'{start_date_formatted}\')(TRADE_DATE<=\'{end_date_formatted}\')'
+                filter_str = f"(SECURITY_CODE=\"{params.stock_code}\")(TRADE_DATE>='{start_date_formatted}')(TRADE_DATE<='{end_date_formatted}')"
 
                 # 构建请求参数
                 request_params = {
@@ -125,14 +125,14 @@ class StockBillboardSpider(BaseWebSpider):
                     "client": "WEB",
                 }
 
-
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本
@@ -141,15 +141,15 @@ class StockBillboardSpider(BaseWebSpider):
                 # 移除 JSONP 回调函数
                 # 响应格式：jQuery{random}_{timestamp}({...});
                 # 例如：jQuery112304786753408034462_1768642295467({...});
-                json_match = re.search(r'jQuery[\d_]+\((.*)\);?', response_text)
+                json_match = re.search(r"jQuery[\d_]+\((.*)\);?", response_text)
                 if json_match:
                     json_str = json_match.group(1)
                 elif response_text.startswith("jQuery"):
                     # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find('(')
-                    end_idx = response_text.rfind(')')
+                    start_idx = response_text.find("(")
+                    end_idx = response_text.rfind(")")
                     if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1:end_idx]
+                        json_str = response_text[start_idx + 1 : end_idx]
                     else:
                         json_str = response_text
                 else:
@@ -157,20 +157,18 @@ class StockBillboardSpider(BaseWebSpider):
 
                 # 解析 JSON
                 import json
+
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:
-                    return SpiderResult(
-                        success=False,
-                        message=f"解析响应数据失败：{str(e)}"
-                    )
+                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                 # 检查返回数据
                 result = data.get("result", {})
                 if not result or not result.get("data"):
                     return SpiderResult(
                         success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的龙虎榜数据，该股票可能未上过龙虎榜"
+                        message=f"未找到股票代码 {params.stock_code} 的龙虎榜数据，该股票可能未上过龙虎榜",
                     )
 
                 # 解析数据
@@ -183,33 +181,34 @@ class StockBillboardSpider(BaseWebSpider):
                     df = df.sort_values("交易日期", ascending=True).reset_index(drop=True)
 
                 # 获取股票名称
-                stock_name = parsed_data[0].get("股票名称", params.stock_code) if parsed_data else params.stock_code
+                stock_name = (
+                    parsed_data[0].get("股票名称", params.stock_code)
+                    if parsed_data
+                    else params.stock_code
+                )
 
                 # 格式化输出
                 if params.data_format == "markdown":
                     return SpiderResult(
                         success=True,
                         data=df.to_markdown() if not df.empty else [],
-                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=df.to_string() if not df.empty else [],
-                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=df.to_dict(orient="records") if not df.empty else [],
-                    message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条"
+                    message=f"成功获取 {stock_name}({params.stock_code}) 龙虎榜数据，共{len(parsed_data)}条",
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_billboard_data(self, billboard_data: list) -> list[dict]:
         """
@@ -254,7 +253,9 @@ class StockBillboardSpider(BaseWebSpider):
                 "上榜原因": safe_str(item.get("EXPLAIN", "")),
                 "上榜营业部买入合计(万元)": round(safe_float(item.get("NET_BUY_AMT")) / 10000, 2),
                 "上榜营业部卖出合计(万元)": round(safe_float(item.get("NET_SELL_AMT")) / 10000, 2),
-                "上榜营业部买卖净额(万元)": round(safe_float(item.get("NET_OPERATEDEPT_AMT")) / 10000, 2),
+                "上榜营业部买卖净额(万元)": round(
+                    safe_float(item.get("NET_OPERATEDEPT_AMT")) / 10000, 2
+                ),
                 "上榜后1日涨跌幅(%)": round(safe_float(item.get("D1_CLOSE_ADJCHRATE")), 2),
                 "上榜后2日涨跌幅(%)": round(safe_float(item.get("D2_CLOSE_ADJCHRATE")), 2),
                 "上榜后3日涨跌幅(%)": round(safe_float(item.get("D3_CLOSE_ADJCHRATE")), 2),

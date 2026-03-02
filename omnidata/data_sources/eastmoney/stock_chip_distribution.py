@@ -23,26 +23,25 @@ class StockChipDistributionParams(BaseModel):
 
     stock_code: str = Field(
         ...,
-        min_length=6, max_length=6,
-        description="股票代码，6位数字，例如：000001(平安银行)、159382(创业板人工智能ETF南方),"
+        min_length=6,
+        max_length=6,
+        description="股票代码，6位数字，例如：000001(平安银行)、159382(创业板人工智能ETF南方),",
     )
     adjust_type: Literal["qfq", "hfq", "none"] = Field(
         default="qfq",
-        description="复权类型，可选值：qfq(前复权)、hfq(后复权)、none(不复权)，默认前复权"
+        description="复权类型，可选值：qfq(前复权)、hfq(后复权)、none(不复权)，默认前复权",
     )
     kline_limit: int = Field(
         default=500,
-        ge=60, le=2000,
-        description="计算筹码分布的历史K线数量，影响计算精度：默认500条(约2年)，建议不少于100条；更多K线=更长期筹码历史=更高精度，但计算更慢"
+        ge=60,
+        le=2000,
+        description="计算筹码分布的历史K线数量，影响计算精度：默认500条(约2年)，建议不少于100条；更多K线=更长期筹码历史=更高精度，但计算更慢",
     )
     days: int = Field(
-        default=90,
-        ge=1, le=500,
-        description="返回最近N天的筹码分布数据，默认90天，范围1-500"
+        default=90, ge=1, le=500, description="返回最近N天的筹码分布数据，默认90天，范围1-500"
     )
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -247,23 +246,24 @@ class StockChipDistributionSpider(BaseWebSpider):
                 }
 
                 # 发送 K 线请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 import json
+
                 response_text = await response.text()
                 data = json.loads(response_text)
 
                 # 检查返回状态
                 if data.get("rc") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('rt', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('rt', '未知错误')}"
                     )
 
                 # 检查是否有数据
@@ -271,7 +271,7 @@ class StockChipDistributionSpider(BaseWebSpider):
                 if not kline_data or not kline_data.get("klines"):
                     return SpiderResult(
                         success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确"
+                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确",
                     )
 
                 # 解析 K 线数据
@@ -280,7 +280,7 @@ class StockChipDistributionSpider(BaseWebSpider):
                 if len(kline_records) < 30:
                     return SpiderResult(
                         success=False,
-                        message=f"K线数据不足，至少需要30条数据，当前只有{len(kline_records)}条"
+                        message=f"K线数据不足，至少需要30条数据，当前只有{len(kline_records)}条",
                     )
 
                 # 计算筹码分布
@@ -298,26 +298,23 @@ class StockChipDistributionSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=chip_data.to_markdown(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=chip_data.to_string(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
+                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=chip_data.to_dict(orient="records"),
-                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条"
+                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}筹码分布数据，共{len(chip_data)}条",
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _get_adjust_name(self, adjust_type: str) -> str:
         """获取复权类型显示名称"""
@@ -355,23 +352,27 @@ class StockChipDistributionSpider(BaseWebSpider):
             if len(parts) < 11:
                 continue
 
-            result.append({
-                "date": parts[0],
-                "open": safe_float(parts[1]),
-                "close": safe_float(parts[2]),
-                "high": safe_float(parts[3]),
-                "low": safe_float(parts[4]),
-                "volume": safe_float(parts[5]),
-                "amount": safe_float(parts[6]),
-                "amplitude": safe_float(parts[7]),
-                "change_pct": safe_float(parts[8]),
-                "change_amt": safe_float(parts[9]),
-                "hsl": safe_float(parts[10]),
-            })
+            result.append(
+                {
+                    "date": parts[0],
+                    "open": safe_float(parts[1]),
+                    "close": safe_float(parts[2]),
+                    "high": safe_float(parts[3]),
+                    "low": safe_float(parts[4]),
+                    "volume": safe_float(parts[5]),
+                    "amount": safe_float(parts[6]),
+                    "amplitude": safe_float(parts[7]),
+                    "change_pct": safe_float(parts[8]),
+                    "change_amt": safe_float(parts[9]),
+                    "hsl": safe_float(parts[10]),
+                }
+            )
 
         return result
 
-    def _calculate_chip_distribution(self, kline_records: list[dict], kline_limit: int = 210) -> pd.DataFrame:
+    def _calculate_chip_distribution(
+        self, kline_records: list[dict], kline_limit: int = 210
+    ) -> pd.DataFrame:
         """
         计算筹码分布
 
@@ -409,17 +410,19 @@ class StockChipDistributionSpider(BaseWebSpider):
             pct_70_con.append(mcode["percentChips"]["70"]["concentration"])
             pct_90_con.append(mcode["percentChips"]["90"]["concentration"])
 
-        df = pd.DataFrame({
-            "日期": date_list,
-            "获利比例": benefit_part,
-            "平均成本": avg_cost,
-            "90%成本-下": pct_90_low,
-            "90%成本-上": pct_90_high,
-            "90%集中度": pct_90_con,
-            "70%成本-下": pct_70_low,
-            "70%成本-上": pct_70_high,
-            "70%集中度": pct_70_con,
-        })
+        df = pd.DataFrame(
+            {
+                "日期": date_list,
+                "获利比例": benefit_part,
+                "平均成本": avg_cost,
+                "90%成本-下": pct_90_low,
+                "90%成本-上": pct_90_high,
+                "90%集中度": pct_90_con,
+                "70%成本-下": pct_70_low,
+                "70%成本-上": pct_70_high,
+                "70%集中度": pct_70_con,
+            }
+        )
 
         # 转换数据类型（日期保持字符串格式以便JSON序列化）
         df["获利比例"] = pd.to_numeric(df["获利比例"], errors="coerce")

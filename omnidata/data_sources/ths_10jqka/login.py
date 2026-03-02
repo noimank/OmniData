@@ -1,6 +1,7 @@
 """
 同花顺10jqka 二维码登录模块
 """
+
 import logging
 
 from omnidata.core import BaseQRLogin, QRLoginState, QRCode
@@ -67,7 +68,10 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
                 return qr_code
 
             else:
-                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}")
+                return QRCode(
+                    success=False,
+                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                )
 
         except Exception as e:
             logger.error(f"Failed to get eastmoney qrcode: {e}")
@@ -87,10 +91,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         await self.close()
 
         if qr_type != "微信":
-            return QRCode(
-                success=False,
-                message=f"不支持的二维码类型：{qr_type}，可选值：微信"
-            )
+            return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}，可选值：微信")
 
         try:
             self._qr_context = await self.browser_context_pool.get_context("ths_10jqka")
@@ -118,31 +119,25 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             popup = await popup_info.value
             await popup.wait_for_load_state("domcontentloaded")  # 等待新窗口加载完成
 
-            weixin_qr_img = popup.locator(".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp")
+            weixin_qr_img = popup.locator(
+                ".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp"
+            )
             # 等待出现二维码
             await weixin_qr_img.wait_for(timeout=2000)
-            qr_code_src = await weixin_qr_img.get_by_role('img').first.get_attribute('src')
+            qr_code_src = await weixin_qr_img.get_by_role("img").first.get_attribute("src")
             # 补齐完整的url
             if qr_code_src.startswith("/"):
                 qr_code_src = "https://open.weixin.qq.com" + qr_code_src
 
-
             return QRCode(
-                success=True,
-                url=qr_code_src,
-                qr_type="微信",
-                message="获取微信二维码成功"
+                success=True, url=qr_code_src, qr_type="微信", message="获取微信二维码成功"
             )
 
         except Exception as e:
             logger.error(f"Failed to get WeChat qrcode: {e}")
             await self.close()
-            return QRCode(
-                url="",
-                qr_type="微信",
-                success=False,
-                message=f"获取微信二维码失败: {e}"
-            )
+            return QRCode(url="", qr_type="微信", success=False, message=f"获取微信二维码失败: {e}")
+
     async def get_ths_qrcode(self) -> QRCode:
         """
         获取指定类型的二维码
@@ -164,15 +159,15 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded", timeout=5000)
 
-            #点击二维码
+            # 点击二维码
             await self._qr_page.locator("#to_qrcode_login").click()
 
-            #给时间等待加载二维码
+            # 给时间等待加载二维码
             await self._qr_page.wait_for_timeout(1100)
             code_box_img = self._qr_page.locator(".code-box img")
             await code_box_img.wait_for(state="visible")
 
-            qr_code_src = await code_box_img.first.get_attribute('src')
+            qr_code_src = await code_box_img.first.get_attribute("src")
             # 补齐完整的url
             if qr_code_src.startswith("/"):
                 qr_code_src = "https://upass.10jqka.com.cn/" + qr_code_src
@@ -181,17 +176,14 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
                 success=True,
                 url=qr_code_src,
                 qr_type="同花顺APP",
-                message="获取同花顺APP二维码成功"
+                message="获取同花顺APP二维码成功",
             )
 
         except Exception as e:
             logger.error(f"Failed to get WeChat qrcode: {e}")
             await self.close()
             return QRCode(
-                url="",
-                qr_type="同花顺APP",
-                success=False,
-                message=f"获取同花顺APP二维码失败: {e}"
+                url="", qr_type="同花顺APP", success=False, message=f"获取同花顺APP二维码失败: {e}"
             )
 
     async def verify_login_state(self) -> QRLoginState:
@@ -206,7 +198,7 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         if not self._qr_page:
             return QRLoginState(
                 status="failed",
-                message="QR code page not initialized, please call get_qrcode first"
+                message="QR code page not initialized, please call get_qrcode first",
             )
 
         try:
@@ -217,17 +209,13 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
                 return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
 
             # 如果页面不再是登录页面，说明登录成功
-            if 'login' not in current_url and "10jqka.com" in current_url:
+            if "login" not in current_url and "10jqka.com" in current_url:
                 # 保存登录状态
                 await self.save_context_state(self._qr_context, "ths_10jqka")
                 await self.close()
-                return QRLoginState(
-                    status="success",
-                    message="登录成功，且保存登录状态"
-                )
+                return QRLoginState(status="success", message="登录成功，且保存登录状态")
             else:
                 return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
-
 
         except Exception as e:
             logger.error(f"Error verifying login state: {e}")
@@ -245,13 +233,13 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         try:
             async with self.new_page("ths_10jqka") as page:
                 await self.filter_file_load(page, "media")
-                #去修改密码页面，每登录就是会跳回登录界面
+                # 去修改密码页面，每登录就是会跳回登录界面
                 await page.goto("https://upass.10jqka.com.cn/bind/")
 
                 await page.wait_for_load_state("domcontentloaded", timeout=3000)
 
                 # 已经跳转回登录界面了的话直接返回
-                if 'login' in page.url:
+                if "login" in page.url:
                     return QRLoginState(status="not_logged_in", message="未登录同花顺10jqka")
 
                 return QRLoginState(status="success", message="已登录同花顺10jqka网站")

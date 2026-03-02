@@ -1,15 +1,15 @@
-
 from dotenv import load_dotenv
 from pathlib import Path
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 
 import pytest
 
 from omnidata.core.browser_context_pool import BrowserContextPool
 from omnidata.core import get_spider_register, spider_register, close_spider_register
-from omnidata.core.config import  BrowserConfig
+from omnidata.core.config import BrowserConfig
+
 
 @pytest.fixture
 async def browser_pool():
@@ -38,9 +38,9 @@ class TestWallStreetcnSpider:
         assert register is not None
         print(register.list_spiders())
 
-    async def test_run(self,browser_pool):
+    async def test_run(self, browser_pool):
         spider_name = "sina_finance_news"
-        params = {"channel": 'global', "limit": 50}
+        params = {"channel": "global", "limit": 50}
         register = spider_register()
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)

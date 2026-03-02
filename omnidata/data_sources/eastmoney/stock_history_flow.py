@@ -18,11 +18,15 @@ from omnidata.core import BaseWebSpider, SpiderResult
 class StockHistoryFlowParams(BaseModel):
     """个股历史资金流参数模型"""
 
-    stock_code: str = Field(..., min_length=6, max_length=6, description="股票或ETF代码，如 000001（平安银行）、516920（芯片ETF）")
+    stock_code: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="股票或ETF代码，如 000001（平安银行）、516920（芯片ETF）",
+    )
     limit: int = Field(default=30, ge=0, le=220, description="获取最近多少个交易日的资金流数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -68,7 +72,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
 
             if first_char == "6" or first_char == "5":
                 market_code = "1"  # 上海市场
-            else :
+            else:
                 market_code = "0"  # 深圳市场
 
             secid = f"{market_code}.{params.stock_code}"
@@ -76,20 +80,22 @@ class StockHistoryFlowSpider(BaseWebSpider):
             async with self.new_page("eastmoney") as page:
                 # 构建请求参数
                 request_params = {
-                "lmt": params.limit if params.limit > 0 else 0,
-                "klt": "101",  # 日K线
-                "fields1": self.FIELDS1,
-                "fields2": self.FIELDS2,
-                "ut": "b2884a393a59ad64002292a3e90d46a5",
-                "secid": secid}
+                    "lmt": params.limit if params.limit > 0 else 0,
+                    "klt": "101",  # 日K线
+                    "fields1": self.FIELDS1,
+                    "fields2": self.FIELDS2,
+                    "ut": "b2884a393a59ad64002292a3e90d46a5",
+                    "secid": secid,
+                }
 
-                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                # 发送请求
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 解析响应（可能是JSONP格式）
@@ -97,16 +103,12 @@ class StockHistoryFlowSpider(BaseWebSpider):
                 data = self._parse_response(body)
 
                 if data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败"
-                    )
+                    return SpiderResult(success=False, message="解析响应数据失败")
 
                 # 检查返回状态
                 if data.get("rc") != 0:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败，请检查股票代码是否存在！"
+                        success=False, message=f"获取数据失败，请检查股票代码是否存在！"
                     )
 
                 # 获取数据内容
@@ -114,8 +116,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
 
                 if not klines:
                     return SpiderResult(
-                        success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的资金流数据"
+                        success=False, message=f"未找到股票代码 {params.stock_code} 的资金流数据"
                     )
 
                 # 解析 K线数据（逗号分隔的字符串）
@@ -130,7 +131,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
 
                         # 解析数值
                         close_price = self._safe_float(kline[11])  # 收盘价
-                        change_pct = self._safe_float(kline[12])   # 涨跌幅
+                        change_pct = self._safe_float(kline[12])  # 涨跌幅
 
                         # 主力净流入
                         main_net_amount = self._safe_float(kline[1])  # 净额（元）
@@ -152,21 +153,33 @@ class StockHistoryFlowSpider(BaseWebSpider):
                         small_net_amount = self._safe_float(kline[2])  # 净额（元）
                         small_net_ratio = self._safe_float(kline[7])  # 净占比（百分比）
 
-                        data_list.append({
-                            "日期": date_str,
-                            "收盘价": close_price,
-                            "涨跌幅(%)": change_pct,
-                            "主力净流入净额(亿元)": round(main_net_amount / 100000000, 2),  # 转换为亿元
-                            "主力净流入净占比(%)": main_net_ratio,
-                            "超大单净流入净额(亿元)": round(super_large_net_amount / 100000000, 2),  # 转换为亿元
-                            "超大单净流入净占比(%)": super_large_net_ratio,
-                            "大单净流入净额(亿元)": round(large_net_amount / 100000000, 2),  # 转换为亿元
-                            "大单净流入净占比(%)": large_net_ratio,
-                            "中单净流入净额(亿元)": round(medium_net_amount / 100000000, 2),  # 转换为亿元
-                            "中单净流入净占比(%)": medium_net_ratio,
-                            "小单净流入净额(亿元)": round(small_net_amount / 100000000, 2),  # 转换为亿元
-                            "小单净流入净占比(%)": small_net_ratio,
-                        })
+                        data_list.append(
+                            {
+                                "日期": date_str,
+                                "收盘价": close_price,
+                                "涨跌幅(%)": change_pct,
+                                "主力净流入净额(亿元)": round(
+                                    main_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "主力净流入净占比(%)": main_net_ratio,
+                                "超大单净流入净额(亿元)": round(
+                                    super_large_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "超大单净流入净占比(%)": super_large_net_ratio,
+                                "大单净流入净额(亿元)": round(
+                                    large_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "大单净流入净占比(%)": large_net_ratio,
+                                "中单净流入净额(亿元)": round(
+                                    medium_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "中单净流入净占比(%)": medium_net_ratio,
+                                "小单净流入净额(亿元)": round(
+                                    small_net_amount / 100000000, 2
+                                ),  # 转换为亿元
+                                "小单净流入净占比(%)": small_net_ratio,
+                            }
+                        )
 
                 # 转换为 DataFrame
                 df = pd.DataFrame(data_list)
@@ -188,14 +201,11 @@ class StockHistoryFlowSpider(BaseWebSpider):
                 return SpiderResult(
                     success=True,
                     data=result_data,
-                    message=f"成功获取股票代码 {params.stock_code} 的历史资金流数据共{len(df)}条"
+                    message=f"成功获取股票代码 {params.stock_code} 的历史资金流数据共{len(df)}条",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_response(self, body: bytes) -> dict | None:
         """
@@ -221,7 +231,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
             start_idx = text.find("(")
             end_idx = text.rfind(")")
             if start_idx > 0 and end_idx > start_idx:
-                json_text = text[start_idx + 1:end_idx]
+                json_text = text[start_idx + 1 : end_idx]
                 return json.loads(json_text)
 
             return None

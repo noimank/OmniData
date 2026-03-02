@@ -113,7 +113,6 @@ class BaseHelper(ABC):
         """
         await self.browser_context_pool.save_context_state(context, namespace)
 
-
     async def remove_context_state(self, namespace: str) -> None:
         """
         删除 Redis 中的 context 状态
@@ -169,12 +168,11 @@ class BaseHelper(ABC):
         """
         return await self.browser_context_pool.get_context(namespace, **kwargs)
 
-
     @asynccontextmanager
     async def new_page(
         self,
         namespace: str | None = None,
-        anti_crawling_strategy: str | list="advanced",
+        anti_crawling_strategy: str | list = "advanced",
     ) -> AsyncIterator[Page]:
         """
         创建新页面（自动管理 context 和 page 的生命周期）
@@ -201,4 +199,3 @@ class BaseHelper(ABC):
         # 使用 BrowserContextPool 的 new_page 方法，自动管理 Page 生命周期
         async with self.browser_context_pool.new_page(namespace, anti_crawling_strategy) as page:
             yield page
-

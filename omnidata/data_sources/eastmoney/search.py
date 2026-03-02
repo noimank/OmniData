@@ -18,8 +18,7 @@ class SearchParams(BaseModel):
 
     keyword: str = Field(..., min_length=1, description="搜索关键词")
     search_type: Literal["news", "ann", "report", "qa"] = Field(
-        default="news",
-        description="搜索类型：news=资讯, ann=公告, report=研报, qa=问董秘"
+        default="news", description="搜索类型：news=资讯, ann=公告, report=研报, qa=问董秘"
     )
 
 
@@ -75,7 +74,7 @@ class EastMoneySearchSpider(BaseWebSpider):
                             api_data_temp = self._parse_jsonp(body)
                             results_t = api_data_temp.get("result", {})
                             data_valid = False
-                            for k,v in results_t.items():
+                            for k, v in results_t.items():
                                 if isinstance(v, list):
                                     if len(v) > 0:
                                         item = v[0]
@@ -98,7 +97,9 @@ class EastMoneySearchSpider(BaseWebSpider):
                 await page.route("**/*", handle_route)
 
                 # 获取搜索类型配置（智能解析无需手动指定 result_field）
-                _, search_url = self.SEARCH_TYPE_MAP.get(params.search_type, self.SEARCH_TYPE_MAP["news"])
+                _, search_url = self.SEARCH_TYPE_MAP.get(
+                    params.search_type, self.SEARCH_TYPE_MAP["news"]
+                )
 
                 # 构建搜索 URL
                 url = f"{search_url}?keyword={params.keyword}"
@@ -109,24 +110,18 @@ class EastMoneySearchSpider(BaseWebSpider):
 
                 # 检查是否成功获取数据
                 if captured_response is None:
-                    return SpiderResult(
-                        success=False,
-                        message="获取数据失败，该查询条件下无结果"
-                    )
+                    return SpiderResult(success=False, message="获取数据失败，该查询条件下无结果")
 
                 # 解析 JSONP 响应
                 api_data = self._parse_jsonp(captured_response)
                 if api_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析数据失败：无法解析 JSONP 响应"
-                    )
+                    return SpiderResult(success=False, message="解析数据失败：无法解析 JSONP 响应")
 
                 # 检查响应状态
                 if api_data.get("code") != 0:
                     return SpiderResult(
                         success=False,
-                        message=f"API 返回错误: {api_data.get('msg', 'Unknown error')}"
+                        message=f"API 返回错误: {api_data.get('msg', 'Unknown error')}",
                     )
 
                 # 提取搜索结果（智能递归解析，无需手动指定 result_field）
@@ -134,32 +129,26 @@ class EastMoneySearchSpider(BaseWebSpider):
 
                 if not results_list:
                     return SpiderResult(
-                        success=True,
-                        data=[],
-                        message=f"未找到关键词 '{params.keyword}' 的搜索结果"
+                        success=True, data=[], message=f"未找到关键词 '{params.keyword}' 的搜索结果"
                     )
 
                 # 转换为统一格式（只保留序号、标题、内容、时间）
                 results = []
                 for index, item in enumerate(results_list, 1):
-                    results.append({
-                        "序号": index,
-                        "标题": self._clean_html(item.get("title", "")),
-                        "内容": self._clean_html(item.get("content", "")),
-                        "时间": item.get("date", ""),
-                    })
-
+                    results.append(
+                        {
+                            "序号": index,
+                            "标题": self._clean_html(item.get("title", "")),
+                            "内容": self._clean_html(item.get("content", "")),
+                            "时间": item.get("date", ""),
+                        }
+                    )
 
                 return SpiderResult(
-                    success=True,
-                    data=results,
-                    message=f"成功获取 {len(results)} 条搜索结果"
+                    success=True, data=results, message=f"成功获取 {len(results)} 条搜索结果"
                 )
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"搜索失败: {str(e)}"
-            )
+            return SpiderResult(success=False, message=f"搜索失败: {str(e)}")
 
     @staticmethod
     def _parse_jsonp(body: bytes) -> dict | None:
@@ -179,7 +168,7 @@ class EastMoneySearchSpider(BaseWebSpider):
             start_idx = text.find("(")
             end_idx = text.rfind(")")
             if start_idx > 0 and end_idx > start_idx:
-                json_text = text[start_idx + 1:end_idx]
+                json_text = text[start_idx + 1 : end_idx]
                 return json.loads(json_text)
             return None
         except Exception:
@@ -196,16 +185,13 @@ class EastMoneySearchSpider(BaseWebSpider):
 
         result = data.get("result", {})
         item_list = None
-        #找到具有title的列表
-        for key,value in result.items():
+        # 找到具有title的列表
+        for key, value in result.items():
             if isinstance(value, list):
                 if any("title" in item for item in value):
                     item_list = value
                     break
         return item_list
-
-
-
 
     @staticmethod
     def _clean_html(text: str) -> str:
@@ -225,4 +211,3 @@ class EastMoneySearchSpider(BaseWebSpider):
         # 移除其他 HTML 标签
         text = re.sub(r"<[^>]+>", "", text)
         return text.strip()
-

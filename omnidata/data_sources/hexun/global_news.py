@@ -65,7 +65,9 @@ class HexunGlobalNewsSpider(BaseWebSpider):
         try:
             async with self.new_page("hexun") as page:
                 # 生成随机 callback 名称
-                callback_name = f"ptemplate_jsonp_{random.randint(100000000000000000, 999999999999999999)}"
+                callback_name = (
+                    f"ptemplate_jsonp_{random.randint(100000000000000000, 999999999999999999)}"
+                )
 
                 # 构建请求参数
                 request_params = {
@@ -77,15 +79,12 @@ class HexunGlobalNewsSpider(BaseWebSpider):
 
                 # 发送请求
                 response = await page.request.get(
-                    self.API_URL,
-                    params=request_params,
-                    timeout=30000
+                    self.API_URL, params=request_params, timeout=30000
                 )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应文本（JSONP格式）
@@ -94,10 +93,7 @@ class HexunGlobalNewsSpider(BaseWebSpider):
                 # 解析JSONP响应
                 json_data = self._parse_jsonp(response_text)
                 if json_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败"
-                    )
+                    return SpiderResult(success=False, message="解析响应数据失败")
 
                 # 解析新闻列表
                 news_list = json_data.get("result", [])
@@ -111,7 +107,7 @@ class HexunGlobalNewsSpider(BaseWebSpider):
                             "total_page": json_data.get("totalPage", 0),
                             "news_list": [],
                         },
-                        message="暂无新闻数据"
+                        message="暂无新闻数据",
                     )
 
                 parsed_news = [self._parse_news_item(item) for item in news_list]
@@ -126,14 +122,11 @@ class HexunGlobalNewsSpider(BaseWebSpider):
                         "total_number": json_data.get("totalNumber", 0),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
         """
@@ -148,10 +141,10 @@ class HexunGlobalNewsSpider(BaseWebSpider):
         try:
             # 匹配 ptemplate_jsonp_xxx( {...}) 格式，注意可能有空格
             # 使用更简单的匹配方式：找到第一个 ( 和最后一个 )
-            start_idx = response_text.find('(')
-            end_idx = response_text.rfind(')')
+            start_idx = response_text.find("(")
+            end_idx = response_text.rfind(")")
             if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                json_str = response_text[start_idx + 1:end_idx].strip()
+                json_str = response_text[start_idx + 1 : end_idx].strip()
                 return json.loads(json_str)
             # 如果直接是JSON格式
             return json.loads(response_text)

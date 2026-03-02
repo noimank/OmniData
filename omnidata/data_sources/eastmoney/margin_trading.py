@@ -19,17 +19,15 @@ class MarginTradingParams(BaseModel):
     """市场融资融券参数模型"""
 
     market: Literal["all", "sh", "sz", "bj"] = Field(
-        default="all",
-        description="市场类型，可选值：all(全部)、sh(沪市)、sz(深市)、bj(京市)"
+        default="all", description="市场类型，可选值：all(全部)、sh(沪市)、sz(深市)、bj(京市)"
     )
     statistics: Literal["1d", "3d", "5d", "10d"] = Field(
         default="1d",
-        description="统计周期，可选值：1d(1日数据)、3d(3日合计)、5d(5日合计)、10d(10日合计)"
+        description="统计周期，可选值：1d(1日数据)、3d(3日合计)、5d(5日合计)、10d(10日合计)",
     )
     limit: int = Field(default=50, ge=1, le=500, description="获取最近多少个交易日的数据")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -42,7 +40,9 @@ class MarginTradingSpider(BaseWebSpider):
     """
 
     name = "eastmoney_margin_trading"
-    description = "获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期"
+    description = (
+        "获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期"
+    )
     version = "1.1.0"
     author = "noimank"
     platform = "东方财富"
@@ -58,25 +58,25 @@ class MarginTradingSpider(BaseWebSpider):
             "reportName": "RPTA_RZRQ_LSHJ",
             "filter": "",
             "name": "全部",
-            "index_name": "沪深300"
+            "index_name": "沪深300",
         },
         "sh": {
             "reportName": "RPTA_WEB_RZRQ_LSSH",
             "filter": "(SCDM=007)",
             "name": "沪市",
-            "index_name": "上证指数"
+            "index_name": "上证指数",
         },
         "sz": {
             "reportName": "RPTA_WEB_RZRQ_LSSH",
             "filter": "(SCDM=001)",
             "name": "深市",
-            "index_name": "深证指数"
+            "index_name": "深证指数",
         },
         "bj": {
             "reportName": "RPTA_WEB_RZRQ_LSSH",
             "filter": "(SCDM=002)",
             "name": "京市",
-            "index_name": "北证50"
+            "index_name": "北证50",
         },
     }
 
@@ -107,34 +107,33 @@ class MarginTradingSpider(BaseWebSpider):
                 }
 
                 # 发送请求
-                response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 解析响应
                 data = await response.json()
 
                 if data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败"
-                    )
+                    return SpiderResult(success=False, message="解析响应数据失败")
 
                 # 检查返回状态
                 # API返回格式: {"version": "...", "result": {"data": [...]}}
                 result = data.get("result", {})
                 if not result or not result.get("data"):
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{data.get('msg', '未知错误')}"
+                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                     )
 
                 # 解析数据，传入统计周期和市场参数
-                result_data = self._parse_margin_data(result["data"], params.statistics, params.market)
+                result_data = self._parse_margin_data(
+                    result["data"], params.statistics, params.market
+                )
 
                 # 按日期降序排列（最新的在前）
                 df = pd.DataFrame(result_data)
@@ -148,27 +147,24 @@ class MarginTradingSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=df.to_markdown(),
-                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据"
+                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
                         success=True,
                         data=df.to_string(),
-                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据"
+                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
                     )
 
                 # 默认返回 dict 格式
                 return SpiderResult(
                     success=True,
                     data=df.to_dict(orient="records"),
-                    message=f"成功获取{market_config['name']}融资融券{statistics_name}数据"
+                    message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _get_statistics_name(self, statistics: str) -> str:
         """获取统计周期显示名称"""
@@ -180,7 +176,9 @@ class MarginTradingSpider(BaseWebSpider):
         }
         return names.get(statistics, "1日")
 
-    def _parse_margin_data(self, data: list, statistics: str = "1d", market: str = "all") -> list[dict]:
+    def _parse_margin_data(
+        self, data: list, statistics: str = "1d", market: str = "all"
+    ) -> list[dict]:
         """
         解析融资融券数据
 
@@ -202,7 +200,9 @@ class MarginTradingSpider(BaseWebSpider):
 
         return result
 
-    def _parse_single_item(self, item: dict, statistics: str = "1d", market: str = "all") -> dict | None:
+    def _parse_single_item(
+        self, item: dict, statistics: str = "1d", market: str = "all"
+    ) -> dict | None:
         """
         解析单条融资融券数据
 
@@ -239,7 +239,11 @@ class MarginTradingSpider(BaseWebSpider):
         index_close = safe_float(item.get("NEW"))  # 指数收盘点位
 
         # 指数涨跌幅（根据统计周期选择）
-        zdf = safe_float(item.get(f"ZDF{suffix}")) if statistics != "1d" else safe_float(item.get("ZDF"))
+        zdf = (
+            safe_float(item.get(f"ZDF{suffix}"))
+            if statistics != "1d"
+            else safe_float(item.get("ZDF"))
+        )
 
         # 融资相关 - 根据统计周期选择字段
         rz_ye = safe_float(item.get("RZYE"))  # 融资余额(元)

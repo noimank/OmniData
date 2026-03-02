@@ -54,8 +54,8 @@ class SpiderInfoExtractor(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # 只处理直接继承 BaseWebSpider 的类
         has_base_web_spider = any(
-            (isinstance(base, ast.Name) and base.id == "BaseWebSpider") or
-            (isinstance(base, ast.Attribute) and base.attr == "BaseWebSpider")
+            (isinstance(base, ast.Name) and base.id == "BaseWebSpider")
+            or (isinstance(base, ast.Attribute) and base.attr == "BaseWebSpider")
             for base in node.bases
         )
 
@@ -118,8 +118,11 @@ def extract_params_from_class(node: ast.ClassDef) -> List[Dict[str, Any]]:
     params = []
 
     # 查找基类 BaseModel
-    bases = [base.id if isinstance(base, ast.Name) else ""
-             for base in node.bases if isinstance(base, ast.Name)]
+    bases = [
+        base.id if isinstance(base, ast.Name) else ""
+        for base in node.bases
+        if isinstance(base, ast.Name)
+    ]
 
     if "BaseModel" not in bases:
         return params
@@ -143,12 +146,14 @@ def extract_params_from_class(node: ast.ClassDef) -> List[Dict[str, Any]]:
                         default_value = keyword.value.value
                         required = False
 
-            params.append({
-                "name": param_name,
-                "description": description,
-                "default": default_value,
-                "required": required,
-            })
+            params.append(
+                {
+                    "name": param_name,
+                    "description": description,
+                    "default": default_value,
+                    "required": required,
+                }
+            )
 
     return params
 
@@ -170,7 +175,9 @@ def render_spider_doc(spider_info: Dict[str, Any], platform_name: str) -> str:
             params_rows.append(
                 f"| `{param['name']}` | string | {req_mark} | {param['description']}{default} |"
             )
-        params_table = "\n".join(["| 参数 | 类型 | 必填 | 说明 |", "| :--- | :--- | :---: | :--- |", *params_rows])
+        params_table = "\n".join(
+            ["| 参数 | 类型 | 必填 | 说明 |", "| :--- | :--- | :---: | :--- |", *params_rows]
+        )
     else:
         params_table = "该接口无需参数。"
 
@@ -285,7 +292,7 @@ def generate_all_datasource_docs():
                 doc_name = spider["name"]
                 index_content += f"- [{spider['description']}]({doc_name}.md)\n"
 
-            index_content += "\n---\n\n## 特点\n\n- ✅ 数据实时更新\n\n## 使用示例\n\n```bash\ncurl -X POST http://localhost:8380/spiders/run \\\n  -H \"Content-Type: application/json\" \\\n  -d '{{\n    \"spider_name\": \"{spiders[0]['name'] if spiders else ''}\",\n    \"params\": {{}}\n  }}'\n```"
+            index_content += '\n---\n\n## 特点\n\n- ✅ 数据实时更新\n\n## 使用示例\n\n```bash\ncurl -X POST http://localhost:8380/spiders/run \\\n  -H "Content-Type: application/json" \\\n  -d \'{{\n    "spider_name": "{spiders[0][\'name\'] if spiders else \'\'}",\n    "params": {{}}\n  }}\'\n```'
             index_path.write_text(index_content, encoding="utf-8")
             print(f"[OK] Generated: {index_path}")
 

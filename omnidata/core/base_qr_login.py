@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class QRLoginState(BaseModel):
-    status: Literal["waiting", "success", "failed", "not_logged_in"] = Field(description="二维码登录状态")
+    status: Literal["waiting", "success", "failed", "not_logged_in"] = Field(
+        description="二维码登录状态"
+    )
     message: str = Field(default="", description="登录状态描述")
 
 
@@ -64,6 +66,7 @@ class BaseQRLogin(BaseHelper):
                     return await page.query_selector(".user-avatar") is not None
         ```
     """
+
     # name就是浏览器context中的namespace，注意了
     name: str = ""
     description: str = ""
@@ -78,10 +81,12 @@ class BaseQRLogin(BaseHelper):
     # 登录状态缓存（实例变量，在 __init__ 中初始化）
     _login_status: QRLoginState
 
-    def __init__(self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None):
+    def __init__(
+        self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None
+    ):
         super().__init__(browser_context_pool, config)
         # 初始化实例变量，避免类变量共享
-        self._login_status = QRLoginState(status='not_logged_in', message="默认未登录状态")
+        self._login_status = QRLoginState(status="not_logged_in", message="默认未登录状态")
 
     @abstractmethod
     async def refresh_login_state(self) -> None:

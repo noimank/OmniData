@@ -1,6 +1,7 @@
 """
 同花顺问财 二维码登录模块
 """
+
 import asyncio
 import logging
 
@@ -17,7 +18,6 @@ class ThsIwencaiQRLogin(BaseQRLogin):
     version = "1.0.0"
     author = "noimank"
     platform = "同花顺问财"
-
 
     async def refresh_login_state(self) -> None:
         """
@@ -66,7 +66,10 @@ class ThsIwencaiQRLogin(BaseQRLogin):
                 qr_code = await self.get_ths_qrcode()
                 return qr_code
             else:
-                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}")
+                return QRCode(
+                    success=False,
+                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                )
 
         except Exception as e:
             logger.error(f"Failed to get ths_iwencai qrcode: {e}")
@@ -91,7 +94,6 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded")
-
 
             # 点击"注册 / 登录"按钮
             await self._qr_page.locator("text=注册 / 登录").hover()
@@ -128,22 +130,13 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             logger.info(f"获取到微信登录二维码URL：{qr_code_url}")
 
             return QRCode(
-                success=True,
-                url=qr_code_url,
-                qr_type="微信",
-                message="获取微信二维码成功"
+                success=True, url=qr_code_url, qr_type="微信", message="获取微信二维码成功"
             )
 
         except Exception as e:
             logger.error(f"Failed to get WeChat qrcode: {e}")
             await self.close()
-            return QRCode(
-                url="",
-                qr_type="微信",
-                success=False,
-                message=f"获取微信二维码失败: {e}"
-            )
-
+            return QRCode(url="", qr_type="微信", success=False, message=f"获取微信二维码失败: {e}")
 
     async def get_ths_qrcode(self) -> QRCode:
         """
@@ -163,7 +156,6 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             await self.filter_file_load(self._qr_page, "media")
             await self._qr_page.goto(base_url)
             await self._qr_page.wait_for_load_state("domcontentloaded")
-
 
             # 点击"注册 / 登录"按钮
             await self._qr_page.locator("text=注册 / 登录").hover()
@@ -196,20 +188,14 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             logger.info(f"获取到同花顺APP登录二维码URL：{qr_code_url}")
 
             return QRCode(
-                success=True,
-                url=qr_code_url,
-                qr_type="同花顺",
-                message="获取同花顺二维码成功"
+                success=True, url=qr_code_url, qr_type="同花顺", message="获取同花顺二维码成功"
             )
 
         except Exception as e:
             logger.error(f"Failed to get THS qrcode: {e}")
             await self.close()
             return QRCode(
-                url="",
-                qr_type="同花顺",
-                success=False,
-                message=f"获取同花顺二维码失败: {e}"
+                url="", qr_type="同花顺", success=False, message=f"获取同花顺二维码失败: {e}"
             )
 
     async def verify_login_state(self) -> QRLoginState:
@@ -224,20 +210,19 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         if not self._qr_page:
             return QRLoginState(
                 status="failed",
-                message="QR code page not initialized, please call get_qrcode first"
+                message="QR code page not initialized, please call get_qrcode first",
             )
 
         try:
 
-            await self._qr_page.wait_for_selector(".login-box .user-photo", state="visible", timeout=800)
+            await self._qr_page.wait_for_selector(
+                ".login-box .user-photo", state="visible", timeout=800
+            )
             # 没有登录的话会出错，无法执行以下语句
             # 保存登录状态
             await self.save_context_state(self._qr_context, "ths_iwencai")
             await self.close()
-            return QRLoginState(
-                status="success",
-                message="登录成功，且保存登录状态"
-            )
+            return QRLoginState(status="success", message="登录成功，且保存登录状态")
 
         except Exception as e:
             logger.error(f"Error verifying login state: {e}")
@@ -265,4 +250,3 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         except Exception as e:
             logger.debug(f"Failed to check ths_iwencai login status: {e}")
             return QRLoginState(status="not_logged_in", message="未登录同花顺问财")
-

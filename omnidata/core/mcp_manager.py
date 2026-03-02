@@ -181,11 +181,11 @@ class MCPServiceInfo:
         # 清理 FastMCP 工具注册表 (FastMCP 内部使用 dict 存储)
         if self.mcp_server is not None:
             try:
-                if hasattr(self.mcp_server, '_tools'):
+                if hasattr(self.mcp_server, "_tools"):
                     self.mcp_server._tools.clear()
-                if hasattr(self.mcp_server, '_resources'):
+                if hasattr(self.mcp_server, "_resources"):
                     self.mcp_server._resources.clear()
-                if hasattr(self.mcp_server, '_prompts'):
+                if hasattr(self.mcp_server, "_prompts"):
                     self.mcp_server._prompts.clear()
             except Exception as e:
                 logger.warning(f"Error clearing FastMCP registries for '{self.name}': {e}")
@@ -396,12 +396,12 @@ class MCPManager:
             )
 
         # 步骤 4: 清除路由缓存（重要！防止旧路由被继续使用）
-        if hasattr(self._app.router, '_route_cache'):
+        if hasattr(self._app.router, "_route_cache"):
             self._app.router._route_cache.clear()
             logger.debug(f"Cleared route cache for '{service_name}'")
 
         # 步骤 5: 清除 OpenAPI 缓存（确保 Swagger 文档更新）
-        if hasattr(self._app, 'openapi_schema'):
+        if hasattr(self._app, "openapi_schema"):
             self._app.openapi_schema = None
             logger.debug(f"Cleared OpenAPI schema cache for '{service_name}'")
 
@@ -440,8 +440,7 @@ class MCPManager:
             for service_name in service_names:
                 try:
                     await asyncio.wait_for(
-                        self._unmount_service_internal(service_name),
-                        timeout=timeout
+                        self._unmount_service_internal(service_name), timeout=timeout
                     )
                 except asyncio.CancelledError:
                     logger.debug(f"Cleanup for service '{service_name}' cancelled during shutdown")
@@ -571,8 +570,7 @@ def get_mcp_manager() -> MCPManager:
     global _mcp_manager
     if _mcp_manager is None:
         raise InitializationError(
-            "MCPManager not initialized. "
-            "Use create_mcp_manager(app) in lifespan first."
+            "MCPManager not initialized. " "Use create_mcp_manager(app) in lifespan first."
         )
     return _mcp_manager
 

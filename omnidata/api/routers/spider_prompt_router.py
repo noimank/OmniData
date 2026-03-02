@@ -66,7 +66,9 @@ async def list_spider_prompts(
         if is_default is not None:
             query = query.where(SpiderPrompt.is_default == is_default)
 
-        result = await session.execute(query.order_by(SpiderPrompt.is_default.desc(), SpiderPrompt.created_at.desc()))
+        result = await session.execute(
+            query.order_by(SpiderPrompt.is_default.desc(), SpiderPrompt.created_at.desc())
+        )
         prompts = result.scalars().all()
 
         # 获取每个提示词的使用次数
@@ -78,7 +80,7 @@ async def list_spider_prompts(
                 usage_count_result = await session.execute(
                     select(func.count(MCPTool.id)).where(
                         MCPTool.spider_name == prompt.spider_name,
-                        MCPTool.selected_prompt_version == None
+                        MCPTool.selected_prompt_version == None,
                     )
                 )
             else:
@@ -86,7 +88,7 @@ async def list_spider_prompts(
                 usage_count_result = await session.execute(
                     select(func.count(MCPTool.id)).where(
                         MCPTool.spider_name == prompt.spider_name,
-                        MCPTool.selected_prompt_version == prompt.version_name
+                        MCPTool.selected_prompt_version == prompt.version_name,
                     )
                 )
             usage_count = usage_count_result.scalar() or 0
@@ -123,7 +125,7 @@ async def create_spider_prompt(request: SpiderPromptCreate):
         existing = await session.execute(
             select(SpiderPrompt).where(
                 SpiderPrompt.spider_name == request.spider_name,
-                SpiderPrompt.version_name == request.version_name
+                SpiderPrompt.version_name == request.version_name,
             )
         )
         if existing.scalar_one_or_none():
@@ -136,8 +138,7 @@ async def create_spider_prompt(request: SpiderPromptCreate):
             await session.execute(
                 update(SpiderPrompt)
                 .where(
-                    SpiderPrompt.spider_name == request.spider_name,
-                    SpiderPrompt.is_default == True
+                    SpiderPrompt.spider_name == request.spider_name, SpiderPrompt.is_default == True
                 )
                 .values(is_default=False)
             )
@@ -185,14 +186,14 @@ async def get_spider_prompt(prompt_id: int):
             usage_count_result = await session.execute(
                 select(func.count(MCPTool.id)).where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == None
+                    MCPTool.selected_prompt_version == None,
                 )
             )
         else:
             usage_count_result = await session.execute(
                 select(func.count(MCPTool.id)).where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == prompt.version_name
+                    MCPTool.selected_prompt_version == prompt.version_name,
                 )
             )
         usage_count = usage_count_result.scalar() or 0
@@ -228,7 +229,7 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
                 select(SpiderPrompt).where(
                     SpiderPrompt.spider_name == prompt.spider_name,
                     SpiderPrompt.version_name == request.version_name,
-                    SpiderPrompt.id != prompt_id
+                    SpiderPrompt.id != prompt_id,
                 )
             )
             if existing.scalar_one_or_none():
@@ -250,14 +251,14 @@ async def update_spider_prompt(prompt_id: int, request: SpiderPromptUpdate):
             usage_count_result = await session.execute(
                 select(func.count(MCPTool.id)).where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == None
+                    MCPTool.selected_prompt_version == None,
                 )
             )
         else:
             usage_count_result = await session.execute(
                 select(func.count(MCPTool.id)).where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == prompt.version_name
+                    MCPTool.selected_prompt_version == prompt.version_name,
                 )
             )
         usage_count = usage_count_result.scalar() or 0
@@ -300,7 +301,7 @@ async def delete_spider_prompt(prompt_id: int):
         usage_count_result = await session.execute(
             select(func.count(MCPTool.id)).where(
                 MCPTool.spider_name == prompt.spider_name,
-                MCPTool.selected_prompt_version == prompt.version_name
+                MCPTool.selected_prompt_version == prompt.version_name,
             )
         )
         usage_count = usage_count_result.scalar() or 0
@@ -340,7 +341,7 @@ async def set_prompt_as_default(prompt_id: int):
             usage_count_result = await session.execute(
                 select(func.count(MCPTool.id)).where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == None
+                    MCPTool.selected_prompt_version == None,
                 )
             )
             usage_count = usage_count_result.scalar() or 0
@@ -365,10 +366,7 @@ async def set_prompt_as_default(prompt_id: int):
         # 数据库事务：将该 Spider 的所有提示词 is_default 设为 False，目标提示词设为 True
         await session.execute(
             update(SpiderPrompt)
-            .where(
-                SpiderPrompt.spider_name == spider_name,
-                SpiderPrompt.is_default == True
-            )
+            .where(SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True)
             .values(is_default=False)
         )
         prompt.is_default = True
@@ -378,8 +376,7 @@ async def set_prompt_as_default(prompt_id: int):
         # 获取使用次数
         usage_count_result = await session.execute(
             select(func.count(MCPTool.id)).where(
-                MCPTool.spider_name == spider_name,
-                MCPTool.selected_prompt_version == None
+                MCPTool.spider_name == spider_name, MCPTool.selected_prompt_version == None
             )
         )
         usage_count = usage_count_result.scalar() or 0
@@ -420,7 +417,7 @@ async def get_prompt_usage(prompt_id: int):
                 .join(MCPService, MCPTool.service_id == MCPService.id)
                 .where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == None
+                    MCPTool.selected_prompt_version == None,
                 )
             )
         else:
@@ -430,19 +427,21 @@ async def get_prompt_usage(prompt_id: int):
                 .join(MCPService, MCPTool.service_id == MCPService.id)
                 .where(
                     MCPTool.spider_name == prompt.spider_name,
-                    MCPTool.selected_prompt_version == prompt.version_name
+                    MCPTool.selected_prompt_version == prompt.version_name,
                 )
             )
 
         tools = []
         for tool, service in tools_result.all():
-            tools.append({
-                "tool_id": tool.id,
-                "tool_name": tool.tool_name,
-                "service_id": service.id,
-                "service_name": service.name,
-                "service_display_name": service.display_name,
-            })
+            tools.append(
+                {
+                    "tool_id": tool.id,
+                    "tool_name": tool.tool_name,
+                    "service_id": service.id,
+                    "service_name": service.name,
+                    "service_display_name": service.display_name,
+                }
+            )
 
         response_data = {
             "prompt_id": prompt_id,
@@ -481,15 +480,14 @@ async def list_spider_prompts_by_name(spider_name: str):
             if prompt.is_default:
                 usage_count_result = await session.execute(
                     select(func.count(MCPTool.id)).where(
-                        MCPTool.spider_name == spider_name,
-                        MCPTool.selected_prompt_version == None
+                        MCPTool.spider_name == spider_name, MCPTool.selected_prompt_version == None
                     )
                 )
             else:
                 usage_count_result = await session.execute(
                     select(func.count(MCPTool.id)).where(
                         MCPTool.spider_name == spider_name,
-                        MCPTool.selected_prompt_version == prompt.version_name
+                        MCPTool.selected_prompt_version == prompt.version_name,
                     )
                 )
             usage_count = usage_count_result.scalar() or 0
@@ -526,7 +524,7 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         existing = await session.execute(
             select(SpiderPrompt).where(
                 SpiderPrompt.spider_name == spider_name,
-                SpiderPrompt.version_name == request.version_name
+                SpiderPrompt.version_name == request.version_name,
             )
         )
         if existing.scalar_one_or_none():
@@ -538,10 +536,7 @@ async def create_spider_prompt_for_spider(spider_name: str, request: SpiderPromp
         if request.is_default:
             await session.execute(
                 update(SpiderPrompt)
-                .where(
-                    SpiderPrompt.spider_name == spider_name,
-                    SpiderPrompt.is_default == True
-                )
+                .where(SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True)
                 .values(is_default=False)
             )
 
@@ -585,8 +580,7 @@ async def get_spider_default_prompt(spider_name: str):
 
         result = await session.execute(
             select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == spider_name,
-                SpiderPrompt.is_default == True
+                SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
             )
         )
         prompt = result.scalar_one_or_none()
@@ -597,7 +591,7 @@ async def get_spider_default_prompt(spider_name: str):
                 spider_name=spider_name,
                 version_name="默认",
                 description=generate_tool_description(spider),
-                is_default=True
+                is_default=True,
             )
             session.add(prompt)
             await session.commit()
@@ -606,8 +600,7 @@ async def get_spider_default_prompt(spider_name: str):
         # 获取使用次数
         usage_count_result = await session.execute(
             select(func.count(MCPTool.id)).where(
-                MCPTool.spider_name == spider_name,
-                MCPTool.selected_prompt_version == None
+                MCPTool.spider_name == spider_name, MCPTool.selected_prompt_version == None
             )
         )
         usage_count = usage_count_result.scalar() or 0
@@ -668,7 +661,7 @@ async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None
         result = await session.execute(
             select(SpiderPrompt).where(
                 SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.version_name == tool.selected_prompt_version
+                SpiderPrompt.version_name == tool.selected_prompt_version,
             )
         )
         return result.scalar_one_or_none()
@@ -676,8 +669,7 @@ async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None
         # 使用默认版本
         result = await session.execute(
             select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.is_default == True
+                SpiderPrompt.spider_name == tool.spider_name, SpiderPrompt.is_default == True
             )
         )
         return result.scalar_one_or_none()
@@ -687,8 +679,7 @@ async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> Sp
     """确保 Spider 有默认提示词版本"""
     result = await session.execute(
         select(SpiderPrompt).where(
-            SpiderPrompt.spider_name == spider_name,
-            SpiderPrompt.is_default == True
+            SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
         )
     )
     default = result.scalar_one_or_none()
@@ -698,7 +689,7 @@ async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> Sp
             spider_name=spider_name,
             version_name="默认",
             description=generate_tool_description(spider),
-            is_default=True
+            is_default=True,
         )
         session.add(default)
         await session.flush()

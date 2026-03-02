@@ -14,6 +14,7 @@ from omnidata.core import BaseWebSpider, SpiderResult
 
 class JRJNewsFlashParams(BaseModel):
     """金融界快讯参数模型"""
+
     pass
     # 不支持以下参数
     # page_size: int = Field(
@@ -66,16 +67,11 @@ class JRJNewsFlashSpider(BaseWebSpider):
                 }
 
                 # 发送 API 请求 (使用 POST 方法)
-                response = await page.request.post(
-                    self.API_URL,
-                    data=request_data,
-                    timeout=30000
-                )
+                response = await page.request.post(self.API_URL, data=request_data, timeout=30000)
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应JSON
@@ -85,7 +81,7 @@ class JRJNewsFlashSpider(BaseWebSpider):
                 if json_data.get("code") != 20000:
                     return SpiderResult(
                         success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}"
+                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
                     )
 
                 # 解析新闻列表
@@ -98,14 +94,11 @@ class JRJNewsFlashSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

@@ -14,19 +14,19 @@ from omnidata.core import BaseWebSpider, SpiderResult
 
 class IndustrySectorFlowParams(BaseModel):
     """行业板块资金流参数模型"""
+
     limit: int = Field(default=86, ge=1, le=86, description="获取数据条数，最多86条")
     sort_field: Literal["f62", "f2", "f3", "f184"] = Field(
-        default="f62",
-        description="排序字段：f62=主力净流入, f2=最新价, f3=涨跌幅, f184=主力净占比"
+        default="f62", description="排序字段：f62=主力净流入, f2=最新价, f3=涨跌幅, f184=主力净占比"
     )
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回格式：json, dict, markdown, string"
+        default="json", description="返回格式：json, dict, markdown, string"
     )
 
 
 class IndustrySectorFlowSpider(BaseWebSpider):
     """行业板块资金流 Spider"""
+
     name = "eastmoney_industry_sector_flow"
     description = "获取行业板块最新资金流向排行数据"
     version = "1.0.0"
@@ -48,18 +48,22 @@ class IndustrySectorFlowSpider(BaseWebSpider):
                 # 获取全部数据（2页，每页50条）
                 all_items = []
                 for page_num in range(1, 3):
-                    response = await page.request.get(self.API_URL, params={
-                        "fid": params.sort_field,
-                        "po": "1",
-                        "pz": "50",
-                        "pn": str(page_num),
-                        "np": "1",
-                        "fltt": "2",
-                        "invt": "2",
-                        "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                        "fs": "m:90+t:2",
-                        "fields": self.FIELDS,
-                    }, timeout=30000)
+                    response = await page.request.get(
+                        self.API_URL,
+                        params={
+                            "fid": params.sort_field,
+                            "po": "1",
+                            "pz": "50",
+                            "pn": str(page_num),
+                            "np": "1",
+                            "fltt": "2",
+                            "invt": "2",
+                            "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
+                            "fs": "m:90+t:2",
+                            "fields": self.FIELDS,
+                        },
+                        timeout=30000,
+                    )
 
                     if response.status == 200:
                         data = await response.json()
@@ -67,7 +71,7 @@ class IndustrySectorFlowSpider(BaseWebSpider):
                             all_items.extend(data.get("data", {}).get("diff", []))
 
                 # 解析数据
-                data_list = [self._parse_item(item) for item in all_items[:params.limit]]
+                data_list = [self._parse_item(item) for item in all_items[: params.limit]]
                 df = pd.DataFrame(data_list)
 
                 result_data = df.to_dict(orient="records")
@@ -77,15 +81,14 @@ class IndustrySectorFlowSpider(BaseWebSpider):
                     result_data = df.to_string()
 
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取 {len(data_list)} 条数据"
+                    success=True, data=result_data, message=f"成功获取 {len(data_list)} 条数据"
                 )
         except Exception as e:
             return SpiderResult(success=False, message=f"数据爬取失败：{str(e)}")
 
     def _parse_item(self, item: dict) -> dict:
-        def safe_float(v): return float(v) if v not in (None, "") else 0.0
+        def safe_float(v):
+            return float(v) if v not in (None, "") else 0.0
 
         main_net = safe_float(item.get("f62")) / 100000000
 
@@ -106,5 +109,9 @@ class IndustrySectorFlowSpider(BaseWebSpider):
             "小单净占比(%)": safe_float(item.get("f87")),
             "领涨股票": item.get("f204", ""),
             "领涨股票代码": item.get("f205", ""),
-            "更新时间": datetime.fromtimestamp(item.get("f124", 0)).strftime("%Y-%m-%d %H:%M:%S") if item.get("f124") else "",
+            "更新时间": (
+                datetime.fromtimestamp(item.get("f124", 0)).strftime("%Y-%m-%d %H:%M:%S")
+                if item.get("f124")
+                else ""
+            ),
         }

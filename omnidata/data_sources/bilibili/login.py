@@ -1,6 +1,7 @@
 """
 Bilibili 二维码登录模块
 """
+
 import logging
 
 from omnidata.core import BaseQRLogin, QRLoginState, QRCode
@@ -59,14 +60,24 @@ class BilibiliQRLogin(BaseQRLogin):
             qr_img = self._qr_page.locator(".login-scan-box img")
             # 等待出现二维码
             await qr_img.wait_for(timeout=2000)
-            qr_code_src = await qr_img.first.get_attribute('src')
+            qr_code_src = await qr_img.first.get_attribute("src")
 
-            return QRCode(url=qr_code_src, qr_type="哔哩哔哩官方", success=True, message="获取哔哩哔哩官方二维码成功")
+            return QRCode(
+                url=qr_code_src,
+                qr_type="哔哩哔哩官方",
+                success=True,
+                message="获取哔哩哔哩官方二维码成功",
+            )
         except Exception as e:
             logger.error(f"Failed to get Bilibili qrcode: {e}")
             # 出错就关闭，防止资源泄露
             await self.close()
-            return QRCode(url="", qr_type="哔哩哔哩官方", success=False, message=f"获取哔哩哔哩官方二维码失败: {e}")
+            return QRCode(
+                url="",
+                qr_type="哔哩哔哩官方",
+                success=False,
+                message=f"获取哔哩哔哩官方二维码失败: {e}",
+            )
 
     async def get_weixin_qr_code(self) -> QRCode:
         self._qr_context = await self.browser_context_pool.get_context("bilibili")
@@ -86,14 +97,18 @@ class BilibiliQRLogin(BaseQRLogin):
             await weixin_btn.click()
             # 等待页面加载完成
 
-            weixin_qr_img = self._qr_page.locator(".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp")
+            weixin_qr_img = self._qr_page.locator(
+                ".js_normal_login.web_qrcode_img_area .web_qrcode_img_wrp"
+            )
             # 等待出现二维码
             await weixin_qr_img.wait_for(timeout=2000)
-            qr_code_src = await weixin_qr_img.get_by_role('img').first.get_attribute('src')
+            qr_code_src = await weixin_qr_img.get_by_role("img").first.get_attribute("src")
             # 补齐完整的url
             if qr_code_src.startswith("/"):
                 qr_code_src = "https://open.weixin.qq.com" + qr_code_src
-            return QRCode(url=qr_code_src, qr_type="微信", success=True, message="获取微信二维码成功")
+            return QRCode(
+                url=qr_code_src, qr_type="微信", success=True, message="获取微信二维码成功"
+            )
 
         except Exception as e:
             logger.error(f"Failed to get Weixin qrcode: {e}")
@@ -124,12 +139,14 @@ class BilibiliQRLogin(BaseQRLogin):
                 return qr_code
 
             else:
-                return QRCode(success=False, message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}")
+                return QRCode(
+                    success=False,
+                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                )
 
         except Exception as e:
             logger.error(f"Failed to get Bilibili qrcode: {e}")
             return QRCode(success=False, message=f"获取二维码失败: {e}")
-
 
     async def verify_login_state(self) -> QRLoginState:
         """
@@ -142,7 +159,10 @@ class BilibiliQRLogin(BaseQRLogin):
 
         """
         if not self._qr_page:
-            return QRLoginState(status="failed", message="QR code page not initialized, please call get_qrcode first")
+            return QRLoginState(
+                status="failed",
+                message="QR code page not initialized, please call get_qrcode first",
+            )
 
         try:
 
@@ -181,11 +201,17 @@ class BilibiliQRLogin(BaseQRLogin):
                 # 检查是否登录
                 await page.locator(".security-title").wait_for(timeout=500)
                 flag_text = await page.locator(".security-left").first.inner_text()
-                for text in ["个人中心", "账号安全", "我的头像", "我的硬币", "我的记录", "成就勋章"]:
+                for text in [
+                    "个人中心",
+                    "账号安全",
+                    "我的头像",
+                    "我的硬币",
+                    "我的记录",
+                    "成就勋章",
+                ]:
                     if text in flag_text:
                         return QRLoginState(status="success", message="已登录")
 
                 return QRLoginState(status="not_logged_in", message="未登录")
         except Exception as e:
             return QRLoginState(status="not_logged_in", message="未登录哔哩哔哩")
-

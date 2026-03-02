@@ -25,8 +25,8 @@ class ThsGlobalNewsParams(BaseModel):
     tag: str = Field(
         default="21101",
         description="标签筛选，支持的数字ID: "
-                    "21101=全部(默认), -21101=要闻, 21103=A股, 21105=港股, "
-                    "21107=美股, 21109=基金, 21111=观点, 34843=公告",
+        "21101=全部(默认), -21101=要闻, 21103=A股, 21105=港股, "
+        "21107=美股, 21109=基金, 21111=观点, 34843=公告",
     )
 
 
@@ -39,7 +39,9 @@ class ThsGlobalNewsSpider(BaseWebSpider):
     """
 
     name = "ths_10jqka_global_news"
-    description = "获取同花顺全球财经快讯新闻列表，支持按标签筛选（全部/要闻/A股/港股/美股/基金/观点/公告）"
+    description = (
+        "获取同花顺全球财经快讯新闻列表，支持按标签筛选（全部/要闻/A股/港股/美股/基金/观点/公告）"
+    )
     version = "1.0.0"
     author = "noimank"
     platform = "同花顺10jqka"
@@ -65,7 +67,6 @@ class ThsGlobalNewsSpider(BaseWebSpider):
                 # await page.goto("https://www.10jqka.com.cn/")
                 # await page.wait_for_load_state("domcontentloaded")
 
-
                 # 构建请求参数
                 request_params = {
                     "page": str(params.page),
@@ -75,15 +76,12 @@ class ThsGlobalNewsSpider(BaseWebSpider):
 
                 # 发送请求
                 response = await page.request.get(
-                    self.API_URL,
-                    params=request_params,
-                    timeout=30000
+                    self.API_URL, params=request_params, timeout=30000
                 )
 
                 if response.status != 200:
                     return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}"
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
                 # 获取响应数据
@@ -92,8 +90,7 @@ class ThsGlobalNewsSpider(BaseWebSpider):
                 # 检查返回状态
                 if json_data.get("status", 1) != 1:
                     return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('msg', '未知错误')}"
+                        success=False, message=f"获取数据失败：{json_data.get('msg', '未知错误')}"
                     )
 
                 # 解析新闻列表
@@ -108,14 +105,11 @@ class ThsGlobalNewsSpider(BaseWebSpider):
                         "total": len(parsed_news),
                         "news_list": parsed_news,
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻"
+                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

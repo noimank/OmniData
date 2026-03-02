@@ -78,9 +78,7 @@ async def create_service(request: MCPServiceCreate):
     """
     async with get_db_session() as session:
         # 检查名称是否已存在
-        existing = await session.execute(
-            select(MCPService).where(MCPService.name == request.name)
-        )
+        existing = await session.execute(select(MCPService).where(MCPService.name == request.name))
         if existing.scalar_one_or_none():
             return error_response(f"服务名称 '{request.name}' 已存在")
 
@@ -143,17 +141,20 @@ async def create_service(request: MCPServiceCreate):
             tool_configs=tool_configs,
         )
 
-        return success_response({
-            "id": service.id,
-            "name": service.name,
-            "display_name": service.display_name,
-            "description": service.description or "",
-            "transport": service.transport,
-            "is_active": service.is_active,
-            "created_at": service.created_at,
-            "updated_at": service.updated_at,
-            "tool_count": len(request.tools),
-        }, "MCP 服务创建成功")
+        return success_response(
+            {
+                "id": service.id,
+                "name": service.name,
+                "display_name": service.display_name,
+                "description": service.description or "",
+                "transport": service.transport,
+                "is_active": service.is_active,
+                "created_at": service.created_at,
+                "updated_at": service.updated_at,
+                "tool_count": len(request.tools),
+            },
+            "MCP 服务创建成功",
+        )
 
 
 @router.get("")
@@ -171,20 +172,23 @@ async def list_services(is_active: bool | None = None):
         result = await session.execute(query.order_by(MCPService.created_at.desc()))
         services = result.scalars().all()
 
-        return success_response([
-            {
-                "id": s.id,
-                "name": s.name,
-                "display_name": s.display_name,
-                "description": s.description or "",
-                "transport": s.transport,
-                "is_active": s.is_active,
-                "created_at": s.created_at,
-                "updated_at": s.updated_at,
-                "tool_count": len(s.tools),
-            }
-            for s in services
-        ], "获取 MCP 服务列表成功")
+        return success_response(
+            [
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "display_name": s.display_name,
+                    "description": s.description or "",
+                    "transport": s.transport,
+                    "is_active": s.is_active,
+                    "created_at": s.created_at,
+                    "updated_at": s.updated_at,
+                    "tool_count": len(s.tools),
+                }
+                for s in services
+            ],
+            "获取 MCP 服务列表成功",
+        )
 
 
 @router.get("/{service_id}")
@@ -192,24 +196,29 @@ async def get_service(service_id: int):
     """获取指定 MCP 服务的详细信息"""
     async with get_db_session() as session:
         result = await session.execute(
-            select(MCPService).options(selectinload(MCPService.tools)).where(MCPService.id == service_id)
+            select(MCPService)
+            .options(selectinload(MCPService.tools))
+            .where(MCPService.id == service_id)
         )
         service = result.scalar_one_or_none()
 
         if not service:
             return error_response("服务不存在")
 
-        return success_response({
-            "id": service.id,
-            "name": service.name,
-            "display_name": service.display_name,
-            "description": service.description or "",
-            "transport": service.transport,
-            "is_active": service.is_active,
-            "created_at": service.created_at,
-            "updated_at": service.updated_at,
-            "tool_count": len(service.tools),
-        }, "获取 MCP 服务详情成功")
+        return success_response(
+            {
+                "id": service.id,
+                "name": service.name,
+                "display_name": service.display_name,
+                "description": service.description or "",
+                "transport": service.transport,
+                "is_active": service.is_active,
+                "created_at": service.created_at,
+                "updated_at": service.updated_at,
+                "tool_count": len(service.tools),
+            },
+            "获取 MCP 服务详情成功",
+        )
 
 
 @router.put("/{service_id}")
@@ -256,8 +265,7 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
             if spiders_to_remove:
                 await session.execute(
                     delete(MCPTool).where(
-                        MCPTool.service_id == service_id,
-                        MCPTool.spider_name.in_(spiders_to_remove)
+                        MCPTool.service_id == service_id, MCPTool.spider_name.in_(spiders_to_remove)
                     )
                 )
 
@@ -313,24 +321,25 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
             logging.error(f"Failed to remount service {service.name}: {e}, deactivating...")
             async with get_db_session() as rollback_session:
                 await rollback_session.execute(
-                    update(MCPService)
-                    .where(MCPService.id == service_id)
-                    .values(is_active=False)
+                    update(MCPService).where(MCPService.id == service_id).values(is_active=False)
                 )
                 await rollback_session.commit()
             return error_response(f"挂载服务失败: {str(e)}。服务已自动停用。")
 
-        return success_response({
-            "id": service.id,
-            "name": service.name,
-            "display_name": service.display_name,
-            "description": service.description or "",
-            "transport": service.transport,
-            "is_active": service.is_active,
-            "created_at": service.created_at,
-            "updated_at": service.updated_at,
-            "tool_count": len(service.tools),
-        }, "MCP 服务更新成功")
+        return success_response(
+            {
+                "id": service.id,
+                "name": service.name,
+                "display_name": service.display_name,
+                "description": service.description or "",
+                "transport": service.transport,
+                "is_active": service.is_active,
+                "created_at": service.created_at,
+                "updated_at": service.updated_at,
+                "tool_count": len(service.tools),
+            },
+            "MCP 服务更新成功",
+        )
 
 
 @router.delete("/{service_id}")
@@ -400,17 +409,20 @@ async def activate_service(service_id: int):
         except Exception as e:
             logger.warning(f"Error mounting service '{service.name}' during activation: {e}")
 
-        return success_response({
-            "id": service.id,
-            "name": service.name,
-            "display_name": service.display_name,
-            "description": service.description or "",
-            "transport": service.transport,
-            "is_active": service.is_active,
-            "created_at": service.created_at,
-            "updated_at": service.updated_at,
-            "tool_count": len(service.tools),
-        }, "MCP 服务激活成功")
+        return success_response(
+            {
+                "id": service.id,
+                "name": service.name,
+                "display_name": service.display_name,
+                "description": service.description or "",
+                "transport": service.transport,
+                "is_active": service.is_active,
+                "created_at": service.created_at,
+                "updated_at": service.updated_at,
+                "tool_count": len(service.tools),
+            },
+            "MCP 服务激活成功",
+        )
 
 
 @router.put("/{service_id}/deactivate")
@@ -418,7 +430,9 @@ async def deactivate_service(service_id: int):
     """停用 MCP 服务"""
     async with get_db_session() as session:
         result = await session.execute(
-            select(MCPService).options(selectinload(MCPService.tools)).where(MCPService.id == service_id)
+            select(MCPService)
+            .options(selectinload(MCPService.tools))
+            .where(MCPService.id == service_id)
         )
         service = result.scalar_one_or_none()
 
@@ -435,21 +449,26 @@ async def deactivate_service(service_id: int):
             await mcp_manager.unmount_service(service.name)
         except asyncio.CancelledError:
             # CancelledError 在停用服务时是预期的，因为 lifespan 清理会中断正在进行的请求
-            logger.debug(f"Service '{service.name}' deactivation caused request cancellation (expected)")
+            logger.debug(
+                f"Service '{service.name}' deactivation caused request cancellation (expected)"
+            )
         except Exception as e:
             logger.warning(f"Error unmounting service '{service.name}' during deactivation: {e}")
 
-        return success_response({
-            "id": service.id,
-            "name": service.name,
-            "display_name": service.display_name,
-            "description": service.description or "",
-            "transport": service.transport,
-            "is_active": service.is_active,
-            "created_at": service.created_at,
-            "updated_at": service.updated_at,
-            "tool_count": len(service.tools),
-        }, "MCP 服务停用成功")
+        return success_response(
+            {
+                "id": service.id,
+                "name": service.name,
+                "display_name": service.display_name,
+                "description": service.description or "",
+                "transport": service.transport,
+                "is_active": service.is_active,
+                "created_at": service.created_at,
+                "updated_at": service.updated_at,
+                "tool_count": len(service.tools),
+            },
+            "MCP 服务停用成功",
+        )
 
 
 # ========== Tool Management Endpoints ==========
@@ -468,25 +487,24 @@ async def list_service_tools(service_id: int):
             return error_response("服务不存在")
 
         # 查询工具
-        result = await session.execute(
-            select(MCPTool)
-            .where(MCPTool.service_id == service_id)
-        )
+        result = await session.execute(select(MCPTool).where(MCPTool.service_id == service_id))
         tools = result.scalars().all()
 
         responses = []
         for t in tools:
             prompt = await _get_active_tool_prompt(session, t)
-            responses.append({
-                "id": t.id,
-                "service_id": t.service_id,
-                "spider_name": t.spider_name,
-                "tool_name": t.tool_name,
-                "enabled": t.enabled,
-                "selected_prompt_version": t.selected_prompt_version,
-                "current_prompt_version_name": prompt.version_name if prompt else None,
-                "current_prompt_description": prompt.description if prompt else None,
-            })
+            responses.append(
+                {
+                    "id": t.id,
+                    "service_id": t.service_id,
+                    "spider_name": t.spider_name,
+                    "tool_name": t.tool_name,
+                    "enabled": t.enabled,
+                    "selected_prompt_version": t.selected_prompt_version,
+                    "current_prompt_version_name": prompt.version_name if prompt else None,
+                    "current_prompt_description": prompt.description if prompt else None,
+                }
+            )
 
         return success_response(responses, "获取服务工具列表成功")
 
@@ -546,7 +564,7 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
         tool_configs = {
             t.spider_name: {
                 "tool_name": t.tool_name,
-                "description": (await _get_active_tool_prompt(session, t)).description or ""
+                "description": (await _get_active_tool_prompt(session, t)).description or "",
             }
             for t in service.tools
             if t.enabled
@@ -562,15 +580,18 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
             tool_configs=tool_configs,
         )
 
-        return success_response({
-            "id": tool.id,
-            "service_id": tool.service_id,
-            "spider_name": tool.spider_name,
-            "tool_name": tool.tool_name,
-            "enabled": tool.enabled,
-            "selected_prompt_version": tool.selected_prompt_version,
-            "current_prompt_description": default_desc,
-        }, "工具添加成功")
+        return success_response(
+            {
+                "id": tool.id,
+                "service_id": tool.service_id,
+                "spider_name": tool.spider_name,
+                "tool_name": tool.tool_name,
+                "enabled": tool.enabled,
+                "selected_prompt_version": tool.selected_prompt_version,
+                "current_prompt_description": default_desc,
+            },
+            "工具添加成功",
+        )
 
 
 @router.delete("/{service_id}/tools/{tool_id}")
@@ -605,11 +626,13 @@ async def remove_tool_from_service(service_id: int, tool_id: int):
         mcp_manager = get_mcp_manager()
         await mcp_manager.unmount_service(service.name)
 
-        spider_names = [t.spider_name for t in service.tools if t.enabled and t.spider_name != spider_name]
+        spider_names = [
+            t.spider_name for t in service.tools if t.enabled and t.spider_name != spider_name
+        ]
         tool_configs = {
             t.spider_name: {
                 "tool_name": t.tool_name,
-                "description": (await _get_active_tool_prompt(session, t)).description or ""
+                "description": (await _get_active_tool_prompt(session, t)).description or "",
             }
             for t in service.tools
             if t.enabled and t.spider_name != spider_name
@@ -654,17 +677,24 @@ async def get_tool_prompt_version(service_id: int, tool_id: int):
         all_prompts = prompts_result.scalars().all()
 
         available_versions = [
-            {"version_name": p.version_name, "description": p.description, "is_default": p.is_default}
+            {
+                "version_name": p.version_name,
+                "description": p.description,
+                "is_default": p.is_default,
+            }
             for p in all_prompts
         ]
 
-        return success_response({
-            "tool_id": tool.id,
-            "spider_name": tool.spider_name,
-            "current_version": current_prompt.version_name if current_prompt else None,
-            "current_description": current_prompt.description if current_prompt else None,
-            "available_versions": available_versions,
-        }, "获取工具提示词版本成功")
+        return success_response(
+            {
+                "tool_id": tool.id,
+                "spider_name": tool.spider_name,
+                "current_version": current_prompt.version_name if current_prompt else None,
+                "current_description": current_prompt.description if current_prompt else None,
+                "available_versions": available_versions,
+            },
+            "获取工具提示词版本成功",
+        )
 
 
 @router.put("/{service_id}/tools/{tool_id}/prompt-version")
@@ -692,12 +722,14 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
         prompt_result = await session.execute(
             select(SpiderPrompt).where(
                 SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.version_name == request.version_name
+                SpiderPrompt.version_name == request.version_name,
             )
         )
         prompt = prompt_result.scalar_one_or_none()
         if not prompt:
-            return error_response(f"Spider '{tool.spider_name}' 不存在提示词版本 '{request.version_name}'")
+            return error_response(
+                f"Spider '{tool.spider_name}' 不存在提示词版本 '{request.version_name}'"
+            )
 
         # 更新工具的提示词版本
         tool.selected_prompt_version = request.version_name if not prompt.is_default else None
@@ -708,7 +740,9 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
         try:
             await mcp_manager.unmount_service(service.name)
         except Exception as e:
-            logger.warning(f"Error unmounting service '{service.name}' during prompt version change: {e}")
+            logger.warning(
+                f"Error unmounting service '{service.name}' during prompt version change: {e}"
+            )
 
         # 重新加载所有工具配置
         spider_names = [t.spider_name for t in service.tools if t.enabled]
@@ -729,7 +763,9 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
                 tool_configs=tool_configs,
             )
         except Exception as e:
-            logger.warning(f"Error mounting service '{service.name}' during prompt version change: {e}")
+            logger.warning(
+                f"Error mounting service '{service.name}' during prompt version change: {e}"
+            )
 
         # 获取所有可用版本
         prompts_result = await session.execute(
@@ -740,17 +776,24 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
         all_prompts = prompts_result.scalars().all()
 
         available_versions = [
-            {"version_name": p.version_name, "description": p.description, "is_default": p.is_default}
+            {
+                "version_name": p.version_name,
+                "description": p.description,
+                "is_default": p.is_default,
+            }
             for p in all_prompts
         ]
 
-        return success_response({
-            "tool_id": tool.id,
-            "spider_name": tool.spider_name,
-            "current_version": prompt.version_name if not prompt.is_default else None,
-            "current_description": prompt.description,
-            "available_versions": available_versions,
-        }, "工具提示词版本设置成功")
+        return success_response(
+            {
+                "tool_id": tool.id,
+                "spider_name": tool.spider_name,
+                "current_version": prompt.version_name if not prompt.is_default else None,
+                "current_description": prompt.description,
+                "available_versions": available_versions,
+            },
+            "工具提示词版本设置成功",
+        )
 
 
 @router.delete("/{service_id}/tools/{tool_id}/prompt-version")
@@ -783,7 +826,9 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
         try:
             await mcp_manager.unmount_service(service.name)
         except Exception as e:
-            logger.warning(f"Error unmounting service '{service.name}' during prompt version clear: {e}")
+            logger.warning(
+                f"Error unmounting service '{service.name}' during prompt version clear: {e}"
+            )
 
         spider_names = [t.spider_name for t in service.tools if t.enabled]
         tool_configs = {}
@@ -803,7 +848,9 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
                 tool_configs=tool_configs,
             )
         except Exception as e:
-            logger.warning(f"Error mounting service '{service.name}' during prompt version clear: {e}")
+            logger.warning(
+                f"Error mounting service '{service.name}' during prompt version clear: {e}"
+            )
 
         # 获取默认提示词
         default_prompt = await _get_active_tool_prompt(session, tool)
@@ -817,17 +864,24 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
         all_prompts = prompts_result.scalars().all()
 
         available_versions = [
-            {"version_name": p.version_name, "description": p.description, "is_default": p.is_default}
+            {
+                "version_name": p.version_name,
+                "description": p.description,
+                "is_default": p.is_default,
+            }
             for p in all_prompts
         ]
 
-        return success_response({
-            "tool_id": tool.id,
-            "spider_name": tool.spider_name,
-            "current_version": None,
-            "current_description": default_prompt.description if default_prompt else None,
-            "available_versions": available_versions,
-        }, "工具提示词版本已恢复默认")
+        return success_response(
+            {
+                "tool_id": tool.id,
+                "spider_name": tool.spider_name,
+                "current_version": None,
+                "current_description": default_prompt.description if default_prompt else None,
+                "available_versions": available_versions,
+            },
+            "工具提示词版本已恢复默认",
+        )
 
 
 # ========== Spider Info Endpoints ==========
@@ -849,14 +903,16 @@ async def list_available_spiders():
             has_params_model = True
             parameter_info = extract_parameter_info(spider.params_model)
 
-        responses.append({
-            "name": info["name"],
-            "description": info.get("description", ""),
-            "platform": info.get("platform", ""),
-            "version": info.get("version", ""),
-            "has_params_model": has_params_model,
-            "parameter_info": parameter_info,
-        })
+        responses.append(
+            {
+                "name": info["name"],
+                "description": info.get("description", ""),
+                "platform": info.get("platform", ""),
+                "version": info.get("version", ""),
+                "has_params_model": has_params_model,
+                "parameter_info": parameter_info,
+            }
+        )
 
     return success_response(responses, "获取可用 Spider 列表成功")
 
@@ -871,7 +927,7 @@ async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None
         result = await session.execute(
             select(SpiderPrompt).where(
                 SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.version_name == tool.selected_prompt_version
+                SpiderPrompt.version_name == tool.selected_prompt_version,
             )
         )
         return result.scalar_one_or_none()
@@ -879,8 +935,7 @@ async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None
         # 使用默认版本
         result = await session.execute(
             select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.is_default == True
+                SpiderPrompt.spider_name == tool.spider_name, SpiderPrompt.is_default == True
             )
         )
         return result.scalar_one_or_none()
@@ -890,8 +945,7 @@ async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> Sp
     """确保 Spider 有默认提示词版本"""
     result = await session.execute(
         select(SpiderPrompt).where(
-            SpiderPrompt.spider_name == spider_name,
-            SpiderPrompt.is_default == True
+            SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
         )
     )
     default = result.scalar_one_or_none()
@@ -901,7 +955,7 @@ async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> Sp
             spider_name=spider_name,
             version_name="默认",
             description=generate_tool_description(spider),
-            is_default=True
+            is_default=True,
         )
         session.add(default)
         await session.flush()

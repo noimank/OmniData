@@ -18,12 +18,15 @@ from omnidata.core import BaseWebSpider, SpiderResult
 class ActiveDepartmentParams(BaseModel):
     """活跃营业部参数模型"""
 
-    start_date: str = Field(default="", description="开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天")
-    end_date: str = Field(default="", description="结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天")
+    start_date: str = Field(
+        default="", description="开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天"
+    )
+    end_date: str = Field(
+        default="", description="结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天"
+    )
     limit: int = Field(default=60, ge=1, le=1000, description="获取数据条数，最多1000条")
     data_format: Literal["json", "dict", "markdown", "string"] = Field(
-        default="json",
-        description="返回数据格式，可选值：json, dict, string, markdown"
+        default="json", description="返回数据格式，可选值：json, dict, string, markdown"
     )
 
 
@@ -83,8 +86,7 @@ class ActiveDepartmentSpider(BaseWebSpider):
                     datetime.strptime(end_date, "%Y-%m-%d")
                 except ValueError:
                     return SpiderResult(
-                        success=False,
-                        message="日期格式错误，请使用 YYYY-MM-DD 格式，如 2026-01-14"
+                        success=False, message="日期格式错误，请使用 YYYY-MM-DD 格式，如 2026-01-14"
                     )
 
                 # 构建过滤条件
@@ -112,12 +114,13 @@ class ActiveDepartmentSpider(BaseWebSpider):
                     }
 
                     # 发送请求
-                    response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+                    response = await page.request.get(
+                        self.API_URL, params=request_params, timeout=30000
+                    )
 
                     if response.status != 200:
                         return SpiderResult(
-                            success=False,
-                            message=f"请求失败，状态码：{response.status}"
+                            success=False, message=f"请求失败，状态码：{response.status}"
                         )
 
                     # 获取响应文本
@@ -125,14 +128,15 @@ class ActiveDepartmentSpider(BaseWebSpider):
 
                     # 移除 JSONP 回调函数
                     import re
-                    json_match = re.search(r'jQuery\d+_\d+\((.*)\);?', response_text)
+
+                    json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
                     if json_match:
                         json_str = json_match.group(1)
                     elif response_text.startswith("jQuery"):
-                        start_idx = response_text.find('(')
-                        end_idx = response_text.rfind(')')
+                        start_idx = response_text.find("(")
+                        end_idx = response_text.rfind(")")
                         if start_idx != -1 and end_idx != -1:
-                            json_str = response_text[start_idx + 1:end_idx]
+                            json_str = response_text[start_idx + 1 : end_idx]
                         else:
                             json_str = response_text
                     else:
@@ -140,21 +144,18 @@ class ActiveDepartmentSpider(BaseWebSpider):
 
                     # 解析 JSON
                     import json
+
                     try:
                         data = json.loads(json_str)
                     except json.JSONDecodeError as e:
-                        return SpiderResult(
-                            success=False,
-                            message=f"解析响应数据失败：{str(e)}"
-                        )
+                        return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
                     # 检查返回状态
                     result = data.get("result", {})
                     if not result:
                         if page_number == 1:
                             return SpiderResult(
-                                success=False,
-                                message=f"获取数据失败，请检查日期范围是否正确"
+                                success=False, message=f"获取数据失败，请检查日期范围是否正确"
                             )
                         break
 
@@ -178,11 +179,11 @@ class ActiveDepartmentSpider(BaseWebSpider):
                     return SpiderResult(
                         success=True,
                         data=[],
-                        message=f"指定日期范围 {start_date} 至 {end_date} 无活跃营业部数据"
+                        message=f"指定日期范围 {start_date} 至 {end_date} 无活跃营业部数据",
                     )
 
                 # 截取到指定数量
-                all_data = all_data[:params.limit]
+                all_data = all_data[: params.limit]
 
                 # 解析数据
                 result_data = self._parse_department_data(all_data)
@@ -206,7 +207,7 @@ class ActiveDepartmentSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_markdown(),
                         },
-                        message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
                 if params.data_format == "string":
                     return SpiderResult(
@@ -215,7 +216,7 @@ class ActiveDepartmentSpider(BaseWebSpider):
                             "stats": stats_info,
                             "records": df.to_string(),
                         },
-                        message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）"
+                        message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）",
                     )
 
                 # 默认返回 dict 格式
@@ -225,104 +226,103 @@ class ActiveDepartmentSpider(BaseWebSpider):
                         "stats": stats_info,
                         "records": df.to_dict(orient="records"),
                     },
-                    message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）"
+                    message=f"成功获取活跃营业部数据（共 {len(result_data)} 条，总计 {total} 条）",
                 )
 
         except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}"
-            )
+            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
     def _parse_department_data(self, data: list) -> list[dict]:
-            """
-            解析活跃营业部数据
+        """
+        解析活跃营业部数据
 
-            Args:
-                data: API返回的数据数组
+        Args:
+            data: API返回的数据数组
 
-            Returns:
-                解析后的数据列表
-            """
-            result = []
+        Returns:
+            解析后的数据列表
+        """
+        result = []
 
-            for item in data:
-                parsed_item = self._parse_single_item(item)
-                if parsed_item:
-                    result.append(parsed_item)
+        for item in data:
+            parsed_item = self._parse_single_item(item)
+            if parsed_item:
+                result.append(parsed_item)
 
-            return result
+        return result
 
     def _parse_single_item(self, item: dict) -> dict | None:
-            """
-            解析单条活跃营业部数据
+        """
+        解析单条活跃营业部数据
 
-            Args:
-                item: API返回的单条数据
+        Args:
+            item: API返回的单条数据
 
-            Returns:
-                解析后的数据字典
-            """
+        Returns:
+            解析后的数据字典
+        """
 
-            def safe_float(value) -> float:
-                """安全地将值转换为 float"""
-                if value is None or value == "":
-                    return 0.0
-                try:
-                    return float(value)
-                except (ValueError, TypeError):
-                    return 0.0
+        def safe_float(value) -> float:
+            """安全地将值转换为 float"""
+            if value is None or value == "":
+                return 0.0
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return 0.0
 
-            def safe_int(value) -> int:
-                """安全地将值转换为 int"""
-                if value is None or value == "":
-                    return 0
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return 0
+        def safe_int(value) -> int:
+            """安全地将值转换为 int"""
+            if value is None or value == "":
+                return 0
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return 0
 
-            def safe_str(value) -> str:
-                """安全地将值转换为 str"""
-                if value is None:
-                    return ""
-                return str(value)
+        def safe_str(value) -> str:
+            """安全地将值转换为 str"""
+            if value is None:
+                return ""
+            return str(value)
 
-            # 营业部信息
-            operate_dept_name = safe_str(item.get("OPERATEDEPT_NAME"))  # 营业部名称
-            operate_dept_code = safe_str(item.get("OPERATEDEPT_CODE"))  # 营业部代码
-            operate_dept_code_old = safe_str(item.get("OPERATEDEPT_CODE_OLD"))  # 旧营业部代码
-            org_name_abbr = safe_str(item.get("ORG_NAME_ABBR"))  # 机构简称
+        # 营业部信息
+        operate_dept_name = safe_str(item.get("OPERATEDEPT_NAME"))  # 营业部名称
+        operate_dept_code = safe_str(item.get("OPERATEDEPT_CODE"))  # 营业部代码
+        operate_dept_code_old = safe_str(item.get("OPERATEDEPT_CODE_OLD"))  # 旧营业部代码
+        org_name_abbr = safe_str(item.get("ORG_NAME_ABBR"))  # 机构简称
 
-            # 日期信息
-            onlist_date_str = item.get("ONLIST_DATE", "")[:10] if item.get("ONLIST_DATE") else ""  # 上榜日期
+        # 日期信息
+        onlist_date_str = (
+            item.get("ONLIST_DATE", "")[:10] if item.get("ONLIST_DATE") else ""
+        )  # 上榜日期
 
-            # 上榜次数
-            buyer_appear_num = safe_int(item.get("BUYER_APPEAR_NUM"))  # 买方上榜次数
-            seller_appear_num = safe_int(item.get("SELLER_APPEAR_NUM"))  # 卖方上榜次数
+        # 上榜次数
+        buyer_appear_num = safe_int(item.get("BUYER_APPEAR_NUM"))  # 买方上榜次数
+        seller_appear_num = safe_int(item.get("SELLER_APPEAR_NUM"))  # 卖方上榜次数
 
-            # 金额相关（单位：元）
-            total_buy_amt = safe_float(item.get("TOTAL_BUYAMT"))  # 总买入金额
-            total_sell_amt = safe_float(item.get("TOTAL_SELLAMT"))  # 总卖出金额
-            total_net_amt = safe_float(item.get("TOTAL_NETAMT"))  # 总净买入金额
+        # 金额相关（单位：元）
+        total_buy_amt = safe_float(item.get("TOTAL_BUYAMT"))  # 总买入金额
+        total_sell_amt = safe_float(item.get("TOTAL_SELLAMT"))  # 总卖出金额
+        total_net_amt = safe_float(item.get("TOTAL_NETAMT"))  # 总净买入金额
 
-            # 交易股票
-            buy_stock = safe_str(item.get("BUY_STOCK"))  # 买入股票代码
-            security_name_abbr = safe_str(item.get("SECURITY_NAME_ABBR"))  # 股票名称
+        # 交易股票
+        buy_stock = safe_str(item.get("BUY_STOCK"))  # 买入股票代码
+        security_name_abbr = safe_str(item.get("SECURITY_NAME_ABBR"))  # 股票名称
 
-            # 构建返回数据
-            result = {
-                "营业部名称": operate_dept_name,
-                "营业部代码": operate_dept_code,
-                "机构简称": org_name_abbr,
-                "上榜日期": onlist_date_str,
-                "买入个股数": buyer_appear_num,
-                "卖出个股数": seller_appear_num,
-                "总买入金额(万元)": round(total_buy_amt / 10000, 2),
-                "总卖出金额(万元)": round(total_sell_amt / 10000, 2),
-                "总买卖净额(万元)": round(total_net_amt / 10000, 2),
-                "交易股票": buy_stock,
-                "股票名称": security_name_abbr,
-            }
+        # 构建返回数据
+        result = {
+            "营业部名称": operate_dept_name,
+            "营业部代码": operate_dept_code,
+            "机构简称": org_name_abbr,
+            "上榜日期": onlist_date_str,
+            "买入个股数": buyer_appear_num,
+            "卖出个股数": seller_appear_num,
+            "总买入金额(万元)": round(total_buy_amt / 10000, 2),
+            "总卖出金额(万元)": round(total_sell_amt / 10000, 2),
+            "总买卖净额(万元)": round(total_net_amt / 10000, 2),
+            "交易股票": buy_stock,
+            "股票名称": security_name_abbr,
+        }
 
-            return result
+        return result

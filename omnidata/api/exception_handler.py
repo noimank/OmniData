@@ -14,9 +14,7 @@ from omnidata.core.exceptions import OmniDataError
 logger = logging.getLogger(__name__)
 
 
-async def omnidata_exception_handler(
-    request: Request, exc: OmniDataError
-) -> JSONResponse:
+async def omnidata_exception_handler(request: Request, exc: OmniDataError) -> JSONResponse:
     """处理自定义业务异常"""
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -24,9 +22,7 @@ async def omnidata_exception_handler(
     )
 
 
-async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     """处理 HTTP 异常"""
     return JSONResponse(
         status_code=exc.status_code,
