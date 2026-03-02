@@ -161,6 +161,8 @@ class MySpider(BaseWebSpider):
             
 ```
 
+注：编写完成新爬虫任务之后需要使用uv run python main.py --run <name>  来运行爬虫测试，验证爬虫正常工作
+
 ### 目录结构
 
 ```
