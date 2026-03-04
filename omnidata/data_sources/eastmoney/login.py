@@ -59,17 +59,17 @@ class EastmoneyQRLogin(BaseQRLogin):
                 "#mobile_login_content img"
             ).first.click()
 
-            #  获取二维码图片URL
-            qr_code_src = (
-                await self._qr_page.locator("#frame_login")
-                .content_frame.locator("#qrcode")
-                .get_attribute("src")
+            # 等待二维码加载
+            await self._qr_page.locator("#frame_login").content_frame.locator("#qrcode").wait_for(
+                state="visible", timeout=3000
             )
-            if qr_code_src.startswith("//"):
-                qr_code_src = "https:" + qr_code_src
+
+            # 截取二维码图片并转换为 Base64（避免二次访问导致二维码刷新）
+            frame = self._qr_page.locator("#frame_login").content_frame
+            qr_code_base64 = await self.screenshot_element_to_base64(frame, "#qrcode")
 
             return QRCode(
-                url=qr_code_src,
+                url=qr_code_base64,
                 qr_type="东方财富官方",
                 success=True,
                 message="东方财富官方二维码成功",
@@ -165,6 +165,9 @@ class EastmoneyQRLogin(BaseQRLogin):
             包含登录状态的字典
 
         """
+        # 如果已经登录成功，直接返回成功状态（避免重复验证）
+        if self._login_status.status == "success":
+            return self._login_status
         if not self._qr_page:
             return QRLoginState(
                 status="failed",
@@ -174,7 +177,7 @@ class EastmoneyQRLogin(BaseQRLogin):
         try:
             current_url = self._qr_page.url
             # 登录完成后会跳转到：https://passport2.eastmoney.com/pub/BasicInfo
-            if "BasicInfo" not in current_url:
+            if "BasicInfo".lower() not in current_url.lower():
                 return QRLoginState(status="waiting", message="正在登录中..........")
             # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
             # 保存登录状态

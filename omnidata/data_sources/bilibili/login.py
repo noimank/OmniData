@@ -1,7 +1,7 @@
 """
 Bilibili 二维码登录模块
 """
-
+import asyncio
 import logging
 
 from omnidata.core import BaseQRLogin, QRLoginState, QRCode
@@ -60,10 +60,15 @@ class BilibiliQRLogin(BaseQRLogin):
             qr_img = self._qr_page.locator(".login-scan-box img")
             # 等待出现二维码
             await qr_img.wait_for(timeout=2000)
-            qr_code_src = await qr_img.first.get_attribute("src")
+            await asyncio.sleep(0.7)
+
+            # 截取二维码图片并转换为 Base64（避免二次访问导致二维码刷新）
+            qr_code_base64 = await self.screenshot_element_to_base64(
+                self._qr_page, ".login-scan-box img"
+            )
 
             return QRCode(
-                url=qr_code_src,
+                url=qr_code_base64,
                 qr_type="哔哩哔哩官方",
                 success=True,
                 message="获取哔哩哔哩官方二维码成功",
@@ -158,6 +163,10 @@ class BilibiliQRLogin(BaseQRLogin):
             包含登录状态的字典
 
         """
+        # 如果已经登录成功，直接返回成功状态（避免重复验证）
+        if self._login_status.status == "success":
+            return self._login_status
+
         if not self._qr_page:
             return QRLoginState(
                 status="failed",

@@ -167,14 +167,12 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
             code_box_img = self._qr_page.locator(".code-box img")
             await code_box_img.wait_for(state="visible")
 
-            qr_code_src = await code_box_img.first.get_attribute("src")
-            # 补齐完整的url
-            if qr_code_src.startswith("/"):
-                qr_code_src = "https://upass.10jqka.com.cn/" + qr_code_src
+            # 截取二维码图片并转换为 Base64（避免二次访问导致二维码刷新）
+            qr_code_base64 = await self.screenshot_element_to_base64(self._qr_page, ".code-box img")
 
             return QRCode(
                 success=True,
-                url=qr_code_src,
+                url=qr_code_base64,
                 qr_type="同花顺APP",
                 message="获取同花顺APP二维码成功",
             )
@@ -195,6 +193,10 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         Returns:
             包含登录状态的字典
         """
+        # 如果已经登录成功，直接返回成功状态（避免重复验证）
+        if self._login_status.status == "success":
+            return self._login_status
+
         if not self._qr_page:
             return QRLoginState(
                 status="failed",

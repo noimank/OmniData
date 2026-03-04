@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import base64
 import logging
 
 from omnidata.core import BaseQRLogin, QRLoginState, QRCode
@@ -181,14 +182,18 @@ class ThsIwencaiQRLogin(BaseQRLogin):
             # 获取二维码图片URL
             qr_code_selector = ".code-box img"
             await frame.locator(qr_code_selector).wait_for(state="visible")
-            qr_code_url = await frame.locator(qr_code_selector).first.get_attribute("src")
-            if qr_code_url.startswith("/"):
-                qr_code_url = "https://upass.iwencai.com" + qr_code_url
 
-            logger.info(f"获取到同花顺APP登录二维码URL：{qr_code_url}")
+            # 注意：frame_locator 返回的是 FrameLocator，需要先获取实际的 Frame
+            # 但 screenshot_element_to_base64 需要 Page 对象，所以我们直接在这里截图
+            element = frame.locator(qr_code_selector).first
+            screenshot_bytes = await element.screenshot(type="png")
+            image_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+            qr_code_base64 = f"data:image/png;base64,{image_base64}"
+
+            logger.info(f"获取到同花顺APP登录二维码（Base64格式）")
 
             return QRCode(
-                success=True, url=qr_code_url, qr_type="同花顺", message="获取同花顺二维码成功"
+                success=True, url=qr_code_base64, qr_type="同花顺", message="获取同花顺二维码成功"
             )
 
         except Exception as e:
@@ -207,6 +212,10 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         Returns:
             包含登录状态的字典
         """
+        # 如果已经登录成功，直接返回成功状态（避免重复验证）
+        if self._login_status.status == "success":
+            return self._login_status
+
         if not self._qr_page:
             return QRLoginState(
                 status="failed",

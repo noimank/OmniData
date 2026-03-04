@@ -2,6 +2,7 @@
 二维码登录基类模块
 """
 
+import base64
 import logging
 from abc import abstractmethod
 from typing import Any, Literal
@@ -202,3 +203,36 @@ class BaseQRLogin(BaseHelper):
             "author": cls.author,
             "platform": cls.platform,
         }
+
+    async def screenshot_element_to_base64(self, page: Page, selector: str) -> str:
+        """
+        截取页面元素并转换为 Base64 编码的 Data URI
+        受 https://github.com/noimank/OmniData/issues/1 启发，有些平台二维码二次访问会变化，进而采用截图的方式保证二维码的一致性
+
+        Args:
+            page: Playwright Page 实例
+            selector: 元素选择器
+
+        Returns:
+            Base64 编码的 Data URI，格式：data:image/png;base64,iVBORw0KG...
+
+        Raises:
+            Exception: 截图失败时抛出异常
+        """
+        try:
+            # 定位元素
+            element = page.locator(selector)
+            await element.wait_for(state="visible", timeout=5000)
+
+            # 截图并获取字节数据
+            screenshot_bytes = await element.screenshot(type="png")
+
+            # 转换为 Base64
+            image_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+            # 返回 Data URI 格式
+            return f"data:image/png;base64,{image_base64}"
+
+        except Exception as e:
+            logger.error(f"Failed to screenshot element {selector}: {e}")
+            raise Exception(f"截图元素失败: {str(e)}")
