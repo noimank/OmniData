@@ -220,7 +220,7 @@ class BrowserContextPool:
 
         # === 阶段1.5：在锁外验证（避免阻塞其他请求） ===
         if metadata is not None:
-            if await self._verify_context_quick(metadata.context):
+            if self._verify_context_quick(metadata.context):
                 self._stats["total_contexts_reused"] += 1
                 logger.debug(f"Context reused: namespace={namespace}")
                 return metadata.context
@@ -246,9 +246,17 @@ class BrowserContextPool:
 
         # === 阶段4：插入池中（加锁，二次检查防止竞态） ===
         async with self._lock:
+            # 二次检查：如果已存在（并发创建），关闭新创建的，使用已有的
+            existing_metadata = self._contexts.get(key)
+            if existing_metadata is not None:
+                # 已有其他请求创建了相同的 context，关闭当前创建的
+                await self._close_context(context)
+                logger.debug(f"Context already exists, reusing: namespace={namespace}")
+                return existing_metadata.context
+
             # 仅在启用 LRU 时进行容量检查和淘汰
             if enable_lru:
-                # 二次检查：确保不超过 max_pool_size（修复竞态条件）
+                # 确保不超过 max_pool_size
                 while len(self._contexts) >= self._max_pool_size:
                     await self._evict_lru()
 
@@ -459,18 +467,16 @@ class BrowserContextPool:
             logger.error(f"Failed to get storage state for {namespace}: {e}")
             return None
 
-    async def _verify_context_quick(self, context: BrowserContext) -> bool:
+    def _verify_context_quick(self, context: BrowserContext) -> bool:
         """
-        快速验证 context 是否可用（终极优化版）
+        快速验证 context 是否可用（纯内存检查）
 
-        优化策略（按性能从高到低）：
-        1. 检查内部 _closing_or_closed 属性（纯内存访问，约 100-1000x 更快）
-        2. 利用现有 page 进行轻量级 evaluate 检查（约 5-10x 更快）
-        3. 兜底创建新 page 进行验证（保持原有可靠性）
+        优化策略：
+        - 仅检查内部状态，避免任何网络调用
+        - 依赖 browser.is_connected() 和 context._closing_or_closed 状态
 
-        性能提升：
-        - 已关闭的 context：约 100-1000x 更快（纯布尔值检查）
-        - 有活跃 page 的 context：约 5-10x 更快（避免 new_page 开销）
+        在正常情况下（无浏览器崩溃/进程被杀），这两个状态指示器是 100% 可靠的。
+        即使在极端异常情况下误判为健康，下次使用时会自然失败并触发重建。
 
         Args:
             context: 要验证的 BrowserContext
@@ -479,25 +485,15 @@ class BrowserContextPool:
             bool: Context 是否可用
         """
         try:
-            # 策略1: 快速状态检查（纯内存操作，约 100-1000x 更快）
-            # 在不考虑极端异常（浏览器崩溃/进程被杀）的情况下，
-            # browser.is_connected() 和 context._closing_or_closed 是 100% 可靠的状态指示器
-            if self._browser and self._browser.is_connected():
-                # browser 已连接，检查 context 状态
-                impl_obj = getattr(context, "_impl_obj", None)
-                # _closing_or_closed=False → 健康，_closing_or_closed=True → 已关闭
-                return not (impl_obj and getattr(impl_obj, "_closing_or_closed", False))
+            # 检查 browser 连接状态
+            if not self._browser or not self._browser.is_connected():
+                return False
 
-            # browser 未连接，降级到实际验证
-            # 策略2: 如果 context 中有现有 page，用轻量级 evaluate 检查（约 5-10x 更快）
-            pages = context.pages
-            if pages:
-                await pages[0].evaluate("() => true")
-                return True
+            # 检查 context 内部状态（纯内存操作）
+            impl_obj = getattr(context, "_impl_obj", None)
+            if impl_obj and getattr(impl_obj, "_closing_or_closed", False):
+                return False
 
-            # 策略3: 无现有 page 时，创建临时 page 验证（较少见场景）
-            test_page = await context.new_page()
-            await test_page.close()
             return True
         except Exception:
             return False

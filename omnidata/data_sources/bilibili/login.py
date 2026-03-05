@@ -1,6 +1,7 @@
 """
 Bilibili 二维码登录模块
 """
+
 import asyncio
 import logging
 

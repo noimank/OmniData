@@ -34,15 +34,12 @@ class LifespanTaskManager:
     管理 lifespan 上下文的专用 asyncio 任务
 
     关键改进:
-    - 使用弱引用打破循环引用链 (LifespanTaskManager -> FastAPI -> Routes -> Mount)
-    - 添加 cleanup() 方法显式清理所有引用
     - 确保 __aenter__ 和 __aexit__ 在同一个任务上下文中调用，避免 ContextVar 错误
+    - 添加 cleanup() 方法显式清理所有引用
     """
 
-    def __init__(self, lifespan_context: Any, app: FastAPI, service_name: str):
+    def __init__(self, lifespan_context: Any, service_name: str):
         self._lifespan_context = lifespan_context
-        # 使用弱引用打破循环引用链，防止内存泄漏
-        self._app_ref = weakref.ref(app)
         self._service_name = service_name
         self._task: asyncio.Task | None = None
         self._is_started = False
@@ -127,7 +124,6 @@ class LifespanTaskManager:
         在服务卸载时必须调用，以打破所有可能的引用链
         """
         self._lifespan_context = None
-        self._app_ref = None
         self._task = None
         self._stop_event = None
         self._startup_complete = None
@@ -178,7 +174,7 @@ class MCPServiceInfo:
             finally:
                 self.lifespan_task_manager = None
 
-        # 清理 FastMCP 工具注册表 (FastMCP 内部使用 dict 存储)
+        # 清理 FastMCP 工具注册表
         if self.mcp_server is not None:
             try:
                 if hasattr(self.mcp_server, "_tools"):
@@ -200,14 +196,13 @@ class MCPServiceInfo:
 
 class MCPManager:
     """
-    MCP 服务管理器 - 修复内存泄漏版本
+    MCP 服务管理器 - 优化版本
 
     关键改进:
     1. 使用 FastAPI 官方推荐的 Mount 删除方法 (isinstance + del)
     2. 显式清理 FastMCP 所有资源引用
-    3. 使用弱引用打破循环引用链
-    4. 清除 FastAPI 路由缓存和 OpenAPI 缓存
-    5. 显式调用垃圾回收
+    3. 清除 FastAPI 路由缓存和 OpenAPI 缓存
+    4. 显式调用垃圾回收
 
     参考:
     - FastAPI GitHub #9995: 正确的 sub-app unmount 方法
@@ -312,7 +307,6 @@ class MCPManager:
                     lifespan_context = http_app.lifespan(self._fastapi_app)
                     lifespan_task_manager = LifespanTaskManager(
                         lifespan_context=lifespan_context,
-                        app=self._fastapi_app,
                         service_name=service_name,
                     )
                     # 启动 lifespan 任务（确保同上下文的 __aenter__ 和 __aexit__）
@@ -343,7 +337,7 @@ class MCPManager:
         """
         内部方法：卸载 MCP 服务（假设已持有锁）
 
-        修复内存泄漏的完整实现，参考 FastAPI GitHub #9995 官方推荐方法
+        完整的资源清理实现，参考 FastAPI GitHub #9995 官方推荐方法
 
         清理步骤:
         1. 从服务字典中移除（先移除防止重复清理）
@@ -377,9 +371,9 @@ class MCPManager:
         mount_removed = False
         routes_to_remove = []
 
-        # 首先收集要删除的路由索引
+        # 收集要删除的路由索引
         for index, route in enumerate(list(self._app.router.routes)):
-            # 使用 isinstance(Mount) 精确匹配，而非字符串前缀匹配
+            # 使用 isinstance(Mount) 精确匹配
             if isinstance(route, Mount) and route.path == mount_path:
                 routes_to_remove.append(index)
                 mount_removed = True
@@ -395,17 +389,17 @@ class MCPManager:
                 f"No Mount route found for '{mount_path}', may have been already removed"
             )
 
-        # 步骤 4: 清除路由缓存（重要！防止旧路由被继续使用）
+        # 步骤 4: 清除路由缓存
         if hasattr(self._app.router, "_route_cache"):
             self._app.router._route_cache.clear()
             logger.debug(f"Cleared route cache for '{service_name}'")
 
-        # 步骤 5: 清除 OpenAPI 缓存（确保 Swagger 文档更新）
+        # 步骤 5: 清除 OpenAPI 缓存
         if hasattr(self._app, "openapi_schema"):
             self._app.openapi_schema = None
             logger.debug(f"Cleared OpenAPI schema cache for '{service_name}'")
 
-        # 步骤 6: 显式清理服务资源引用（调用 MCPServiceInfo 的清理方法）
+        # 步骤 6: 显式清理服务资源引用
         try:
             service_info.cleanup_resources()
         except Exception as e:
@@ -429,8 +423,6 @@ class MCPManager:
 
         在应用关闭时调用，会等待所有清理任务完成。
 
-        改进: 添加显式垃圾回收，确保释放所有资源
-
         Args:
             timeout: 每个服务清理的超时时间（秒）
         """
@@ -449,13 +441,12 @@ class MCPManager:
                 except Exception as e:
                     logger.error(f"Error cleaning up service '{service_name}': {e}")
 
-            # 额外保护：确保服务字典被清空
+            # 确保服务字典被清空
             self._services.clear()
 
-        # 强制垃圾回收（确保释放所有循环引用的资源）
-        # 这是修复内存泄漏的关键步骤
+        # 强制垃圾回收，确保释放所有循环引用的资源
         gc.collect()
-        logger.info("Forced garbage collection after MCP services cleanup")
+        logger.info("All MCP services cleaned up, garbage collection completed")
 
     def is_service_mounted(self, service_name: str) -> bool:
         """检查服务是否已挂载"""

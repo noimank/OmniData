@@ -58,7 +58,7 @@ async def init_redis() -> None:
 
 
 async def close_redis() -> None:
-    """关闭 Redis 连接（带超时保护）"""
+    """关闭 Redis 连接（带超时保护和强制清理）"""
     global _redis, _pool
 
     # 关闭 Redis 客户端
@@ -67,7 +67,7 @@ async def close_redis() -> None:
             await asyncio.wait_for(_redis.aclose(), timeout=3.0)
             logger.info("Redis connection closed")
         except asyncio.TimeoutError:
-            logger.warning("Redis close timeout, proceeding with cleanup")
+            logger.warning("Redis close timeout, forcing cleanup")
         except asyncio.CancelledError:
             logger.debug("Redis close cancelled during shutdown")
         except Exception as e:
@@ -79,8 +79,14 @@ async def close_redis() -> None:
     if _pool is not None:
         try:
             await asyncio.wait_for(_pool.disconnect(), timeout=3.0)
+            logger.info("Redis connection pool disconnected")
         except asyncio.TimeoutError:
-            logger.warning("Redis pool disconnect timeout, proceeding with cleanup")
+            logger.warning("Redis pool disconnect timeout, forcing cleanup")
+            # 超时后强制断开所有连接
+            try:
+                await _pool.disconnect(inuse_connections=True)
+            except Exception as e:
+                logger.error(f"Error forcing Redis pool disconnect: {e}")
         except asyncio.CancelledError:
             logger.debug("Redis pool disconnect cancelled during shutdown")
         except Exception as e:
