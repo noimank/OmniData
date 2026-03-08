@@ -90,18 +90,20 @@ class LoginRegister:
                     if self._stop_event.is_set():
                         break
 
-                    if not self._instances:
-                        continue  # 没有活跃的登录器实例
-
                     # 获取当前时间在小时内的秒数（0-3599）
                     now = datetime.datetime.now()
                     current_second = now.minute * 60 + now.second
 
-                    # 找出分配到当前秒的所有登录器
+                    # 找出分配到当前秒的所有登录器（从已注册的登录器中查找，而不是已实例化的）
                     logins_to_refresh = []
                     for login_name, assigned_second in self._login_second_assignments.items():
-                        if assigned_second == current_second and login_name in self._instances:
-                            logins_to_refresh.append((login_name, self._instances[login_name]))
+                        if assigned_second == current_second:
+                            try:
+                                instance = self.get_login_instance(login_name)
+                                logins_to_refresh.append((login_name, instance))
+                            except Exception as e:
+                                logger.error(f"Failed to get login instance {login_name}: {e}")
+                                continue
 
                     if not logins_to_refresh:
                         continue
@@ -135,7 +137,9 @@ class LoginRegister:
                                         f"Failed to get login status after refresh for {login_name}: {status_error}"
                                     )
                                 await instance.close()
-                                # logger.debug(f"Refreshed {login_name} at second {current_second}")
+                                logger.info(
+                                    f"Successfully refreshed {login_name} at second {current_second}"
+                                )
                             except Exception as e:
                                 logger.error(f"Error refreshing {login_name}: {e}")
 
