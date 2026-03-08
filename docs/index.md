@@ -24,30 +24,6 @@ OmniData 是一个基于 **Playwright** 和 **FastAPI** 的可扩展网页爬虫
 
 ## 技术栈
 
-```mermaid
-graph TB
-    subgraph "前端"
-        A[Vue 3 + Element Plus]
-    end
-
-    subgraph "后端"
-        B[FastAPI]
-        C[Playwright Chromium]
-        D[Redis 状态存储]
-        E[SQLite 审计日志]
-    end
-
-    subgraph "协议"
-        F[FastMCP]
-    end
-
-    A -->|HTTP| B
-    B --> C
-    B --> D
-    B --> E
-    B --> F
-```
-
 - **Python 3.12+** - 核心语言
 - **FastAPI 0.128+** - Web 框架
 - **Playwright 1.57+** - 浏览器自动化
@@ -60,7 +36,43 @@ graph TB
 
 ## 快速预览
 
-### 安装
+### 方式一：Docker 快速体验（推荐）
+
+使用 Docker 一键启动完整服务（包含后端、前端、Redis）：
+
+```bash
+# 拉取镜像
+docker pull noimank/omnidata:latest
+
+# 启动服务
+docker run -d \
+  --name omnidata \
+  -p 80:80 \
+  noimankdocker/omnidata:latest
+
+# 访问服务
+# 前端界面：http://localhost
+# API 文档：http://localhost/docs
+```
+
+!!! tip "自定义配置"
+    通过环境变量覆盖默认配置：
+    ```bash
+    docker run -d \
+      --name omnidata \
+      -p 80:80 \
+      -e OMNIDATA_REDIS__HOST=localhost \
+      -e OMNIDATA_BROWSER__HEADLESS=true \
+      -v ./data:/app/data -v ./logs:/var/log/supervisor \
+
+      noimankdocker/omnidata:latest
+    ```
+
+详细的环境配置请参考.env.example 文件。项目使用sqlite数据库，建议把/app/data目录挂载到本地，防止容器重建造成数据丢失
+
+
+
+### 方式二：本地开发安装
 
 ```bash
 git clone https://github.com/noimank/OmniData.git
@@ -90,32 +102,6 @@ cd frontend && npm run dev
 - **后端 API**：`http://localhost:8380`
 - **前端界面**：`http://localhost:5173`
 - **API 文档**：`http://localhost:8380/docs`
-
----
-
-## 数据源概览
-
-```bash
-curl http://localhost:8380/spiders
-```
-
-当前支持 **15+** 个数据源平台：
-
-| 平台 | 接口数 | 类别 |
-| :--- | :---: | :--- |
-| 东方财富 | 17 | 金融行情 |
-| Bilibili | 1 | 视频 |
-| 财联社 | 1 | 全球新闻 |
-| 富途牛牛 | 1 | 快讯 |
-| 和讯网 | 1 | 7x24 快讯 |
-| 金融界 | 1 | 快讯 |
-| 21财经 | 1 | 快讯 |
-| 第一财经 | 1 | 快讯 |
-| 华尔街见闻 | 1 | 全球快讯 |
-| 新浪财经 | 1 | 国际新闻 |
-| 同花顺 | 2 | 资讯/问财 |
-
-查看 [完整数据源列表](datasources/index.md)。
 
 ---
 
