@@ -1,90 +1,43 @@
 # 东方财富
 
-东方财富网数据接口，提供股票行情、资金流向、龙虎榜等金融数据。
+## 概览
 
----
+| 统计项 | 数值 |
+| :--- | :--- |
+| **平台标识** | `eastmoney` |
+| **接口数量** | 22 |
 
-## 接口概览
+## 接口列表
 
-### 行情数据
+| 接口说明 | 爬虫名称 | 版本 |
+| :--- | :--- | :---: |
+| [获取指定日期范围的龙虎榜活跃营业部数据，包括营业部买卖金额、净买入额、上榜次数等](eastmoney_active_department.md) | `eastmoney_active_department` | 1.0.0 |
+| [获取概念板块资金流向排行数据，支持今日、5日、10日排行查询](eastmoney_concept_sector_flow.md) | `eastmoney_concept_sector_flow` | 1.0.0 |
+| [获取中国CPI居民消费价格指数月度数据，包括全国、城市、农村的当月同比、环比增长及累计数据](eastmoney_china_cpi.md) | `eastmoney_china_cpi` | 1.0.0 |
+| [获取指定日期范围的龙虎榜交易明细数据，包括上榜股票、涨跌幅、龙虎榜买卖金额等](eastmoney_daily_billboard_details.md) | `eastmoney_daily_billboard_details` | 1.0.0 |
+| [获取营业部收益率排行榜数据，包括营业部上榜次数、收益率、交易金额等](eastmoney_department_return_ranking.md) | `eastmoney_department_return_ranking` | 1.0.0 |
+| [获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等](eastmoney_fast_news.md) | `eastmoney_fast_news` | 1.0.0 |
+| [获取行业板块最新资金流向排行数据](eastmoney_industry_sector_flow.md) | `eastmoney_industry_sector_flow` | 1.0.0 |
+| [获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期](eastmoney_margin_trading.md) | `eastmoney_margin_trading` | 1.1.0 |
+| [获取沪深两市大盘资金流向历史数据](eastmoney_market_flow.md) | `eastmoney_market_flow` | 1.0.0 |
+| [获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向](eastmoney_realtime_stock_fund_flow.md) | `eastmoney_realtime_stock_fund_flow` | 1.0.0 |
+| [东方财富网通用搜索，支持资讯、公告、研报、问董秘四种搜索类型](eastmoney_search.md) | `eastmoney_search` | 1.0.0 |
+| [获取指定行业板块内个股的资金流向排行数据](eastmoney_sector_stock_flow.md) | `eastmoney_sector_stock_flow` | 1.0.0 |
+| [获取A股个股历史龙虎榜上榜数据，包括上榜原因、涨跌幅、买卖金额、营业部净买入以及上榜后多日涨跌幅等完整数据，支持日期范围查询](eastmoney_stock_billboard.md) | `eastmoney_stock_billboard` | 1.0.0 |
+| [获取A股/ETF筹码分布数据，包括获利比例、平均成本、90%/70%筹码集中度等指标，用于分析筹码结构和成本分布](eastmoney_stock_chip_distribution.md) | `eastmoney_stock_chip_distribution` | 1.0.0 |
+| [获取A股/ETF基金历史日线K线数据，包括开高低收、成交量成交额、涨跌幅等完整K线数据，支持前复权/后复权/不复权，支持日期范围查询](eastmoney_stock_daily_kline.md) | `eastmoney_stock_daily_kline` | 1.1.0 |
+| [获取个股/ETF历史资金流向数据](eastmoney_stock_history_flow.md) | `eastmoney_stock_history_flow` | 1.0.0 |
+| [获取个股/ETF分时资金流向数据（分钟级别），包括主力、超大单、大单、中单、小单的净流入](eastmoney_stock_intraday_flow.md) | `eastmoney_stock_intraday_flow` | 1.0.0 |
+| [获取沪深京A股实时行情列表数据，支持分页和排序](eastmoney_stock_list.md) | `eastmoney_stock_list` | 1.0.0 |
+| [获取单只股票的融资融券历史数据，支持1日/3日/5日/10日统计周期](eastmoney_stock_margin_trading.md) | `eastmoney_stock_margin_trading` | 1.0.0 |
+| [获取单只股票的机构买卖统计数据，包括龙虎榜机构交易明细、买卖金额、上榜原因等](eastmoney_stock_organization_trade.md) | `eastmoney_stock_organization_trade` | 1.0.0 |
+| [获取A股/ETF基金实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据](eastmoney_stock_quote.md) | `eastmoney_stock_quote` | 1.2.0 |
+| [东方财富条件选股，通过自然语言查询获取符合条件的股票列表](eastmoney_stock_selection.md) | `eastmoney_stock_selection` | 2.0.0 |
 
-[![股票行情](https://img.shields.io/badge/股票行情-blue)](eastmoney_stock_quote.md)
-[![日K线](https://img.shields.io/badge/日K线-9cf)](eastmoney_stock_daily_kline.md)
-[![股票列表](https://img.shields.io/badge/沪深京A股列表-lightblue)](eastmoney_stock_list.md)
+## 使用说明
 
-### 资金流向
-
-[![历史资金](https://img.shields.io/badge/历史资金流向-green)](eastmoney_stock_history_flow.md)
-[![分时资金](https://img.shields.io/badge/分时资金流向-success)](eastmoney_stock_intraday_flow.md)
-[![实时资金](https://img.shields.io/badge/实时资金-important)](eastmoney_realtime_stock_fund_flow.md)
-[![市场资金](https://img.shields.io/badge/市场资金流向-informational)](eastmoney_market_flow.md)
-[![行业板块](https://img.shields.io/badge/行业板块流向-ff69b4)](eastmoney_industry_sector_flow.md)
-[![概念板块](https://img.shields.io/badge/概念板块流向-purple)](eastmoney_concept_sector_flow.md)
-[![行业板块个股](https://img.shields.io/badge/板块个股流向-blueviolet)](eastmoney_sector_stock_flow.md)
-
-### 龙虎榜
-
-[![龙虎榜](https://img.shields.io/badge/龙虎牌-red)](eastmoney_stock_billboard.md)
-[![龙虎榜详情](https://img.shields.io/badge/龙虎牌详情-critical)](eastmoney_daily_billboard_details.md)
-[![机构交易](https://img.shields.io/badge/机构交易-orange)](eastmoney_stock_organization_trade.md)
-
-### 交易数据
-
-[![融资融券](https://img.shields.io/badge/融资融券-teal)](eastmoney_stock_margin_trading.md)
-[![融资融券(个股)](https://img.shields.io/badge/个股融资融券-cyan)](eastmoney_margin_trading.md)
-[![筹码分布](https://img.shields.io/badge/筹码分布-indigo)](eastmoney_stock_chip_distribution.md)
-
-### 营业部
-
-[![活跃营业部](https://img.shields.io/badge/活跃营业部-yellowgreen)](eastmoney_active_department.md)
-[![收益排名](https://img.shields.io/badge/营业部收益排名-yellow)](eastmoney_department_return_ranking.md)
-
-### 其他
-
-[![CPI数据](https://img.shields.io/badge/CPI数据-lightgrey)](eastmoney_china_cpi.md)
-[![股票搜索](https://img.shields.io/badge/股票搜索-brightgreen)](eastmoney_search.md)
-[![快讯](https://img.shields.io/badge/快讯-ff5722)](eastmoney_fast_news.md)
-
-### 智能选股
-
-[![条件选股](https://img.shields.io/badge/条件选股-9c27b0)](eastmoney_stock_selection.md)
-
----
-
-## 特点
-
-- 无需登录
-- 数据实时更新
-- 支持沪深市场
-
----
-
-## 快速开始
-
-### 获取股票行情
+所有接口均通过统一的 API 端点调用：
 
 ```bash
-curl -X POST http://localhost:8380/spiders/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "spider_name": "eastmoney_stock_quote",
-    "params": {
-      "stock_code": "000001"
-    }
-  }'
+POST http://localhost:8380/api/v1/spiders/run
 ```
-
-### 查看市场资金流向
-
-```bash
-curl -X POST http://localhost:8380/spiders/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "spider_name": "eastmoney_market_flow",
-    "params": {}
-  }'
-```
-
----
-
-点击上方标签查看详细文档。

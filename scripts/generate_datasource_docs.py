@@ -1,303 +1,237 @@
 """
 自动扫描 data_sources/ 目录，生成数据源接口文档
-
-使用方法：
-    uv run python scripts/generate_datasource_docs.py
 """
-
 import ast
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
-def get_platform_display_name(platform_dir: str) -> str:
-    """获取平台中文名称"""
-    platform_names = {
-        "21jingji": "21财经",
-        "bilibili": "Bilibili",
-        "cls": "财联社",
-        "eastmoney": "东方财富",
-        "futunn": "富途牛牛",
-        "hexun": "和讯网",
-        "jrj": "金融界",
-        "sina": "新浪财经",
-        "ths_10jqka": "同花顺",
-        "ths_iwencai": "同花顺问财",
-        "wallstreetcn": "华尔街见闻",
-        "yicai": "第一财经",
-    }
-    return platform_names.get(platform_dir, platform_dir)
-
-
 class SpiderInfoExtractor(ast.NodeVisitor):
-    """从 Python 代码中提取爬虫信息"""
-
     def __init__(self):
         self.class_name: Optional[str] = None
-        self.bases: List[str] = []
         self.class_attributes: Dict[str, Any] = {}
         self.params_model: Optional[str] = None
-        self.imports: Dict[str, str] = {}  # name -> module
-
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            self.imports[alias.asname or alias.name] = alias.name
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.module:
-            for alias in node.names:
-                self.imports[alias.asname or alias.name] = f"{node.module}.{alias.name}"
-        self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        # 只处理直接继承 BaseWebSpider 的类
-        has_base_web_spider = any(
-            (isinstance(base, ast.Name) and base.id == "BaseWebSpider")
-            or (isinstance(base, ast.Attribute) and base.attr == "BaseWebSpider")
-            for base in node.bases
-        )
-
-        if has_base_web_spider:
+        has_base = any((isinstance(b, ast.Name) and b.id == "BaseWebSpider") for b in node.bases)
+        if has_base:
             self.class_name = node.name
-
-            # 提取类属性
             for item in node.body:
                 if isinstance(item, ast.Assign):
                     for target in item.targets:
                         if isinstance(target, ast.Name):
-                            attr_name = target.id
                             if isinstance(item.value, ast.Constant):
-                                self.class_attributes[attr_name] = item.value.value
-                            elif isinstance(item.value, ast.Str):  # Python < 3.8
-                                self.class_attributes[attr_name] = item.value.s
-                            elif isinstance(item.value, ast.Name):
+                                self.class_attributes[target.id] = item.value.value
+                            elif isinstance(item.value, ast.Name) and target.id == "params_model":
                                 self.params_model = item.value.id
-
         self.generic_visit(node)
 
-
-def extract_spider_info(file_path: Path) -> Optional[Dict[str, Any]]:
-    """从爬虫文件中提取元数据"""
-    try:
-        content = file_path.read_text(encoding="utf-8")
-        tree = ast.parse(content)
-
-        extractor = SpiderInfoExtractor()
-        extractor.visit(tree)
-
-        if not extractor.class_name:
-            return None
-
-        # 查找 params_model 类定义以提取参数信息
-        params_info = []
-        if extractor.params_model:
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and node.name == extractor.params_model:
-                    params_info = extract_params_from_class(node)
-                    break
-
-        return {
-            "class_name": extractor.class_name,
-            "name": extractor.class_attributes.get("name", ""),
-            "description": extractor.class_attributes.get("description", ""),
-            "author": extractor.class_attributes.get("author", ""),
-            "version": extractor.class_attributes.get("version", ""),
-            "platform": extractor.class_attributes.get("platform", ""),
-            "params_model": extractor.params_model,
-            "params": params_info,
-        }
-    except Exception as e:
-        print(f"解析文件 {file_path} 失败: {e}")
-        return None
-
-
-def extract_params_from_class(node: ast.ClassDef) -> List[Dict[str, Any]]:
-    """从 Pydantic 模型类中提取参数信息"""
+def extract_params(node: ast.ClassDef) -> List[Dict[str, Any]]:
     params = []
-
-    # 查找基类 BaseModel
-    bases = [
-        base.id if isinstance(base, ast.Name) else ""
-        for base in node.bases
-        if isinstance(base, ast.Name)
-    ]
-
-    if "BaseModel" not in bases:
-        return params
-
-    # 提取类属性作为参数
     for item in node.body:
         if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-            param_name = item.target.id
-
-            # 尝试获取 Field 信息
-            default_value = None
-            description = ""
-            required = True
-
+            ptype = "string"
+            try:
+                ptype = ast.unparse(item.annotation) if item.annotation else "string"
+            except:
+                pass
+            desc, default, req = "", None, True
             if isinstance(item.value, ast.Call):
-                # 处理 Field(...) 调用
-                for keyword in item.value.keywords:
-                    if keyword.arg == "description" and isinstance(keyword.value, ast.Constant):
-                        description = keyword.value.value
-                    elif keyword.arg == "default" and isinstance(keyword.value, ast.Constant):
-                        default_value = keyword.value.value
-                        required = False
-
-            params.append(
-                {
-                    "name": param_name,
-                    "description": description,
-                    "default": default_value,
-                    "required": required,
-                }
-            )
-
+                for kw in item.value.keywords:
+                    if kw.arg == "description" and isinstance(kw.value, ast.Constant):
+                        desc = kw.value.value
+                    elif kw.arg == "default" and isinstance(kw.value, ast.Constant):
+                        default, req = kw.value.value, False
+            elif item.value and isinstance(item.value, ast.Constant):
+                default, req = item.value.value, False
+            params.append({"name": item.target.id, "type": ptype, "description": desc, "default": default, "required": req})
     return params
 
+def extract_spider_info(fp: Path) -> Optional[Dict[str, Any]]:
+    try:
+        tree = ast.parse(fp.read_text(encoding="utf-8"))
+        ext = SpiderInfoExtractor()
+        ext.visit(tree)
+        if not ext.class_name:
+            return None
+        params = []
+        if ext.params_model:
+            for n in ast.walk(tree):
+                if isinstance(n, ast.ClassDef) and n.name == ext.params_model:
+                    params = extract_params(n)
+                    break
+        return {
+            "name": ext.class_attributes.get("name", ""),
+            "description": ext.class_attributes.get("description", ""),
+            "author": ext.class_attributes.get("author", ""),
+            "version": ext.class_attributes.get("version", ""),
+            "platform": ext.class_attributes.get("platform", ""),
+            "params": params,
+        }
+    except Exception as e:
+        print(f"Error: {fp} - {e}")
+        return None
 
-def render_spider_doc(spider_info: Dict[str, Any], platform_name: str) -> str:
-    """渲染单个爬虫文档"""
-
-    # 生成标题（从 snake_case 转换为可读标题）
-    name = spider_info["name"]
-    title = name.replace("_", " ").title()
-
-    # 生成参数表格
-    params_table = ""
-    if spider_info["params"]:
-        params_rows = []
-        for param in spider_info["params"]:
-            req_mark = "✓" if param["required"] else "✗"
-            default = f", 默认: `{param['default']}`" if param["default"] is not None else ""
-            params_rows.append(
-                f"| `{param['name']}` | string | {req_mark} | {param['description']}{default} |"
-            )
-        params_table = "\n".join(
-            ["| 参数 | 类型 | 必填 | 说明 |", "| :--- | :--- | :---: | :--- |", *params_rows]
-        )
+def render_spider_doc(si: Dict, pn: str) -> str:
+    pt = ""
+    if si["params"]:
+        rows = []
+        for p in si["params"]:
+            req = '✓' if p['required'] else '✗'
+            default_val = f"`{p['default']}`" if p['default'] is not None else '-'
+            rows.append(f"| `{p['name']}` | `{p['type']}` | {req} | {default_val} | {p['description']} |")
+        pt = "\n".join(["| 参数名 | 类型 | 必填 | 默认值 | 说明 |", "| :--- | :--- | :---: | :--- | :--- |", *rows])
     else:
-        params_table = "该接口无需参数。"
+        pt = "该接口无需参数。"
+    ep_bash = ',\n    "params": { ... }' if si["params"] else ""
+    ep_python = ',\n            "params": { ... }' if si["params"] else ""
+    return f"""# {si['description']}
 
-    return f"""# {title}
+## 基本信息
 
-!!! abstract "接口信息"
-    - **爬虫名称**：`{spider_info['name']}`
-    - **平台**：{platform_name}
-    - **作者**：{spider_info['author']}
-    - **版本**：{spider_info['version']}
-
-## 功能说明
-
-{spider_info['description']}
+| 项目 | 值 |
+| :--- | :--- |
+| **爬虫名称** | `{si['name']}` |
+| **平台** | {pn} |
+| **版本** | {si['version']} |
+| **作者** | {si['author']} |
 
 ## 请求参数
 
-{params_table}
-
-## 返回结果
-
-```json
-{{
-  "success": true,
-  "data": {{ ... }}
-}}
-```
+{pt}
 
 ## 使用示例
 
+### API 调用
+
 ```bash
-curl -X POST http://localhost:8380/spiders/run \\
-  -H "Content-Type: application/json" \\
+curl -X POST http://localhost:8380/api/v1/spiders/run \
+  -H "Content-Type: application/json" \
   -d '{{
-    "spider_name": "{spider_info['name']}"{',\n    "params": {{ ... }}' if spider_info['params'] else ''}
+    "spider_name": "{si['name']}"{ep_bash}
   }}'
 ```
+
+### Python SDK
 
 ```python
 import httpx
 
 async with httpx.AsyncClient() as client:
     resp = await client.post(
-        "http://localhost:8380/spiders/run",
+        "http://localhost:8380/api/v1/spiders/run",
         json={{
-            "spider_name": "{spider_info['name']}"{',\n            "params": {{ ... }}' if spider_info['params'] else ''}
+            "spider_name": "{si['name']}"{ep_python}
         }}
     )
     result = resp.json()
 ```
 
-## 注意事项
+## 返回格式
 
-!!! tip "使用提示"
-    具体使用方法请参考代码实现。
-
-!!! warning "限制"
-    请合理使用接口，避免频繁请求。
+```json
+{{
+  "success": true,
+  "message": "执行成功",
+  "data": {{ ... }},
+  "execution_time": 1.23
+}}
+```
 """
 
+def gen_platform_index(pdn: str, pn: str, spiders: List) -> str:
+    rows = [f"| [{s['description']}]({s['name']}.md) | `{s['name']}` | {s['version']} |" for s in spiders]
+    table = "\n".join(["| 接口说明 | 爬虫名称 | 版本 |", "| :--- | :--- | :---: |", *rows])
+    return f"""# {pn}
 
-def generate_all_datasource_docs():
-    """生成所有数据源文档"""
-    project_root = Path(__file__).parent.parent
-    datasources_dir = project_root / "omnidata" / "data_sources"
-    docs_dir = project_root / "docs" / "datasources"
+## 概览
 
-    total_generated = 0
-
-    for platform_dir in sorted(datasources_dir.iterdir()):
-        if not platform_dir.is_dir() or platform_dir.name.startswith("_"):
-            continue
-
-        platform_name = get_platform_display_name(platform_dir.name)
-        platform_docs_dir = docs_dir / platform_dir.name
-        platform_docs_dir.mkdir(parents=True, exist_ok=True)
-
-        spiders = []
-
-        # 扫描平台目录下的所有 Python 文件
-        for py_file in sorted(platform_dir.glob("*.py")):
-            if py_file.name.startswith("_") or py_file.name == "login.py":
-                continue
-
-            spider_info = extract_spider_info(py_file)
-            if spider_info and spider_info["name"]:
-                spiders.append(spider_info)
-
-                # 生成单个爬虫文档
-                doc_filename = f"{spider_info['name']}.md"
-                doc_path = platform_docs_dir / doc_filename
-
-                content = render_spider_doc(spider_info, platform_name)
-                doc_path.write_text(content, encoding="utf-8")
-                total_generated += 1
-                print(f"[OK] Generated: {doc_path}")
-
-        # 更新平台索引文档（如果已存在则跳过，避免覆盖手动内容）
-        index_path = platform_docs_dir / "index.md"
-        if not index_path.exists():
-            index_content = f"""# {platform_name}
-
-{platform_name}数据接口。
-
-!!! note "接口数量"
-    当前共有 **{len(spiders)}** 个接口。
+| 统计项 | 数值 |
+| :--- | :--- |
+| **平台标识** | `{pdn}` |
+| **接口数量** | {len(spiders)} |
 
 ## 接口列表
 
+{table}
+
+## 使用说明
+
+所有接口均通过统一的 API 端点调用：
+
+```bash
+POST http://localhost:8380/api/v1/spiders/run
+```
 """
-            for spider in spiders:
-                doc_name = spider["name"]
-                index_content += f"- [{spider['description']}]({doc_name}.md)\n"
 
-            index_content += '\n---\n\n## 特点\n\n- ✅ 数据实时更新\n\n## 使用示例\n\n```bash\ncurl -X POST http://localhost:8380/spiders/run \\\n  -H "Content-Type: application/json" \\\n  -d \'{{\n    "spider_name": "{spiders[0][\'name\'] if spiders else \'\'}",\n    "params": {{}}\n  }}\'\n```'
-            index_path.write_text(index_content, encoding="utf-8")
-            print(f"[OK] Generated: {index_path}")
+def gen_main_index(stats: Dict) -> str:
+    total_p = len(stats)
+    total_s = sum(s["spider_count"] for s in stats.values())
+    rows = [f"| [{s['display_name']}]({pd}/index.md) | {s['spider_count']} | `{pd}` |" for pd, s in sorted(stats.items())]
+    table = "\n".join(["| 平台 | 接口数 | 标识 |", "| :--- | :---: | :--- |", *rows])
+    return f"""# 数据源
 
-    print(f"\n[OK] Generated {total_generated} spider docs in total")
+## 统计概览
 
+| 统计项 | 数值 |
+| :--- | :--- |
+| **支持平台数** | {total_p} |
+| **总接口数** | {total_s} |
+
+## 平台列表
+
+{table}
+
+## 使用方式
+
+### 通过 API
+
+```bash
+curl http://localhost:8380/api/v1/spiders
+curl -X POST http://localhost:8380/api/v1/spiders/run -H "Content-Type: application/json" -d '{{"spider_name": "xxx"}}'
+```
+
+### 通过 MCP
+
+创建 MCP 服务后，所有爬虫自动暴露为 MCP 工具。
+"""
+
+def generate_all_datasource_docs():
+    root = Path(__file__).parent.parent
+    ds_dir = root / "omnidata" / "data_sources"
+    docs_dir = root / "docs" / "datasources"
+    stats, total = {}, 0
+    
+    for pd in sorted(ds_dir.iterdir()):
+        if not pd.is_dir() or pd.name.startswith("_") or pd.name == "example":
+            continue
+        
+        pname = pd.name
+        pdocs = docs_dir / pname
+        pdocs.mkdir(parents=True, exist_ok=True)
+        spiders = []
+        
+        for pf in sorted(pd.glob("*.py")):
+            if pf.name.startswith("_") or pf.name == "login.py":
+                continue
+            si = extract_spider_info(pf)
+            if si and si["name"]:
+                spiders.append(si)
+                dp = pdocs / f"{si['name']}.md"
+                dp.write_text(render_spider_doc(si, si.get("platform", pname)), encoding="utf-8")
+                total += 1
+                print(f"✓ {dp.relative_to(root)}")
+        
+        if spiders:
+            dn = spiders[0].get("platform", pname)
+            ip = pdocs / "index.md"
+            ip.write_text(gen_platform_index(pname, dn, spiders), encoding="utf-8")
+            print(f"✓ {ip.relative_to(root)}")
+            stats[pname] = {"display_name": dn, "spider_count": len(spiders)}
+    
+    mi = docs_dir / "index.md"
+    mi.write_text(gen_main_index(stats), encoding="utf-8")
+    print(f"✓ {mi.relative_to(root)}")
+    print(f"\n✓ 共生成 {total} 个爬虫文档，覆盖 {len(stats)} 个平台")
 
 if __name__ == "__main__":
     generate_all_datasource_docs()

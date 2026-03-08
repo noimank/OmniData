@@ -1,62 +1,57 @@
-# Eastmoney Active Department
+# 获取指定日期范围的龙虎榜活跃营业部数据，包括营业部买卖金额、净买入额、上榜次数等
 
-!!! abstract "接口信息"
-    - **爬虫名称**：`eastmoney_active_department`
-    - **平台**：东方财富
-    - **作者**：noimank
-    - **版本**：1.0.0
+## 基本信息
 
-## 功能说明
-
-获取指定日期范围的龙虎榜活跃营业部数据，包括营业部买卖金额、净买入额、上榜次数等
+| 项目 | 值 |
+| :--- | :--- |
+| **爬虫名称** | `eastmoney_active_department` |
+| **平台** | 东方财富 |
+| **版本** | 1.0.0 |
+| **作者** | noimank |
 
 ## 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-| :--- | :--- | :---: | :--- |
-| `start_date` | string | ✗ | 开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天, 默认: `` |
-| `end_date` | string | ✗ | 结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天, 默认: `` |
-| `limit` | string | ✗ | 获取数据条数，最多1000条, 默认: `60` |
-| `data_format` | string | ✗ | 返回数据格式，可选值：json, dict, string, markdown, 默认: `json` |
-
-## 返回结果
-
-```json
-{
-  "success": true,
-  "data": { ... }
-}
-```
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+| :--- | :--- | :---: | :--- | :--- |
+| `start_date` | `str` | ✗ | `` | 开始日期，格式：YYYY-MM-DD，如 2026-01-14，默认为当天 |
+| `end_date` | `str` | ✗ | `` | 结束日期，格式：YYYY-MM-DD，如 2026-01-16，默认为当天 |
+| `limit` | `int` | ✗ | `60` | 获取数据条数，最多1000条 |
+| `data_format` | `Literal['json', 'dict', 'markdown', 'string']` | ✗ | `json` | 返回数据格式，可选值：json, dict, string, markdown |
 
 ## 使用示例
 
+### API 调用
+
 ```bash
-curl -X POST http://localhost:8380/spiders/run \
-  -H "Content-Type: application/json" \
-  -d '{
+curl -X POST http://localhost:8380/api/v1/spiders/run   -H "Content-Type: application/json"   -d '{
     "spider_name": "eastmoney_active_department",
-    "params": {{ ... }}
+    "params": { ... }
   }'
 ```
+
+### Python SDK
 
 ```python
 import httpx
 
 async with httpx.AsyncClient() as client:
     resp = await client.post(
-        "http://localhost:8380/spiders/run",
+        "http://localhost:8380/api/v1/spiders/run",
         json={
             "spider_name": "eastmoney_active_department",
-            "params": {{ ... }}
+            "params": { ... }
         }
     )
     result = resp.json()
 ```
 
-## 注意事项
+## 返回格式
 
-!!! tip "使用提示"
-    具体使用方法请参考代码实现。
-
-!!! warning "限制"
-    请合理使用接口，避免频繁请求。
+```json
+{
+  "success": true,
+  "message": "执行成功",
+  "data": { ... },
+  "execution_time": 1.23
+}
+```

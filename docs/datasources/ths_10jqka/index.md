@@ -1,16 +1,22 @@
-# 同花顺
+# 同花顺10jqka
 
-同花顺财经资讯数据接口。
+## 概览
 
----
+| 统计项 | 数值 |
+| :--- | :--- |
+| **平台标识** | `ths_10jqka` |
+| **接口数量** | 1 |
 
-## 接口概览
+## 接口列表
 
-[![全球新闻](https://img.shields.io/badge/全球新闻-informational)](ths_10jqka_global_news.md)
+| 接口说明 | 爬虫名称 | 版本 |
+| :--- | :--- | :---: |
+| [获取同花顺全球财经快讯新闻列表，支持按标签筛选（全部/要闻/A股/港股/美股/基金/观点/公告）](ths_10jqka_global_news.md) | `ths_10jqka_global_news` | 1.0.0 |
 
----
+## 使用说明
 
-## 特点
+所有接口均通过统一的 API 端点调用：
 
-- 无需登录
-- 实时新闻更新
+```bash
+POST http://localhost:8380/api/v1/spiders/run
+```

@@ -1,62 +1,57 @@
-# Eastmoney Sector Stock Flow
+# 获取指定行业板块内个股的资金流向排行数据
 
-!!! abstract "接口信息"
-    - **爬虫名称**：`eastmoney_sector_stock_flow`
-    - **平台**：东方财富
-    - **作者**：noimank
-    - **版本**：1.0.0
+## 基本信息
 
-## 功能说明
-
-获取指定行业板块内个股的资金流向排行数据
+| 项目 | 值 |
+| :--- | :--- |
+| **爬虫名称** | `eastmoney_sector_stock_flow` |
+| **平台** | 东方财富 |
+| **版本** | 1.0.0 |
+| **作者** | noimank |
 
 ## 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-| :--- | :--- | :---: | :--- |
-| `sector_code` | string | ✓ | 板块代码,如 BK0737 |
-| `limit` | string | ✗ | 获取数据条数,最多150条, 默认: `50` |
-| `rank_type` | string | ✗ | 排行类型:today=今日排行, 5day=5日排行, 10day=10日排行, 默认: `today` |
-| `data_format` | string | ✗ | 返回格式:json, dict, markdown, string, 默认: `json` |
-
-## 返回结果
-
-```json
-{
-  "success": true,
-  "data": { ... }
-}
-```
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+| :--- | :--- | :---: | :--- | :--- |
+| `sector_code` | `str` | ✓ | - | 板块代码,如 BK0737 |
+| `limit` | `int` | ✗ | `50` | 获取数据条数,最多150条 |
+| `rank_type` | `Literal['today', '5day', '10day']` | ✗ | `today` | 排行类型:today=今日排行, 5day=5日排行, 10day=10日排行 |
+| `data_format` | `Literal['json', 'dict', 'markdown', 'string']` | ✗ | `json` | 返回格式:json, dict, markdown, string |
 
 ## 使用示例
 
+### API 调用
+
 ```bash
-curl -X POST http://localhost:8380/spiders/run \
-  -H "Content-Type: application/json" \
-  -d '{
+curl -X POST http://localhost:8380/api/v1/spiders/run   -H "Content-Type: application/json"   -d '{
     "spider_name": "eastmoney_sector_stock_flow",
-    "params": {{ ... }}
+    "params": { ... }
   }'
 ```
+
+### Python SDK
 
 ```python
 import httpx
 
 async with httpx.AsyncClient() as client:
     resp = await client.post(
-        "http://localhost:8380/spiders/run",
+        "http://localhost:8380/api/v1/spiders/run",
         json={
             "spider_name": "eastmoney_sector_stock_flow",
-            "params": {{ ... }}
+            "params": { ... }
         }
     )
     result = resp.json()
 ```
 
-## 注意事项
+## 返回格式
 
-!!! tip "使用提示"
-    具体使用方法请参考代码实现。
-
-!!! warning "限制"
-    请合理使用接口，避免频繁请求。
+```json
+{
+  "success": true,
+  "message": "执行成功",
+  "data": { ... },
+  "execution_time": 1.23
+}
+```
