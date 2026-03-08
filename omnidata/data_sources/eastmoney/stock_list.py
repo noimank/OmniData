@@ -20,7 +20,7 @@ class StockListParams(BaseModel):
 
     page: int = Field(default=1, ge=1, description="页码，从1开始")
     page_size: int = Field(default=20, ge=1, le=100, description="每页数量，最大100")
-    sort_field: Literal["f2", "f3", "f5", "f6", "f15", "f16"]  = Field(
+    sort_field: Literal["f2", "f3", "f5", "f6", "f15", "f16"] = Field(
         default="f3",
         description="排序字段，f3=涨跌幅, f2=最新价, f5=成交量, f6=成交额, f15=最高, f16=最低",
     )
@@ -129,7 +129,12 @@ class StockListSpider(BaseWebSpider):
                 if not diff_list:
                     return SpiderResult(
                         success=True,
-                        data={"total": total, "stocks": [], "page": params.page, "page_size": params.page_size},
+                        data={
+                            "total": total,
+                            "stocks": [],
+                            "page": params.page,
+                            "page_size": params.page_size,
+                        },
                         message="当前页无数据",
                     )
 
