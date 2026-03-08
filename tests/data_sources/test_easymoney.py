@@ -64,7 +64,7 @@ class TestEastMoneySpider:
 
     async def test_run4(self, browser_pool):
         spider_name = "eastmoney_industry_sector_flow"
-        params = {"limit": 10, "sort_field": "f62"}
+        params = {"limit": 10, "rank_type": "today"}
         register = spider_register()
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)

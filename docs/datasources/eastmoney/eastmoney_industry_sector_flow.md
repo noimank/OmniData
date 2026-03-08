@@ -14,8 +14,8 @@
 
 | 参数 | 类型 | 必填 | 说明 |
 | :--- | :--- | :---: | :--- |
-| `limit` | string | ✗ | 获取数据条数，最多86条, 默认: `86` |
-| `sort_field` | string | ✗ | 排序字段：f62=主力净流入, f2=最新价, f3=涨跌幅, f184=主力净占比, 默认: `f62` |
+| `limit` | string | ✗ | 获取数据条数，最多128条, 默认: `128` |
+| `rank_type` | string | ✗ | 排行类型：today=今日排行, 5day=5日排行, 10day=10日排行, 默认: `today` |
 | `data_format` | string | ✗ | 返回格式：json, dict, markdown, string, 默认: `json` |
 
 ## 返回结果
