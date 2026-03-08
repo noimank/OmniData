@@ -32,8 +32,8 @@ uv run python main.py                    # 或指定端口
 uv run uvicorn omnidata.api.main:app --reload
 
 # 爬虫操作
-uv run python main.py --list             # 列出所有爬虫
-uv run python main.py --run <name>       # 运行指定爬虫
+uv run python main.py --list                           # 列出所有爬虫
+uv run python main.py --run <name> --params '{"key": "value"}'  # 运行指定爬虫（传递 JSON 参数）
 
 # 代码质量（只进行格式化，不进行lint和类型检查）
 uv run black .                           # 格式化
@@ -161,7 +161,38 @@ class MySpider(BaseWebSpider):
             
 ```
 
-注：编写完成新爬虫任务之后需要使用uv run python main.py --run <name>  来运行爬虫测试，验证爬虫正常工作
+注：编写完成新爬虫任务之后需要使用uv run python main.py --run <name>  来运行爬虫测试,验证爬虫正常工作
+
+### 爬虫测试规范
+
+**重要**: 爬虫测试**必须**使用 CLI 命令进行,**禁止**创建额外的测试文件。
+
+#### 测试命令
+
+```bash
+# 基本测试（无参数）
+uv run python main.py --run <spider_name>
+
+# 带参数测试（JSON 格式）
+uv run python main.py --run <spider_name> --params '{"url": "https://example.com", "keyword": "test"}'
+```
+
+#### 示例
+
+```bash
+# 测试东方财富新闻查询爬虫
+uv run python main.py --run eastmoney_news_query --params '{"url": "https://www.eastmoney.com", "keyword": "股票"}'
+
+# 列出所有可用爬虫
+uv run python main.py --list
+```
+
+#### 注意事项
+
+1. **参数格式**: `--params` 后必须跟 JSON 字符串,使用单引号包裹
+2. **参数验证**: 参数会根据爬虫的 `params_model` 自动验证
+3. **禁止创建测试文件**: 不要在 `tests/` 目录下创建针对单个爬虫的测试文件
+4. **调试输出**: 测试结果会直接输出到控制台,包括 `SpiderResult` 的完整信息
 
 ### 目录结构
 
