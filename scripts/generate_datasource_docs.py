@@ -2,6 +2,7 @@
 自动扫描 data_sources/ 目录，生成数据源接口文档
 """
 import ast
+from ruamel.yaml import YAML
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -195,6 +196,66 @@ curl -X POST http://localhost:8380/api/v1/spiders/run -H "Content-Type: applicat
 创建 MCP 服务后，所有爬虫自动暴露为 MCP 工具。
 """
 
+def update_mkdocs_nav(platform_stats: Dict[str, Dict[str, Any]], root: Path):
+    """更新 mkdocs.yml 中的数据源导航配置（保留注释和格式）"""
+    mkdocs_path = root / "mkdocs.yml"
+
+    if not mkdocs_path.exists():
+        print("⚠ mkdocs.yml 不存在，跳过导航更新")
+        return
+
+    # 使用 ruamel.yaml 保留注释和格式
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.default_flow_style = False
+    yaml.width = 4096  # 避免自动换行
+    yaml.indent(mapping=2, sequence=4, offset=2)  # mapping=2, sequence=4 匹配原始格式
+
+    try:
+        with open(mkdocs_path, "r", encoding="utf-8") as f:
+            config = yaml.load(f)
+    except Exception as e:
+        print(f"⚠ 解析 mkdocs.yml 失败: {e}")
+        return
+
+    if "nav" not in config:
+        print("⚠ mkdocs.yml 中未找到 nav 配置")
+        return
+
+    # 查找数据源部分
+    datasources_index = -1
+    for i, item in enumerate(config["nav"]):
+        if isinstance(item, dict) and "数据源" in item:
+            datasources_index = i
+            break
+
+    if datasources_index == -1:
+        print("⚠ 未找到数据源导航配置")
+        return
+
+    # 构建新的数据源导航列表
+    new_datasources_nav = yaml.seq()
+    new_datasources_nav.append("datasources/index.md")
+
+    # 按平台名称排序添加
+    for platform_dir, stats in sorted(platform_stats.items()):
+        display_name = stats["display_name"]
+        item = yaml.map()
+        item[display_name] = f"datasources/{platform_dir}/index.md"
+        new_datasources_nav.append(item)
+
+    # 更新配置
+    config["nav"][datasources_index]["数据源"] = new_datasources_nav
+
+    # 写回文件，保持原有格式和注释
+    try:
+        with open(mkdocs_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+        print(f"✓ {mkdocs_path.relative_to(root)} (已更新数据源导航)")
+    except Exception as e:
+        print(f"⚠ 写入 mkdocs.yml 失败: {e}")
+
+
 def generate_all_datasource_docs():
     root = Path(__file__).parent.parent
     ds_dir = root / "omnidata" / "data_sources"
@@ -202,7 +263,7 @@ def generate_all_datasource_docs():
     stats, total = {}, 0
     
     for pd in sorted(ds_dir.iterdir()):
-        if not pd.is_dir() or pd.name.startswith("_") or pd.name == "example":
+        if not pd.is_dir() or pd.name.startswith("_"):
             continue
         
         pname = pd.name
@@ -231,6 +292,10 @@ def generate_all_datasource_docs():
     mi = docs_dir / "index.md"
     mi.write_text(gen_main_index(stats), encoding="utf-8")
     print(f"✓ {mi.relative_to(root)}")
+
+    # 更新 mkdocs.yml 导航配置
+    update_mkdocs_nav(stats, root)
+
     print(f"\n✓ 共生成 {total} 个爬虫文档，覆盖 {len(stats)} 个平台")
 
 if __name__ == "__main__":

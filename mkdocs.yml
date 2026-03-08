@@ -112,19 +112,17 @@ nav:
       - development/configuration.md
   - 数据源:
       - datasources/index.md
-      - 东方财富: datasources/eastmoney/index.md
-      - Bilibili: datasources/bilibili/index.md
+      - 21财经: datasources/21jingji/index.md
       - 财联社: datasources/cls/index.md
+      - 东方财富: datasources/eastmoney/index.md
+      - 测试平台: datasources/example/index.md
       - 富途牛牛: datasources/futunn/index.md
       - 和讯网: datasources/hexun/index.md
       - 金融界: datasources/jrj/index.md
-      - 21财经: datasources/21jingji/index.md
-      - 第一财经: datasources/yicai/index.md
-      - 华尔街见闻: datasources/wallstreetcn/index.md
       - 新浪财经: datasources/sina/index.md
       - 同花顺10jqka: datasources/ths_10jqka/index.md
-      - 同花顺问财: datasources/ths_iwencai/index.md
-      - 示例: datasources/example/index.md
+      - 华尔街见闻: datasources/wallstreetcn/index.md
+      - 第一财经: datasources/yicai/index.md
   - API 参考:
       - api/spiders.md
       - api/mcp.md
