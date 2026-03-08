@@ -90,8 +90,7 @@ class IndustrySectorFlowSpider(BaseWebSpider):
 
                 # 解析数据
                 data_list = [
-                    self._parse_item(item, params.rank_type)
-                    for item in all_items[: params.limit]
+                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
                 ]
                 df = pd.DataFrame(data_list)
 
@@ -109,6 +108,7 @@ class IndustrySectorFlowSpider(BaseWebSpider):
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
         """解析数据项"""
+
         def safe_float(v):
             return float(v) if v not in (None, "") else 0.0
 
