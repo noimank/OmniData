@@ -82,7 +82,11 @@ markdown_extensions:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
-  - pymdownx.superfences          # 代码块围栏
+  - pymdownx.superfences:        # 代码块围栏
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite        # 行内代码高亮
   - pymdownx.details             # 可折叠提示框
   - pymdownx.snippets            # 代码片段包含
