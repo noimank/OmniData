@@ -10,6 +10,7 @@
 
 [![股票行情](https://img.shields.io/badge/股票行情-blue)](eastmoney_stock_quote.md)
 [![日K线](https://img.shields.io/badge/日K线-9cf)](eastmoney_stock_daily_kline.md)
+[![股票列表](https://img.shields.io/badge/沪深京A股列表-lightblue)](eastmoney_stock_list.md)
 
 ### 资金流向
 

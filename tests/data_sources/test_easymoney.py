@@ -215,3 +215,11 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
+    async def test_run22(self, browser_pool):
+        spider_name = "eastmoney_stock_list"
+        params = {"page": 1, "page_size": 20}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
