@@ -20,6 +20,7 @@
 [![市场资金](https://img.shields.io/badge/市场资金流向-informational)](eastmoney_market_flow.md)
 [![行业板块](https://img.shields.io/badge/行业板块流向-ff69b4)](eastmoney_industry_sector_flow.md)
 [![概念板块](https://img.shields.io/badge/概念板块流向-purple)](eastmoney_concept_sector_flow.md)
+[![行业板块个股](https://img.shields.io/badge/板块个股流向-blueviolet)](eastmoney_sector_stock_flow.md)
 
 ### 龙虎榜
 
