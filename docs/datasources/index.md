@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **支持平台数** | 11 |
-| **总接口数** | 33 |
+| **总接口数** | 34 |
 
 ## 平台列表
 
@@ -13,7 +13,7 @@
 | :--- | :---: | :--- |
 | [21财经](21jingji/index.md) | 1 | `21jingji` |
 | [财联社](cls/index.md) | 1 | `cls` |
-| [东方财富](eastmoney/index.md) | 23 | `eastmoney` |
+| [东方财富](eastmoney/index.md) | 24 | `eastmoney` |
 | [测试平台](example/index.md) | 1 | `example` |
 | [富途牛牛](futunn/index.md) | 1 | `futunn` |
 | [和讯网](hexun/index.md) | 1 | `hexun` |
