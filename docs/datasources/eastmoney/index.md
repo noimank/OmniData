@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 22 |
+| **接口数量** | 23 |
 
 ## 接口列表
 
@@ -17,6 +17,7 @@
 | [获取指定日期范围的龙虎榜交易明细数据，包括上榜股票、涨跌幅、龙虎榜买卖金额等](eastmoney_daily_billboard_details.md) | `eastmoney_daily_billboard_details` | 1.0.0 |
 | [获取营业部收益率排行榜数据，包括营业部上榜次数、收益率、交易金额等](eastmoney_department_return_ranking.md) | `eastmoney_department_return_ranking` | 1.0.0 |
 | [获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等](eastmoney_fast_news.md) | `eastmoney_fast_news` | 1.0.0 |
+| [获取指定行业板块的历史资金流向数据（日线/周线/月线）](eastmoney_industry_history_flow.md) | `eastmoney_industry_history_flow` | 1.0.0 |
 | [获取行业板块最新资金流向排行数据](eastmoney_industry_sector_flow.md) | `eastmoney_industry_sector_flow` | 1.0.0 |
 | [获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期](eastmoney_margin_trading.md) | `eastmoney_margin_trading` | 1.1.0 |
 | [获取沪深两市大盘资金流向历史数据](eastmoney_market_flow.md) | `eastmoney_market_flow` | 1.0.0 |
