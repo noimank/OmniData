@@ -76,7 +76,8 @@ class TestLogin:
         register = login_register()
         instance = register.get_login_instance(login_name)
         # res = await instance.get_qrcode("同花顺APP")
-        res = await instance.get_qrcode("微信")
-        # res = await instance.is_login()
+        # res = await instance.get_qrcode("微信")
+        res = await instance.is_login()
+        # res = await instance.verify_login_state()
 
         print(res)

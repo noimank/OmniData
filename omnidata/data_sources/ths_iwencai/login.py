@@ -98,6 +98,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
 
             # 点击"注册 / 登录"按钮
             await self._qr_page.locator("text=注册 / 登录").hover()
+            await asyncio.sleep(0.4)
             await self._qr_page.locator("text=注册 / 登录").click()
 
             # 等待登录弹窗容器可见
@@ -160,6 +161,7 @@ class ThsIwencaiQRLogin(BaseQRLogin):
 
             # 点击"注册 / 登录"按钮
             await self._qr_page.locator("text=注册 / 登录").hover()
+            await asyncio.sleep(0.4)
             await self._qr_page.locator("text=注册 / 登录").click()
 
             # 等待登录弹窗容器可见
@@ -225,8 +227,12 @@ class ThsIwencaiQRLogin(BaseQRLogin):
         try:
 
             await self._qr_page.wait_for_selector(
-                ".login-box .user-photo", state="visible", timeout=800
+                ".main-right-header", state="visible", timeout=1200
             )
+            text = await self._qr_page.locator(".main-right-header").inner_text()
+            if ("注册" in text) or ("登录" in text):
+                return QRLoginState(status="waiting", message="等待验证登录状态中...")
+
             # 没有登录的话会出错，无法执行以下语句
             # 保存登录状态
             await self.save_context_state(self._qr_context, "ths_iwencai")
@@ -253,8 +259,9 @@ class ThsIwencaiQRLogin(BaseQRLogin):
                 await page.wait_for_load_state("domcontentloaded", timeout=6000)
 
                 # 检查是否登录 - 等待登录成功标志元素
-                await page.wait_for_selector(".login-box .user-photo", state="visible", timeout=800)
-
+                text = await page.locator(".main-right-header").inner_text()
+                if ("注册" in text) or ("登录" in text):
+                    return QRLoginState(status="not_logged_in", message="未登录同花顺问财")
                 return QRLoginState(status="success", message="已登录同花顺问财")
         except Exception as e:
             logger.debug(f"Failed to check ths_iwencai login status: {e}")
