@@ -16,7 +16,7 @@ class SectorStockFlowParams(BaseModel):
     """行业板块个股资金流参数模型"""
 
     sector_code: str = Field(..., description="板块代码,如 BK0737")
-    limit: int = Field(default=50, ge=1, le=150, description="获取数据条数,最多150条")
+    limit: int = Field(default=50, ge=1, description="获取数据条数")
     rank_type: Literal["today", "5day", "10day"] = Field(
         default="today", description="排行类型:today=今日排行, 5day=5日排行, 10day=10日排行"
     )

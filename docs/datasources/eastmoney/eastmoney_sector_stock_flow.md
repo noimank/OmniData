@@ -14,7 +14,7 @@
 | 参数名 | 类型 | 必填 | 默认值 | 说明 |
 | :--- | :--- | :---: | :--- | :--- |
 | `sector_code` | `str` | ✓ | - | 板块代码,如 BK0737 |
-| `limit` | `int` | ✗ | `50` | 获取数据条数,最多150条 |
+| `limit` | `int` | ✗ | `50` | 获取数据条数 |
 | `rank_type` | `Literal['today', '5day', '10day']` | ✗ | `today` | 排行类型:today=今日排行, 5day=5日排行, 10day=10日排行 |
 | `data_format` | `Literal['json', 'dict', 'markdown', 'string']` | ✗ | `json` | 返回格式:json, dict, markdown, string |
 
