@@ -128,7 +128,7 @@ class ConceptSectorFlowSpider(BaseWebSpider):
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
         def safe_float(v):
-            return float(v) if v not in (None, "") else 0.0
+            return float(v) if v not in (None, "", "-") else 0.0
 
         # 基础字段
         result = {
