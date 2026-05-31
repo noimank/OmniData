@@ -165,7 +165,7 @@ class MySpider(BaseWebSpider):
 
 ### 爬虫测试规范
 
-**重要**: 爬虫测试**必须**使用 CLI 命令进行,**禁止**创建额外的测试文件。
+**重要**: 爬虫测试优先使用 CLI 命令进行快速验证，也可在 `tests/data_sources/` 目录下创建 pytest 测试文件进行集成测试。
 
 #### 测试命令
 
@@ -191,7 +191,7 @@ uv run python main.py --list
 
 1. **参数格式**: `--params` 后必须跟 JSON 字符串,使用单引号包裹
 2. **参数验证**: 参数会根据爬虫的 `params_model` 自动验证
-3. **禁止创建测试文件**: 不要在 `tests/` 目录下创建针对单个爬虫的测试文件
+3. **集成测试**: 可在 `tests/data_sources/` 下创建测试文件，文件名格式 `test_{platform}.py`
 4. **调试输出**: 测试结果会直接输出到控制台,包括 `SpiderResult` 的完整信息
 
 ### 目录结构
