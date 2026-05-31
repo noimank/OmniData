@@ -4,8 +4,8 @@
 
 | 统计项 | 数值 |
 | :--- | :--- |
-| **支持平台数** | 11 |
-| **总接口数** | 34 |
+| **支持平台数** | 17 |
+| **总接口数** | 40 |
 
 ## 平台列表
 
@@ -16,11 +16,17 @@
 | [东方财富](eastmoney/index.md) | 24 | `eastmoney` |
 | [测试平台](example/index.md) | 1 | `example` |
 | [富途牛牛](futunn/index.md) | 1 | `futunn` |
+| [格隆汇](gelonghui/index.md) | 1 | `gelonghui` |
 | [和讯网](hexun/index.md) | 1 | `hexun` |
+| [英为财情](investing/index.md) | 1 | `investing` |
+| [界面新闻](jiemian/index.md) | 1 | `jiemian` |
+| [金十数据](jin10/index.md) | 1 | `jin10` |
 | [金融界](jrj/index.md) | 1 | `jrj` |
 | [新浪财经](sina/index.md) | 1 | `sina` |
 | [同花顺10jqka](ths_10jqka/index.md) | 1 | `ths_10jqka` |
 | [华尔街见闻](wallstreetcn/index.md) | 1 | `wallstreetcn` |
+| [选股宝](xuangubao/index.md) | 1 | `xuangubao` |
+| [雪球](xueqiu/index.md) | 1 | `xueqiu` |
 | [第一财经](yicai/index.md) | 1 | `yicai` |
 
 ## 使用方式

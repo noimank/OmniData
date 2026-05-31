@@ -121,11 +121,17 @@ nav:
       - 东方财富: datasources/eastmoney/index.md
       - 测试平台: datasources/example/index.md
       - 富途牛牛: datasources/futunn/index.md
+      - 格隆汇: datasources/gelonghui/index.md
       - 和讯网: datasources/hexun/index.md
+      - 英为财情: datasources/investing/index.md
+      - 界面新闻: datasources/jiemian/index.md
+      - 金十数据: datasources/jin10/index.md
       - 金融界: datasources/jrj/index.md
       - 新浪财经: datasources/sina/index.md
       - 同花顺10jqka: datasources/ths_10jqka/index.md
       - 华尔街见闻: datasources/wallstreetcn/index.md
+      - 选股宝: datasources/xuangubao/index.md
+      - 雪球: datasources/xueqiu/index.md
       - 第一财经: datasources/yicai/index.md
   - API 参考:
       - api/spiders.md
