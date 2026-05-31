@@ -46,50 +46,46 @@ class CLSNewsSpider(BaseWebSpider):
     params_model = CLSNewsParams
 
     # API 配置
-    API_URL = "https://www.cls.cn/nodeapi/telegraphList"
+    API_URL = "https://www.cls.cn/api/cache"
+    API_PARAMS = {
+        "app": "CailianpressWeb",
+        "name": "telegraph",
+        "os": "web",
+        "sv": "8.7.9",
+    }
 
     async def crawl(self, params: CLSNewsParams) -> SpiderResult:
-        """
-        爬取财联社快讯新闻列表
-
-        Args:
-            params: 验证后的参数对象
-
-        Returns:
-            SpiderResult: 执行结果
-        """
         try:
             async with self.new_page("cls") as page:
-                # 直接访问 API URL
-                await page.goto(self.API_URL + "?rn=" + str(params.rn))
+                query_params = {**self.API_PARAMS, "rn": str(params.rn)}
+                qs = "&".join(f"{k}={v}" for k, v in query_params.items())
+                await page.goto(f"{self.API_URL}?{qs}")
                 await page.wait_for_load_state("domcontentloaded")
 
-                # 解析页面中的 JSON 数据
                 json_data = await page.evaluate(
                     """() => {
                     try {
                         return JSON.parse(document.body.innerText);
                     } catch (e) {
-                        return { error: -1, msg: String(e) };
+                        return { errno: -1, msg: String(e) };
                     }
                 }"""
                 )
 
-                # 检查返回状态
-                if json_data.get("error") != 0:
+                if json_data.get("errno") != 0:
                     return SpiderResult(
-                        success=False, message=f"获取数据失败：{json_data.get('msg', '未知错误')}"
+                        success=False,
+                        message=f"获取数据失败：{json_data.get('msg', '未知错误')}",
                     )
 
-                # 解析新闻列表
                 roll_data = json_data.get("data", {}).get("roll_data", [])
                 parsed_news = [self._parse_news_item(item) for item in roll_data]
 
-                # 筛选重点新闻
                 if params.symbol == "重点":
-                    parsed_news = [n for n in parsed_news if n["level"] in ["A", "B"]]
+                    parsed_news = [
+                        n for n in parsed_news if n["level"] in ["A", "B"]
+                    ]
 
-                # 构建最终结果
                 news_data = [
                     {
                         "title": item["title"],
