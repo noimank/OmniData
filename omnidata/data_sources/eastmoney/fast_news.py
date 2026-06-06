@@ -63,6 +63,9 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://www.eastmoney.com/")
+
                 # 构建请求参数
                 timestamp = int(datetime.now().timestamp() * 1000)
                 request_params = {

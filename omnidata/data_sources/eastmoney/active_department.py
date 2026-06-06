@@ -6,6 +6,7 @@
 包括营业部名称、买入卖出金额、净买入额、上榜次数、交易股票等
 """
 
+import random
 from datetime import datetime
 from typing import Literal
 
@@ -62,6 +63,9 @@ class ActiveDepartmentSpider(BaseWebSpider):
 
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://data.eastmoney.com/lhb/")
+
                 # 处理默认日期（当天）
                 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -173,6 +177,7 @@ class ActiveDepartmentSpider(BaseWebSpider):
                         break
 
                     page_number += 1
+                    await page.wait_for_timeout(random.randint(500, 1500))
 
                 # 如果没有数据
                 if not all_data:

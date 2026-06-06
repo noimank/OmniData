@@ -184,6 +184,7 @@ class StockSelectionSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
                 # 先访问选股页面设置必要的 cookies
                 await page.goto("https://xuangu.eastmoney.com/", wait_until="networkidle")
 

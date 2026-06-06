@@ -3,6 +3,8 @@
 获取概念板块资金流向排行数据，支持今日、5日、10日排行
 """
 
+import random
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -36,8 +38,8 @@ class ConceptSectorFlowSpider(BaseWebSpider):
 
     PAGE_URL = "https://data.eastmoney.com/bkzj/hy.html"
     API_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+    DEFAULT_UT = "8dec03ba335b81bf4ebdf7b29ec27d15"
 
-    # 每个 rank_type 对应的 fid 和 fields 配置
     RANK_TYPE_CONFIG = {
         "今日": {
             "fid": "f62",
@@ -56,58 +58,79 @@ class ConceptSectorFlowSpider(BaseWebSpider):
     async def crawl(self, params: ConceptSectorFlowParams) -> SpiderResult:
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2.eastmoney.com**", capture_ut)
+
                 await page.goto(self.PAGE_URL)
                 await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
-                # 获取当前 rank_type 的配置
-                config = self.RANK_TYPE_CONFIG[params.rank_type]
+                ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 获取全部数据
+                config = self.RANK_TYPE_CONFIG[params.rank_type]
+                api_params = {
+                    "fid": config["fid"],
+                    "po": "1",
+                    "pz": "50",
+                    "pn": "1",
+                    "np": "1",
+                    "fltt": "2",
+                    "invt": "2",
+                    "ut": ut,
+                    "fs": "m:90+t:3",
+                    "fields": config["fields"],
+                }
+
                 all_items = []
                 page_num = 1
-                page_size = 50
-
-                current_num = 0
 
                 while True:
-                    response = await page.request.get(
-                        self.API_URL,
-                        params={
-                            "fid": config["fid"],
-                            "po": "1",  # 1=降序，-1=升序
-                            "pz": str(page_size),
-                            "pn": str(page_num),
-                            "np": "1",
-                            "fltt": "2",
-                            "invt": "2",
-                            "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                            "fs": "m:90+t:3",  # t:3 表示概念板块（行业板块是 t:2）
-                            "fields": config["fields"],
-                        },
-                        timeout=30000,
+                    result = await page.evaluate(
+                        """
+                        async ([apiUrl, params]) => {
+                            const url = new URL(apiUrl);
+                            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                            const resp = await fetch(url.toString(), { credentials: 'include' });
+                            if (!resp.ok) return null;
+                            return await resp.json();
+                        }
+                        """,
+                        [self.API_URL, api_params],
                     )
-                    current_num += page_size
 
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get("rc") == 0:
-                            diff = data.get("data", {}).get("diff", [])
-                            if not diff:
-                                break
-                            all_items.extend(diff)
-                            if len(diff) < page_size:
-                                break
-                            page_num += 1
-                        else:
-                            break
-                    else:
-                        break
-                    if current_num >= params.limit:
+                    if result is None or result.get("rc") != 0:
                         break
 
-                # 解析数据 - 根据 rank_type 动态生成字段
+                    diff = result.get("data", {}).get("diff", [])
+                    if not diff:
+                        break
+
+                    all_items.extend(diff)
+                    if len(diff) < 50:
+                        break
+
+                    page_num += 1
+                    api_params["pn"] = str(page_num)
+
+                    if len(all_items) >= params.limit:
+                        break
+
+                    await page.wait_for_timeout(random.randint(500, 1500))
+
                 data_list = [
-                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
+                    self._parse_item(item, params.rank_type)
+                    for item in all_items[: params.limit]
                 ]
                 df = pd.DataFrame(data_list)
 
@@ -130,7 +153,6 @@ class ConceptSectorFlowSpider(BaseWebSpider):
         def safe_float(v):
             return float(v) if v not in (None, "", "-") else 0.0
 
-        # 基础字段
         result = {
             "板块代码": item.get("f12", ""),
             "板块名称": item.get("f14", ""),
@@ -138,7 +160,6 @@ class ConceptSectorFlowSpider(BaseWebSpider):
         }
 
         if rank_type == "今日":
-            # 今日排行字段
             result["今日涨跌幅(%)"] = safe_float(item.get("f3"))
             result["今日主力净流入(亿元)"] = round(safe_float(item.get("f62")) / 100000000, 2)
             result["今日主力净占比(%)"] = safe_float(item.get("f184"))
@@ -154,8 +175,6 @@ class ConceptSectorFlowSpider(BaseWebSpider):
             result["今日领涨股票代码"] = item.get("f205", "")
 
         elif rank_type == "5日":
-            # 5日排行字段
-            # f164=5日主力净流入, f168=5日超大单净流入, f172=5日大单净流入
             result["5日涨跌幅(%)"] = item.get("f109", "")
             result["5日主力净流入(亿元)"] = round(safe_float(item.get("f164")) / 100000000, 2)
             result["5日主力净流入净占比(%)"] = item.get("f165", "")
@@ -171,8 +190,6 @@ class ConceptSectorFlowSpider(BaseWebSpider):
             result["5日领涨股票代码"] = item.get("f258", "")
 
         else:  # 10日
-            # 10日排行字段
-            # f174=10日主力净流入, f178=10日超大单净流入, f182=10日大单净流入
             result["10日涨跌幅(%)"] = item.get("f160", "")
             result["10日主力净流入(亿元)"] = round(safe_float(item.get("f174")) / 100000000, 2)
             result["10日主力净流入净占比(%)"] = item.get("f175", "")

@@ -60,6 +60,8 @@ class StockMarginTradingSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://data.eastmoney.com/")
                 # 构建过滤条件
                 filter_str = f'(scode="{params.stock_code}")'
 

@@ -103,6 +103,8 @@ class StockBillboardSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://data.eastmoney.com/")
                 # 格式化日期
                 start_date_formatted = self._format_date(params.start_date)
                 end_date_formatted = self._format_date(params.end_date)

@@ -6,6 +6,7 @@
 包括上榜股票、涨跌幅、龙虎榜净买入金额、成交金额等数据
 """
 
+import random
 from datetime import datetime
 from typing import Literal
 
@@ -70,6 +71,9 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://data.eastmoney.com/")
+
                 # 处理默认日期（当天）
                 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -181,6 +185,7 @@ class DailyBillboardDetailsSpider(BaseWebSpider):
                         break
 
                     page_number += 1
+                    await page.wait_for_timeout(random.randint(500, 1500))
 
                 # 如果没有数据
                 if not all_data:

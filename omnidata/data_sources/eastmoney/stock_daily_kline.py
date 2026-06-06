@@ -6,6 +6,7 @@
 支持查询前复权、后复权、不复权等多种K线类型
 """
 
+import json
 import random
 import re
 import time
@@ -65,6 +66,7 @@ class StockDailyKlineSpider(BaseWebSpider):
 
     # API 配置
     API_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
 
     # 复权类型映射
     ADJUST_TYPE_MAP = {
@@ -98,6 +100,10 @@ class StockDailyKlineSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
                 # 根据股票代码自动判断市场ID
                 # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
                 stock_code = params.stock_code
@@ -110,13 +116,28 @@ class StockDailyKlineSpider(BaseWebSpider):
 
                 secid = f"{market_id}.{stock_code}"
 
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2his API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2his.eastmoney.com**", capture_ut)
+
+                await page.goto("https://data.eastmoney.com/")
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
                 # 构建请求参数
                 request_params = {
                     "cb": self._generate_jsonp_callback(),  # 动态生成 JSONP 回调函数名
                     "fields1": "f1,f2,f3,f4,f5,f6",
                     "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-                    # "ut": "7eea3edcaed734bea9cbfc24409ed989",
-                    "ut": "b2884a393a59ad64002292a3e90d46a5",
+                    "ut": ut,
                     "klt": "101",  # 101表示日线
                     "fqt": self.ADJUST_TYPE_MAP[params.adjust_type],
                     "secid": secid,
@@ -125,18 +146,23 @@ class StockDailyKlineSpider(BaseWebSpider):
                     "_": str(int(time.time() * 1000)),  # 添加时间戳参数
                 }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+                response_text = await page.evaluate(
+                    """
+                    async ([apiUrl, params]) => {
+                        const url = new URL(apiUrl);
+                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                        const resp = await fetch(url.toString(), { credentials: 'include' });
+                        if (!resp.ok) return null;
+                        return await resp.text();
+                    }
+                    """,
+                    [self.API_URL, request_params],
                 )
 
-                if response.status != 200:
+                if response_text is None:
                     return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
+                        success=False, message="请求失败"
                     )
-
-                # 获取响应文本
-                response_text = await response.text()
 
                 # 移除 JSONP 回调函数
                 # 响应格式：jQuery{random}_{timestamp}({...});
@@ -156,8 +182,6 @@ class StockDailyKlineSpider(BaseWebSpider):
                     json_str = response_text
 
                 # 解析 JSON
-                import json
-
                 try:
                     data = json.loads(json_str)
                 except json.JSONDecodeError as e:

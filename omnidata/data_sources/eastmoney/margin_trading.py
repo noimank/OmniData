@@ -92,6 +92,8 @@ class MarginTradingSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+                await page.goto("https://data.eastmoney.com/")
                 # 获取市场配置
                 market_config = self.MARKET_CONFIG[params.market]
                 # 构建请求参数

@@ -6,6 +6,7 @@
 支持分页查询和排序
 """
 
+import random
 import re
 from typing import Any
 
@@ -45,6 +46,7 @@ class StockListSpider(BaseWebSpider):
 
     # API 配置
     API_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+    DEFAULT_UT = "fa5fd1943c7b386f172d6893dbfba10b"
     # 市场筛选：沪深京A股
     # m:0+t:6+f:!2 = 深圳A股(排除ST)
     # m:0+t:80+f:!2 = 深圳创业板(排除ST)
@@ -67,6 +69,26 @@ class StockListSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2.eastmoney.com**", capture_ut)
+
+                await page.goto("https://data.eastmoney.com/")
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
                 # 构建请求参数
                 request_params = {
                     "np": "1",
@@ -79,21 +101,26 @@ class StockListSpider(BaseWebSpider):
                     "pz": str(params.page_size),
                     "po": str(params.sort_order),
                     "dect": "1",
-                    "ut": "fa5fd1943c7b386f172d6893dbfba10b",
+                    "ut": ut,
                 }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+                response_text = await page.evaluate(
+                    """
+                    async ([apiUrl, params]) => {
+                        const url = new URL(apiUrl);
+                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                        const resp = await fetch(url.toString(), { credentials: 'include' });
+                        if (!resp.ok) return null;
+                        return await resp.text();
+                    }
+                    """,
+                    [self.API_URL, request_params],
                 )
 
-                if response.status != 200:
+                if response_text is None:
                     return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
+                        success=False, message="请求失败"
                     )
-
-                # 获取响应文本
-                response_text = await response.text()
 
                 import json
 

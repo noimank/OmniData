@@ -12,6 +12,7 @@
 API 来源：https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get
 """
 
+import random
 import re
 from datetime import datetime
 from typing import Literal
@@ -56,6 +57,7 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
 
     PAGE_URL = "https://data.eastmoney.com/bkzj/BK0737.html"
     API_URL = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+    DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
 
     # K线周期映射
     PERIOD_MAP = {"day": "101", "week": "102", "month": "103"}
@@ -70,30 +72,55 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
             klt = self.PERIOD_MAP[params.period]
 
             async with self.new_page("eastmoney") as page:
-                await self.apply_anti_detection_scripts(page, "advanced")
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2his API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2his.eastmoney.com**", capture_ut)
+
                 await page.goto(self.PAGE_URL)
                 await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
                 # 请求历史资金流数据
-                response = await page.request.get(
-                    self.API_URL,
-                    params={
-                        "lmt": str(params.limit),
-                        "klt": klt,
-                        "fields1": "f1,f2,f3,f7",
-                        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
-                        "ut": "b2884a393a59ad64002292a3e90d46a5",
-                        "secid": secid,
-                    },
-                    timeout=30000,
+                api_params = {
+                    "lmt": str(params.limit),
+                    "klt": klt,
+                    "fields1": "f1,f2,f3,f7",
+                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
+                    "ut": ut,
+                    "secid": secid,
+                }
+
+                result = await page.evaluate(
+                    """
+                    async ([apiUrl, params]) => {
+                        const url = new URL(apiUrl);
+                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                        const resp = await fetch(url.toString(), { credentials: 'include' });
+                        if (!resp.ok) return null;
+                        return await resp.json();
+                    }
+                    """,
+                    [self.API_URL, api_params],
                 )
 
-                if response.status != 200:
+                if result is None:
                     return SpiderResult(
-                        success=False, message=f"API请求失败，状态码：{response.status}"
+                        success=False, message="API请求失败"
                     )
 
-                data = await response.json()
+                data = result
 
                 if data.get("rc") != 0:
                     return SpiderResult(

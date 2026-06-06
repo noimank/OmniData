@@ -3,6 +3,8 @@
 获取指定行业板块内个股的资金流向排行数据
 """
 
+import random
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -37,6 +39,7 @@ class SectorStockFlowSpider(BaseWebSpider):
 
     PAGE_URL = "https://data.eastmoney.com/bkzj/{sector_code}.html"
     API_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+    DEFAULT_UT = "8dec03ba335b81bf4ebdf7b29ec27d15"
 
     # 不同排行类型的配置
     RANK_CONFIG = {
@@ -56,45 +59,78 @@ class SectorStockFlowSpider(BaseWebSpider):
 
     async def crawl(self, params: SectorStockFlowParams) -> SpiderResult:
         try:
-            # 获取对应排行类型的配置
-            config = self.RANK_CONFIG[params.rank_type]
-
             async with self.new_page("eastmoney") as page:
-                await self.apply_anti_detection_scripts(page, "advanced")
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2.eastmoney.com**", capture_ut)
+
                 page_url = self.PAGE_URL.format(sector_code=params.sector_code)
                 await page.goto(page_url)
                 await page.wait_for_load_state("domcontentloaded", timeout=10000)
 
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
+                config = self.RANK_CONFIG[params.rank_type]
+                api_params = {
+                    "fid": config["fid"],
+                    "po": "1",
+                    "pz": "50",
+                    "pn": "1",
+                    "np": "1",
+                    "fltt": "2",
+                    "invt": "2",
+                    "ut": ut,
+                    "fs": f"b:{params.sector_code}",
+                    "fields": config["fields"],
+                }
+
                 # 获取全部数据(分页获取,每页50条)
                 all_items = []
-                pages_needed = (params.limit + 49) // 50  # 向上取整
+                page_num = 1
 
-                for page_num in range(1, pages_needed + 1):
-                    response = await page.request.get(
-                        self.API_URL,
-                        params={
-                            "fid": config["fid"],
-                            "po": "1",
-                            "pz": "50",
-                            "pn": str(page_num),
-                            "np": "1",
-                            "fltt": "2",
-                            "invt": "2",
-                            "ut": "8dec03ba335b81bf4ebdf7b29ec27d15",
-                            "fs": f"b:{params.sector_code}",
-                            "fields": config["fields"],
-                        },
-                        timeout=30000,
+                while True:
+                    result = await page.evaluate(
+                        """
+                        async ([apiUrl, params]) => {
+                            const url = new URL(apiUrl);
+                            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                            const resp = await fetch(url.toString(), { credentials: 'include' });
+                            if (!resp.ok) return null;
+                            return await resp.json();
+                        }
+                        """,
+                        [self.API_URL, api_params],
                     )
 
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get("rc") == 0:
-                            all_items.extend(data.get("data", {}).get("diff", []))
+                    if result is None or result.get("rc") != 0:
+                        break
 
-                            # 如果已经获取足够数据,提前退出
-                            if len(all_items) >= params.limit:
-                                break
+                    diff = result.get("data", {}).get("diff", [])
+                    if not diff:
+                        break
+
+                    all_items.extend(diff)
+                    if len(diff) < 50:
+                        break
+
+                    page_num += 1
+                    api_params["pn"] = str(page_num)
+
+                    if len(all_items) >= params.limit:
+                        break
+
+                    await page.wait_for_timeout(random.randint(500, 1500))
 
                 # 解析数据
                 data_list = [

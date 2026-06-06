@@ -6,6 +6,8 @@
 支持输入股票代码或指数代码查询实时行情
 """
 
+import random
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -43,6 +45,7 @@ class StockQuoteSpider(BaseWebSpider):
 
     # API 配置 - 使用 /qt/stock/get 接口获取完整的买卖五价数据
     API_URL = "https://push2.eastmoney.com/api/qt/stock/get"
+    DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
     # 请求字段：使用akshare的完整字段参数以确保获取买卖五价数据
     FIELDS = "f120,f121,f122,f174,f175,f59,f163,f43,f57,f58,f169,f170,f46,f44,f51,f168,f47,f164,f116,f60,f45,f52,f50,f48,f167,f117,f71,f161,f49,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149,f55,f62,f162,f92,f173,f104,f105,f84,f85,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f107,f111,f86,f177,f78,f110,f262,f263,f264,f267,f268,f255,f256,f257,f258,f127,f199,f128,f198,f259,f260,f261,f171,f277,f278,f279,f288,f152,f250,f251,f252,f253,f254,f269,f270,f271,f272,f273,f274,f275,f276,f265,f266,f289,f290,f286,f285,f292,f293,f294,f295"
 
@@ -58,6 +61,10 @@ class StockQuoteSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
                 # 根据股票代码自动判断市场ID
                 # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
                 stock_code = params.stock_code
@@ -70,25 +77,51 @@ class StockQuoteSpider(BaseWebSpider):
 
                 secid = f"{market_id}.{stock_code}"
 
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2.eastmoney.com**", capture_ut)
+
+                await page.goto("https://quote.eastmoney.com/")
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
                 # 构建请求参数
                 request_params = {
                     "fltt": "2",
                     "invt": "2",
                     "fields": self.FIELDS,
                     "secid": secid,
+                    "ut": ut,
                 }
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+
+                result = await page.evaluate(
+                    """
+                    async ([apiUrl, params]) => {
+                        const url = new URL(apiUrl);
+                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                        const resp = await fetch(url.toString(), { credentials: 'include' });
+                        if (!resp.ok) return null;
+                        return await resp.json();
+                    }
+                    """,
+                    [self.API_URL, request_params],
                 )
 
-                if response.status != 200:
+                if result is None:
                     return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
+                        success=False, message="请求失败"
                     )
 
                 # 解析响应
-                data = await response.json()
+                data = result
 
                 # 检查返回状态
                 if data.get("rc") != 0:

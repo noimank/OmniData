@@ -6,6 +6,8 @@
 支持输入股票代码或指数代码查询资金流向
 """
 
+import random
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -41,6 +43,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
 
     # API 配置
     API_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+    DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
     # 请求字段：包含所有资金流向相关字段
     FIELDS = "f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f64,f65,f70,f71,f76,f77,f82,f83,f164,f166,f168,f170,f172,f252,f253,f254,f255,f256,f124,f6,f278,f279,f280,f281,f282"
 
@@ -56,26 +59,54 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
+                await self.filter_file_load(
+                    page, ["image", "stylesheet", "font", "media"]
+                )
+
+                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+                captured_ut = {}
+
+                async def capture_ut(route):
+                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                    if m:
+                        captured_ut["token"] = m.group(1)
+                    await route.continue_()
+
+                await page.route("**push2.eastmoney.com**", capture_ut)
+
+                await page.goto("https://data.eastmoney.com/")
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+                ut = captured_ut.get("token") or self.DEFAULT_UT
+
                 # 构建请求参数
                 request_params = {
                     "fltt": "2",
                     "secids": params.secid,
                     "fields": self.FIELDS,
-                    "ut": "b2884a393a59ad64002292a3e90d46a5",
+                    "ut": ut,
                 }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+                result = await page.evaluate(
+                    """
+                    async ([apiUrl, params]) => {
+                        const url = new URL(apiUrl);
+                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+                        const resp = await fetch(url.toString(), { credentials: 'include' });
+                        if (!resp.ok) return null;
+                        return await resp.json();
+                    }
+                    """,
+                    [self.API_URL, request_params],
                 )
 
-                if response.status != 200:
+                if result is None:
                     return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
+                        success=False, message="请求失败"
                     )
 
                 # 解析响应
-                data = await response.json()
+                data = result
 
                 # 检查返回状态
                 if data.get("rc") != 0:
