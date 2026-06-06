@@ -249,7 +249,7 @@ def update_mkdocs_nav(platform_stats: Dict[str, Dict[str, Any]], root: Path):
 
     # 写回文件，保持原有格式和注释
     try:
-        with open(mkdocs_path, "w", encoding="utf-8") as f:
+        with open(mkdocs_path, "w", encoding="utf-8", newline="\n") as f:
             yaml.dump(config, f)
         print(f"✓ {mkdocs_path.relative_to(root)} (已更新数据源导航)")
     except Exception as e:
@@ -278,19 +278,19 @@ def generate_all_datasource_docs():
             if si and si["name"]:
                 spiders.append(si)
                 dp = pdocs / f"{si['name']}.md"
-                dp.write_text(render_spider_doc(si, si.get("platform", pname)), encoding="utf-8")
+                dp.write_text(render_spider_doc(si, si.get("platform", pname)), encoding="utf-8", newline="\n")
                 total += 1
                 print(f"✓ {dp.relative_to(root)}")
         
         if spiders:
             dn = spiders[0].get("platform", pname)
             ip = pdocs / "index.md"
-            ip.write_text(gen_platform_index(pname, dn, spiders), encoding="utf-8")
+            ip.write_text(gen_platform_index(pname, dn, spiders), encoding="utf-8", newline="\n")
             print(f"✓ {ip.relative_to(root)}")
             stats[pname] = {"display_name": dn, "spider_count": len(spiders)}
     
     mi = docs_dir / "index.md"
-    mi.write_text(gen_main_index(stats), encoding="utf-8")
+    mi.write_text(gen_main_index(stats), encoding="utf-8", newline="\n")
     print(f"✓ {mi.relative_to(root)}")
 
     # 更新 mkdocs.yml 导航配置

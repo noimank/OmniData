@@ -1,19 +1,17 @@
-# 获取金十数据实时财经快讯，包括内容、时间、类型等
+# 获取同花顺A股市场涨跌分布概览数据（10区间分布、涨跌停、大盘评级）
 
 ## 基本信息
 
 | 项目 | 值 |
 | :--- | :--- |
-| **爬虫名称** | `jin10_flash_news` |
-| **平台** | 金十数据 |
-| **版本** | 1.0.0 |
+| **爬虫名称** | `ths_10jqka_market_overview` |
+| **平台** | 同花顺10jqka |
+| **版本** | 3.0.0 |
 | **作者** | noimank |
 
 ## 请求参数
 
-| 参数名 | 类型 | 必填 | 默认值 | 说明 |
-| :--- | :--- | :---: | :--- | :--- |
-| `num` | `int` | ✗ | `20` | 获取快讯数量，默认20条，最大100条 |
+该接口无需参数。
 
 ## 使用示例
 
@@ -21,8 +19,7 @@
 
 ```bash
 curl -X POST http://localhost:8380/api/v1/spiders/run   -H "Content-Type: application/json"   -d '{
-    "spider_name": "jin10_flash_news",
-    "params": { ... }
+    "spider_name": "ths_10jqka_market_overview"
   }'
 ```
 
@@ -35,8 +32,7 @@ async with httpx.AsyncClient() as client:
     resp = await client.post(
         "http://localhost:8380/api/v1/spiders/run",
         json={
-            "spider_name": "jin10_flash_news",
-            "params": { ... }
+            "spider_name": "ths_10jqka_market_overview"
         }
     )
     result = resp.json()
