@@ -3,6 +3,7 @@
     <div class="header-content">
       <div class="title">
         <h3>{{ currentTitle }}</h3>
+        <span class="build-version">v{{ buildVersion }}</span>
       </div>
       <div class="header-actions">
         <a href="https://github.com/noimank/OmniData" target="_blank" class="action-link github-link">
@@ -37,6 +38,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const currentTitle = computed(() => route.meta.title as string || 'OmniData')
+const buildVersion = __BUILD_VERSION__
 </script>
 
 <style scoped lang="scss">
@@ -52,10 +54,24 @@ const currentTitle = computed(() => route.meta.title as string || 'OmniData')
     height: 100%;
 
     .title {
+      display: flex;
+      align-items: center;
+
       h3 {
         margin: 0;
         font-size: 18px;
         color: #303133;
+      }
+
+      .build-version {
+        font-size: 12px;
+        color: #909399;
+        background: #f4f4f5;
+        padding: 2px 8px;
+        border-radius: 10px;
+        margin-left: 10px;
+        vertical-align: middle;
+        font-family: 'SF Mono', 'Cascadia Code', monospace;
       }
     }
 
