@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 24 |
+| **接口数量** | 25 |
 
 ## 接口列表
 
@@ -16,6 +16,7 @@
 | [获取中国CPI居民消费价格指数月度数据，包括全国、城市、农村的当月同比、环比增长及累计数据](eastmoney_china_cpi.md) | `eastmoney_china_cpi` | 1.0.0 |
 | [获取指定日期范围的龙虎榜交易明细数据，包括上榜股票、涨跌幅、龙虎榜买卖金额等](eastmoney_daily_billboard_details.md) | `eastmoney_daily_billboard_details` | 1.0.0 |
 | [获取营业部收益率排行榜数据，包括营业部上榜次数、收益率、交易金额等](eastmoney_department_return_ranking.md) | `eastmoney_department_return_ranking` | 1.0.0 |
+| [获取ETF基金持仓明细数据，包括持仓股票、占净值比例、持股数、持仓市值等信息，支持按年份筛选](eastmoney_etf_holdings.md) | `eastmoney_etf_holdings` | 1.0.0 |
 | [获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等](eastmoney_fast_news.md) | `eastmoney_fast_news` | 1.0.0 |
 | [获取指定行业板块的历史资金流向数据（日线/周线/月线）](eastmoney_industry_history_flow.md) | `eastmoney_industry_history_flow` | 1.0.0 |
 | [获取指定行业板块的实时资金流向数据（分钟级）](eastmoney_industry_realtime_flow.md) | `eastmoney_industry_realtime_flow` | 1.0.0 |
