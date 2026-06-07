@@ -58,9 +58,7 @@ class ConceptSectorFlowSpider(BaseWebSpider):
     async def crawl(self, params: ConceptSectorFlowParams) -> SpiderResult:
         try:
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
                 captured_ut = {}
@@ -129,8 +127,7 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                     await page.wait_for_timeout(random.randint(500, 1500))
 
                 data_list = [
-                    self._parse_item(item, params.rank_type)
-                    for item in all_items[: params.limit]
+                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
                 ]
                 df = pd.DataFrame(data_list)
 

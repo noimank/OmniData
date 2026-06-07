@@ -72,9 +72,7 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
             klt = self.PERIOD_MAP[params.period]
 
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2his API 请求 ──
                 captured_ut = {}
@@ -116,9 +114,7 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
                 )
 
                 if result is None:
-                    return SpiderResult(
-                        success=False, message="API请求失败"
-                    )
+                    return SpiderResult(success=False, message="API请求失败")
 
                 data = result
 

@@ -45,6 +45,7 @@ class TestTHS10JqkaSpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
     async def test_run2(self, browser_pool):
         spider_name = "ths_10jqka_market_overview"
         params = {}

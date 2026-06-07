@@ -11,9 +11,9 @@
 API: GET api.php?t=indexflash&type=all  (JSON)
 
 返回字段说明：
-	    zdfb_data.zdfb: 涨跌分布10区间（含精确百分比边界），区间依次为：
-	        [-∞, -8%]   [-8%, -6%]   [-6%, -4%]   [-4%, -2%]   [-2%, 0)
-	        [0, 2%]     (2%, 4%]     (4%, 6%]     (6%, 8%]     [8%, +∞]
+            zdfb_data.zdfb: 涨跌分布10区间（含精确百分比边界），区间依次为：
+                [-∞, -8%]   [-8%, -6%]   [-6%, -4%]   [-4%, -2%]   [-2%, 0)
+                [0, 2%]     (2%, 4%]     (4%, 6%]     (6%, 8%]     [8%, +∞]
     zdfb_data.znum: 上涨总只数
     zdfb_data.dnum: 下跌总只数
     zdt_data: 涨跌停分时数据
@@ -180,10 +180,12 @@ class MarketOverviewSpider(BaseWebSpider):
 
         distribution = []
         for i, count in enumerate(zdfb_raw):
-            distribution.append({
-                "区间": self.ZDFB_LABELS[i] if i < len(self.ZDFB_LABELS) else f"区间{i}",
-                "数量": count,
-            })
+            distribution.append(
+                {
+                    "区间": self.ZDFB_LABELS[i] if i < len(self.ZDFB_LABELS) else f"区间{i}",
+                    "数量": count,
+                }
+            )
 
         # ── 涨跌停 ──
         last_zdt = zdt_data.get("last_zdt", {})
@@ -195,11 +197,13 @@ class MarketOverviewSpider(BaseWebSpider):
         dtzs = zdt_data.get("dtzs", [])
         step = max(1, len(zd_time) // 20) if zd_time else 1
         for i in range(0, len(zd_time), step):
-            timeline.append({
-                "时间": zd_time[i],
-                "涨停": ztzs[i] if i < len(ztzs) else 0,
-                "跌停": dtzs[i] if i < len(dtzs) else 0,
-            })
+            timeline.append(
+                {
+                    "时间": zd_time[i],
+                    "涨停": ztzs[i] if i < len(ztzs) else 0,
+                    "跌停": dtzs[i] if i < len(dtzs) else 0,
+                }
+            )
 
         return {
             "涨跌分布": distribution,

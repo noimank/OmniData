@@ -227,9 +227,7 @@ class StockChipDistributionSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # 判断市场ID
                 stock_code = params.stock_code
@@ -283,9 +281,7 @@ class StockChipDistributionSpider(BaseWebSpider):
                 )
 
                 if response_text is None:
-                    return SpiderResult(
-                        success=False, message="请求失败"
-                    )
+                    return SpiderResult(success=False, message="请求失败")
 
                 data = json.loads(response_text)
 

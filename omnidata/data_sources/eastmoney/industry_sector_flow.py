@@ -61,9 +61,7 @@ class IndustrySectorFlowSpider(BaseWebSpider):
             config = self.RANK_CONFIG[params.rank_type]
 
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 captured_ut = {}
 

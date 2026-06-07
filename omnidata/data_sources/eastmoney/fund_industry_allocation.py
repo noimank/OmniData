@@ -339,13 +339,9 @@ class FundIndustryAllocationSpider(BaseWebSpider):
                     left_label = h4.find("label", class_="left")
                     date_font = h4.find("font", class_="px12")
                     # 报告期描述：去掉基金名链接和 nbsp，如 "2025年4季度行业配置明细"
-                    report_label = (
-                        left_label.get_text(strip=True) if left_label else ""
-                    )
+                    report_label = left_label.get_text(strip=True) if left_label else ""
                     # 截止日期，如 "2025-12-31"
-                    report_date = (
-                        date_font.get_text(strip=True) if date_font else ""
-                    )
+                    report_date = date_font.get_text(strip=True) if date_font else ""
                 else:
                     report_label = ""
                     report_date = ""

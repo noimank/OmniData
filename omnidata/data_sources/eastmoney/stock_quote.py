@@ -61,9 +61,7 @@ class StockQuoteSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # 根据股票代码自动判断市场ID
                 # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
@@ -116,9 +114,7 @@ class StockQuoteSpider(BaseWebSpider):
                 )
 
                 if result is None:
-                    return SpiderResult(
-                        success=False, message="请求失败"
-                    )
+                    return SpiderResult(success=False, message="请求失败")
 
                 # 解析响应
                 data = result

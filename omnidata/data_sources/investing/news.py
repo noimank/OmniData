@@ -38,10 +38,7 @@ CATEGORY_LABELS = {
 class InvestingNewsParams(BaseModel):
     category: str = Field(
         default="all",
-        description=(
-            "新闻类别: "
-            + ", ".join(f"{k}({v})" for k, v in CATEGORY_LABELS.items())
-        ),
+        description=("新闻类别: " + ", ".join(f"{k}({v})" for k, v in CATEGORY_LABELS.items())),
     )
     limit: int = Field(
         default=20,
@@ -117,10 +114,7 @@ class InvestingNewsSpider(BaseWebSpider):
 
     async def _crawl_all(self, limit: int) -> SpiderResult:
         async with self.new_page("investing") as page:
-            tasks = [
-                self._fetch_feed(page, cat, feed_id)
-                for cat, feed_id in CATEGORY_MAP.items()
-            ]
+            tasks = [self._fetch_feed(page, cat, feed_id) for cat, feed_id in CATEGORY_MAP.items()]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_news: list[dict[str, Any]] = []
@@ -146,9 +140,7 @@ class InvestingNewsSpider(BaseWebSpider):
             message=f"成功获取 {len(news_list)} 条全部新闻（合并自 {len(CATEGORY_MAP)} 个分类）",
         )
 
-    async def _fetch_feed(
-        self, page: Any, category: str, feed_id: str
-    ) -> list[dict[str, Any]]:
+    async def _fetch_feed(self, page: Any, category: str, feed_id: str) -> list[dict[str, Any]]:
         feed_url = self.RSS_BASE_URL.format(feed_id)
         response = await page.request.get(feed_url, timeout=30000)
 

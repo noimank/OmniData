@@ -189,8 +189,12 @@ class ETFHoldingSpider(BaseWebSpider):
                         "股票代码": h["stock_code"],
                         "股票名称": h["stock_name"],
                         # 优先用首次加载时 JS 填充的价格（最新报告期才有），否则用表格中可能的值
-                        "最新价": initial_prices.get(h["stock_code"], {}).get("price", h.get("latest_price", "")),
-                        "涨跌幅": initial_prices.get(h["stock_code"], {}).get("change", h.get("change_pct", "")),
+                        "最新价": initial_prices.get(h["stock_code"], {}).get(
+                            "price", h.get("latest_price", "")
+                        ),
+                        "涨跌幅": initial_prices.get(h["stock_code"], {}).get(
+                            "change", h.get("change_pct", "")
+                        ),
                         "占净值比例": h["nav_ratio"],
                         "持股数_万股": h["shares_wan"],
                         "持仓市值_万元": h["market_value_wan"],

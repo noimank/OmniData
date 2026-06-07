@@ -82,9 +82,7 @@ class CLSNewsSpider(BaseWebSpider):
                 parsed_news = [self._parse_news_item(item) for item in roll_data]
 
                 if params.symbol == "重点":
-                    parsed_news = [
-                        n for n in parsed_news if n["level"] in ["A", "B"]
-                    ]
+                    parsed_news = [n for n in parsed_news if n["level"] in ["A", "B"]]
 
                 news_data = [
                     {

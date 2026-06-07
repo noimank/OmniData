@@ -1,10 +1,12 @@
 """
 自动扫描 data_sources/ 目录，生成数据源接口文档
 """
+
 import ast
 from ruamel.yaml import YAML
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 
 class SpiderInfoExtractor(ast.NodeVisitor):
     def __init__(self):
@@ -26,6 +28,7 @@ class SpiderInfoExtractor(ast.NodeVisitor):
                                 self.params_model = item.value.id
         self.generic_visit(node)
 
+
 def extract_params(node: ast.ClassDef) -> List[Dict[str, Any]]:
     params = []
     for item in node.body:
@@ -44,8 +47,17 @@ def extract_params(node: ast.ClassDef) -> List[Dict[str, Any]]:
                         default, req = kw.value.value, False
             elif item.value and isinstance(item.value, ast.Constant):
                 default, req = item.value.value, False
-            params.append({"name": item.target.id, "type": ptype, "description": desc, "default": default, "required": req})
+            params.append(
+                {
+                    "name": item.target.id,
+                    "type": ptype,
+                    "description": desc,
+                    "default": default,
+                    "required": req,
+                }
+            )
     return params
+
 
 def extract_spider_info(fp: Path) -> Optional[Dict[str, Any]]:
     try:
@@ -72,15 +84,24 @@ def extract_spider_info(fp: Path) -> Optional[Dict[str, Any]]:
         print(f"Error: {fp} - {e}")
         return None
 
+
 def render_spider_doc(si: Dict, pn: str) -> str:
     pt = ""
     if si["params"]:
         rows = []
         for p in si["params"]:
-            req = '✓' if p['required'] else '✗'
-            default_val = f"`{p['default']}`" if p['default'] is not None else '-'
-            rows.append(f"| `{p['name']}` | `{p['type']}` | {req} | {default_val} | {p['description']} |")
-        pt = "\n".join(["| 参数名 | 类型 | 必填 | 默认值 | 说明 |", "| :--- | :--- | :---: | :--- | :--- |", *rows])
+            req = "✓" if p["required"] else "✗"
+            default_val = f"`{p['default']}`" if p["default"] is not None else "-"
+            rows.append(
+                f"| `{p['name']}` | `{p['type']}` | {req} | {default_val} | {p['description']} |"
+            )
+        pt = "\n".join(
+            [
+                "| 参数名 | 类型 | 必填 | 默认值 | 说明 |",
+                "| :--- | :--- | :---: | :--- | :--- |",
+                *rows,
+            ]
+        )
     else:
         pt = "该接口无需参数。"
     ep_bash = ',\n    "params": { ... }' if si["params"] else ""
@@ -139,8 +160,12 @@ async with httpx.AsyncClient() as client:
 ```
 """
 
+
 def gen_platform_index(pdn: str, pn: str, spiders: List) -> str:
-    rows = [f"| [{s['description']}]({s['name']}.md) | `{s['name']}` | {s['version']} |" for s in spiders]
+    rows = [
+        f"| [{s['description']}]({s['name']}.md) | `{s['name']}` | {s['version']} |"
+        for s in spiders
+    ]
     table = "\n".join(["| 接口说明 | 爬虫名称 | 版本 |", "| :--- | :--- | :---: |", *rows])
     return f"""# {pn}
 
@@ -164,10 +189,14 @@ POST http://localhost:8380/api/v1/spiders/run
 ```
 """
 
+
 def gen_main_index(stats: Dict) -> str:
     total_p = len(stats)
     total_s = sum(s["spider_count"] for s in stats.values())
-    rows = [f"| [{s['display_name']}]({pd}/index.md) | {s['spider_count']} | `{pd}` |" for pd, s in sorted(stats.items())]
+    rows = [
+        f"| [{s['display_name']}]({pd}/index.md) | {s['spider_count']} | `{pd}` |"
+        for pd, s in sorted(stats.items())
+    ]
     table = "\n".join(["| 平台 | 接口数 | 标识 |", "| :--- | :---: | :--- |", *rows])
     return f"""# 数据源
 
@@ -195,6 +224,7 @@ curl -X POST http://localhost:8380/api/v1/spiders/run -H "Content-Type: applicat
 
 创建 MCP 服务后，所有爬虫自动暴露为 MCP 工具。
 """
+
 
 def update_mkdocs_nav(platform_stats: Dict[str, Dict[str, Any]], root: Path):
     """更新 mkdocs.yml 中的数据源导航配置（保留注释和格式）"""
@@ -261,16 +291,16 @@ def generate_all_datasource_docs():
     ds_dir = root / "omnidata" / "data_sources"
     docs_dir = root / "docs" / "datasources"
     stats, total = {}, 0
-    
+
     for pd in sorted(ds_dir.iterdir()):
         if not pd.is_dir() or pd.name.startswith("_"):
             continue
-        
+
         pname = pd.name
         pdocs = docs_dir / pname
         pdocs.mkdir(parents=True, exist_ok=True)
         spiders = []
-        
+
         for pf in sorted(pd.glob("*.py")):
             if pf.name.startswith("_") or pf.name == "login.py":
                 continue
@@ -278,17 +308,19 @@ def generate_all_datasource_docs():
             if si and si["name"]:
                 spiders.append(si)
                 dp = pdocs / f"{si['name']}.md"
-                dp.write_text(render_spider_doc(si, si.get("platform", pname)), encoding="utf-8", newline="\n")
+                dp.write_text(
+                    render_spider_doc(si, si.get("platform", pname)), encoding="utf-8", newline="\n"
+                )
                 total += 1
                 print(f"✓ {dp.relative_to(root)}")
-        
+
         if spiders:
             dn = spiders[0].get("platform", pname)
             ip = pdocs / "index.md"
             ip.write_text(gen_platform_index(pname, dn, spiders), encoding="utf-8", newline="\n")
             print(f"✓ {ip.relative_to(root)}")
             stats[pname] = {"display_name": dn, "spider_count": len(spiders)}
-    
+
     mi = docs_dir / "index.md"
     mi.write_text(gen_main_index(stats), encoding="utf-8", newline="\n")
     print(f"✓ {mi.relative_to(root)}")
@@ -297,6 +329,7 @@ def generate_all_datasource_docs():
     update_mkdocs_nav(stats, root)
 
     print(f"\n✓ 共生成 {total} 个爬虫文档，覆盖 {len(stats)} 个平台")
+
 
 if __name__ == "__main__":
     generate_all_datasource_docs()

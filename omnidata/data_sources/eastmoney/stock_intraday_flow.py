@@ -83,9 +83,7 @@ class StockIntradayFlowSpider(BaseWebSpider):
             secid = f"{market_code}.{params.stock_code}"
 
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
                 captured_ut = {}
@@ -127,9 +125,7 @@ class StockIntradayFlowSpider(BaseWebSpider):
                 )
 
                 if text is None:
-                    return SpiderResult(
-                        success=False, message="请求失败"
-                    )
+                    return SpiderResult(success=False, message="请求失败")
 
                 # 解析响应（可能是JSONP格式）
                 body = text.encode("utf-8")

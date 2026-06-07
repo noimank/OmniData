@@ -76,9 +76,7 @@ class Jin10FlashNewsSpider(BaseWebSpider):
 
                 flash_list = json_data.get("data", [])
                 parsed_news = [
-                    self._parse_news_item(item)
-                    for item in flash_list
-                    if item.get("time")
+                    self._parse_news_item(item) for item in flash_list if item.get("time")
                 ]
 
                 return SpiderResult(

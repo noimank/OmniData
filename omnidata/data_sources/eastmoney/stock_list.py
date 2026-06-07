@@ -69,9 +69,7 @@ class StockListSpider(BaseWebSpider):
         """
         try:
             async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(
-                    page, ["image", "stylesheet", "font", "media"]
-                )
+                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
                 captured_ut = {}
@@ -118,9 +116,7 @@ class StockListSpider(BaseWebSpider):
                 )
 
                 if response_text is None:
-                    return SpiderResult(
-                        success=False, message="请求失败"
-                    )
+                    return SpiderResult(success=False, message="请求失败")
 
                 import json
 
