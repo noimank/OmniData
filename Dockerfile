@@ -3,6 +3,11 @@
 # ============================================
 FROM node:24-alpine AS frontend-builder
 
+# 接收 CI 传入的构建时间戳，确保每次 CI 构建时此层缓存失效，
+# 避免前端构建产物被旧缓存命中（导致版本号不更新）
+ARG BUILD_DATE
+ENV BUILD_DATE=${BUILD_DATE}
+
 WORKDIR /frontend
 
 # 复制依赖文件并安装
