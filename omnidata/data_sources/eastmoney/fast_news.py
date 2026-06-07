@@ -2,13 +2,18 @@
 东方财富全球财经快讯 Spider
 获取东方财富全球财经快讯新闻列表
 
-从 https://np-weblist.eastmoney.com/comm/web/getFastNewsList 接口获取数据
-支持分页和每页数量设置
+通过访问 https://kuaixun.eastmoney.com/ 触发对
+https://np-weblist.eastmoney.com/comm/web/getFastNewsList 的真实请求，
+用 page.route 拦截该请求、改写 fastColumn / pageSize 参数后再放行，
+直接读取响应数据。整个流程以浏览器原生请求发出，
+服务端看到的是带 cookie / referer / sec-ch-ua 等真实浏览器指纹的请求，
+反爬风险最低。
 """
 
+import json
 import re
-from datetime import datetime
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from pydantic import BaseModel, Field
 
@@ -42,14 +47,17 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
 
     name = "eastmoney_fast_news"
     description = "获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等"
-    version = "1.0.0"
+    version = "1.2.0"
     author = "noimank"
     platform = "东方财富"
 
     params_model = EastmoneyFastNewsParams
 
-    # API 配置
-    API_URL = "https://np-weblist.eastmoney.com/comm/web/getFastNewsList"
+    # 入口页面：访问后会自动向 getFastNewsList 发起请求
+    PAGE_URL = "https://kuaixun.eastmoney.com/"
+    # 目标接口
+    API_HOST = "np-weblist.eastmoney.com"
+    API_PATH = "/comm/web/getFastNewsList"
 
     async def crawl(self, params: EastmoneyFastNewsParams) -> SpiderResult:
         """
@@ -64,37 +72,60 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         try:
             async with self.new_page("eastmoney") as page:
                 await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://www.eastmoney.com/")
 
-                # 构建请求参数
-                timestamp = int(datetime.now().timestamp() * 1000)
-                request_params = {
-                    "client": "web",
-                    "biz": "web_724",
-                    "fastColumn": params.fast_column,
-                    "sortEnd": "",
-                    "pageSize": params.page_size,
-                    "req_trace": timestamp,
-                    "_": timestamp + 1,
-                }
+                # ── 拦截 getFastNewsList 请求 ──
+                # 服务端对 cookie / referer / sec-ch-ua 等浏览器指纹敏感，
+                # 通过 page.route 拦截后用 route.fetch(url=新URL) 改写参数再放行，
+                # Playwright 会自动带上原始请求的所有请求头，伪装度最高。
+                captured_body: dict[str, str | None] = {"body": None}
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
+                async def handle_route(route):
+                    url = route.request.url
+                    if self.API_PATH in url and self.API_HOST in url:
+                        # 改写 fastColumn / pageSize，保留其它字段（特别是 sortEnd= 空值）
+                        new_url = self._rewrite_query(
+                            url,
+                            {
+                                "fastColumn": params.fast_column,
+                                "pageSize": str(params.page_size),
+                            },
+                        )
+                        try:
+                            response = await route.fetch(url=new_url)
+                            captured_body["body"] = await response.text()
+                            await route.fulfill(response=response)
+                            return
+                        except Exception:
+                            # 改写失败则放行原始请求
+                            await route.continue_()
+                            return
+                    await route.continue_()
 
-                if response.status != 200:
+                await page.route("**/*", handle_route)
+
+                # 访问入口页，等待页面真正发起 getFastNewsList 请求
+                await page.goto(self.PAGE_URL, timeout=30000)
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+
+                # 等待拦截到响应（最多 10 秒）
+                for _ in range(20):
+                    if captured_body["body"] is not None:
+                        break
+                    await page.wait_for_timeout(500)
+
+                if captured_body["body"] is None:
                     return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
+                        success=False,
+                        message="拦截 getFastNewsList 响应超时，页面未发起该请求",
                     )
 
-                # 获取响应文本（JSONP格式）
-                response_text = await response.text()
-
-                # 解析JSONP响应
-                json_data = self._parse_jsonp(response_text)
+                # 解析 JSONP 响应
+                json_data = self._parse_jsonp(captured_body["body"])
                 if json_data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
+                    return SpiderResult(
+                        success=False,
+                        message="解析响应数据失败：返回内容不是合法的 JSONP/JSON",
+                    )
 
                 # 检查返回状态
                 if json_data.get("code") != "1":
@@ -119,30 +150,54 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         except Exception as e:
             return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
 
-    def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
+    @staticmethod
+    def _rewrite_query(url: str, overrides: dict[str, str]) -> str:
         """
-        解析JSONP格式响应
+        改写 URL 的 query string，保留 keep_blank_values 的空值字段
 
         Args:
-            response_text: JSONP响应文本
+            url: 原始 URL
+            overrides: 要覆盖的字段
 
         Returns:
-            解析后的字典数据
+            改写后的 URL
         """
-        try:
-            # 匹配 jQuery18305328649312153803_1769931049465({...}) 格式
-            match = re.search(r"jQuery\d+_\d+\(({.+})\)", response_text)
-            if match:
-                json_str = match.group(1)
-                import json
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query, keep_blank_values=True)
+        qs.update({k: [v] for k, v in overrides.items()})
+        new_query = urlencode(qs, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
 
-                return json.loads(json_str)
-            # 如果直接是JSON格式
-            import json
+    def _parse_jsonp(self, raw_text: str) -> dict[str, Any] | None:
+        """
+        解析 JSONP / JSON 响应
 
-            return json.loads(response_text)
-        except Exception as e:
+        支持两种格式：
+        - JSON: {"code": "1", ...}
+        - JSONP: callback({"code": "1", ...}) / jQuery183..._123({"code": "1", ...});
+
+        Args:
+            raw_text: 原始响应文本
+
+        Returns:
+            解析后的字典，失败返回 None
+        """
+        if not raw_text:
             return None
+        try:
+            # 优先尝试直接解析为 JSON
+            return json.loads(raw_text)
+        except json.JSONDecodeError:
+            pass
+
+        # JSONP：匹配 "callback({...});" 形式
+        match = re.search(r"\w+\s*\((.*)\)\s*;?\s*$", raw_text.strip(), re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return None
+        return None
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """
@@ -155,14 +210,8 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
             解析后的新闻字典
         """
         return {
-            # "code": item.get("code", ""),
             "title": item.get("title", ""),
             "content": item.get("summary", ""),
             "pub_time": item.get("showTime", ""),
-            # "comment_count": item.get("pinglun_Num", 0),
-            # "share_count": item.get("share", 0),
             "stock_list": item.get("stockList", []),
-            # "image": item.get("image", []),
-            # "title_color": item.get("titleColor", 0),
-            # "real_sort": item.get("realSort", ""),
         }
