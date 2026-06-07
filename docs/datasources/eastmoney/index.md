@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 25 |
+| **接口数量** | 26 |
 
 ## 接口列表
 
@@ -18,6 +18,7 @@
 | [获取营业部收益率排行榜数据，包括营业部上榜次数、收益率、交易金额等](eastmoney_department_return_ranking.md) | `eastmoney_department_return_ranking` | 1.0.0 |
 | [获取ETF基金持仓明细数据，包括持仓股票、占净值比例、持股数、持仓市值等信息，支持按年份筛选](eastmoney_etf_holdings.md) | `eastmoney_etf_holdings` | 1.0.0 |
 | [获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等](eastmoney_fast_news.md) | `eastmoney_fast_news` | 1.0.0 |
+| [获取ETF/LOF基金历史净值数据，包括单位净值、累计净值、日增长率、申赎状态、分红送配等信息，支持日期范围筛选](eastmoney_fund_nav_history.md) | `eastmoney_fund_nav_history` | 1.0.0 |
 | [获取指定行业板块的历史资金流向数据（日线/周线/月线）](eastmoney_industry_history_flow.md) | `eastmoney_industry_history_flow` | 1.0.0 |
 | [获取指定行业板块的实时资金流向数据（分钟级）](eastmoney_industry_realtime_flow.md) | `eastmoney_industry_realtime_flow` | 1.0.0 |
 | [获取行业板块最新资金流向排行数据](eastmoney_industry_sector_flow.md) | `eastmoney_industry_sector_flow` | 1.0.0 |

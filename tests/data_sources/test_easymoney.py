@@ -247,8 +247,17 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
     async def test_run26(self, browser_pool):
         spider_name = "eastmoney_etf_holdings"
+        params = {"fund_code": "159559"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
+    async def test_run27(self, browser_pool):
+        spider_name = "eastmoney_fund_nav_history"
         params = {"fund_code": "159559"}
         register = spider_register()
         instance = register.get_spider_instance(spider_name)
