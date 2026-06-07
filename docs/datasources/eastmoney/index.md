@@ -5,13 +5,14 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 27 |
+| **接口数量** | 28 |
 
 ## 接口列表
 
 | 接口说明 | 爬虫名称 | 版本 |
 | :--- | :--- | :---: |
 | [获取指定日期范围的龙虎榜活跃营业部数据，包括营业部买卖金额、净买入额、上榜次数等](eastmoney_active_department.md) | `eastmoney_active_department` | 1.0.0 |
+| [获取指定板块的当日盘口异动数据，包括各种异动类型（涨停板/火箭发射/大笔买卖等）的次数和个股](eastmoney_board_changes.md) | `eastmoney_board_changes` | 1.0.0 |
 | [获取概念板块资金流向排行数据，支持今日、5日、10日排行查询](eastmoney_concept_sector_flow.md) | `eastmoney_concept_sector_flow` | 1.0.0 |
 | [获取中国CPI居民消费价格指数月度数据，包括全国、城市、农村的当月同比、环比增长及累计数据](eastmoney_china_cpi.md) | `eastmoney_china_cpi` | 1.0.0 |
 | [获取指定日期范围的龙虎榜交易明细数据，包括上榜股票、涨跌幅、龙虎榜买卖金额等](eastmoney_daily_billboard_details.md) | `eastmoney_daily_billboard_details` | 1.0.0 |

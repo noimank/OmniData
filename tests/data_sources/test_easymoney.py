@@ -263,9 +263,19 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
     async def test_run28(self, browser_pool):
         spider_name = "eastmoney_fund_industry_allocation"
         params = {"fund_code": "159559", "year": "2025"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
+    async def test_run29(self, browser_pool):
+        """测试板块当日异动爬虫 - 融资融券板块"""
+        spider_name = "eastmoney_board_changes"
+        params = {"board_code": "BK0475", "data_format": "json"}
         register = spider_register()
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
