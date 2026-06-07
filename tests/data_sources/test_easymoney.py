@@ -280,3 +280,12 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
+    async def test_run30(self, browser_pool):
+        """测试板块当日异动爬虫 - 融资融券板块"""
+        spider_name = "eastmoney_board_changes_list"
+        params = {"page": 1, "page_size": 60}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
