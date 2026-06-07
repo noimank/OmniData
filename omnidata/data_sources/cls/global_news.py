@@ -39,7 +39,7 @@ class CLSNewsSpider(BaseWebSpider):
 
     name = "cls_global_news"
     description = "获取财联社全球财经快讯，支持筛选重点新闻（全部/重点）"
-    version = "1.0.0"
+    version = "1.1.0"
     author = "noimank"
     platform = "财联社"
 
@@ -89,6 +89,7 @@ class CLSNewsSpider(BaseWebSpider):
                         "title": item["title"],
                         "content": item["content"],
                         "pub_time": item["pub_time"],
+                        "url": item["url"],
                     }
                     for item in parsed_news
                 ]
@@ -125,10 +126,12 @@ class CLSNewsSpider(BaseWebSpider):
         else:
             pub_time = ""
 
+        item_id = item.get("id", 0)
         return {
-            "id": item.get("id", 0),
+            "id": item_id,
             "title": item.get("title", ""),
             "content": item.get("content", ""),
             "level": item.get("level", ""),
             "pub_time": pub_time,
+            "url": f"https://www.cls.cn/detail/{item_id}" if item_id else "",
         }

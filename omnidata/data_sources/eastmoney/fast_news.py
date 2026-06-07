@@ -47,7 +47,7 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
 
     name = "eastmoney_fast_news"
     description = "获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等"
-    version = "1.2.0"
+    version = "1.2.1"
     author = "noimank"
     platform = "东方财富"
 
@@ -209,9 +209,11 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         Returns:
             解析后的新闻字典
         """
+        code = item.get("code", "")
         return {
             "title": item.get("title", ""),
             "content": item.get("summary", ""),
             "pub_time": item.get("showTime", ""),
+            "url": f"https://finance.eastmoney.com/a/{code}.html" if code else "",
             "stock_list": item.get("stockList", []),
         }
