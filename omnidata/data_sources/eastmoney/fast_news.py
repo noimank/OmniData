@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from pydantic import BaseModel, Field
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from omnidata.core import BaseWebSpider, SpiderResult
 
@@ -105,7 +106,11 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
 
                 # 访问入口页，等待页面真正发起 getFastNewsList 请求
                 await page.goto(self.PAGE_URL, timeout=30000)
-                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程：拦截逻辑自带超时回退
+                    pass
 
                 # 等待拦截到响应（最多 10 秒）
                 for _ in range(20):

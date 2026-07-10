@@ -9,6 +9,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -47,11 +48,12 @@ class XueqiuFlashNewsSpider(BaseWebSpider):
         try:
             async with self.new_page("xueqiu") as page:
                 # 先访问雪球首页获取 Cookie
-                await page.goto(
-                    "https://xueqiu.com/",
-                    wait_until="domcontentloaded",
-                    timeout=15000,
-                )
+                await page.goto("https://xueqiu.com/")
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 response = await page.request.get(
                     self.API_URL,

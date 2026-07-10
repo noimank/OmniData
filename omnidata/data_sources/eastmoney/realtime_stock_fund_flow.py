@@ -6,10 +6,10 @@
 支持输入股票代码或指数代码查询资金流向
 """
 
-import random
 import re
 from datetime import datetime
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -45,7 +45,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
     API_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
     DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
     # 请求字段：包含所有资金流向相关字段
-    FIELDS = "f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f64,f65,f70,f71,f76,f77,f82,f83,f164,f166,f168,f170,f172,f252,f253,f254,f255,f256,f124,f6,f278,f279,f280,f281,f282"
+    FIELDS = "f2,f3,f4,f5,f12,f14,f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f64,f65,f70,f71,f76,f77,f82,f83,f164,f166,f168,f170,f172,f252,f253,f254,f255,f256,f124,f278,f279,f280,f281,f282"
 
     async def crawl(self, params: RealtimeStockFundFlowParams) -> SpiderResult:
         """
@@ -73,7 +73,11 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                 await page.route("**push2.eastmoney.com**", capture_ut)
 
                 await page.goto("https://data.eastmoney.com/")
-                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
@@ -159,8 +163,16 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
             except (ValueError, TypeError):
                 return 0
 
-        # 基础数据
-        # f6 = safe_float(item.get("f6"))  # 最新价
+        def safe_str(value) -> str:
+            """安全地将值转换为 str"""
+            if value is None:
+                return ""
+            return str(value)
+
+        # 基础数据（ulist.np/get 列表接口字段映射）
+        f12 = safe_str(item.get("f12"))  # 证券代码
+        f14 = safe_str(item.get("f14"))  # 证券名称
+        f2 = safe_float(item.get("f2"))  # 最新价
         f124 = safe_int(item.get("f124"))  # 更新时间戳
 
         # 主力资金
@@ -211,8 +223,9 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
         # 构建返回数据
         result = {
             "证券ID": params.secid,
-            # "证券名称": params.sec_name,
-            # "最新价": round(f6, 2),
+            "证券代码": f12,
+            "证券名称": f14,
+            "最新价": round(f2, 2),
             "更新时间": update_time,
             "今日资金流向": {
                 "主力": {

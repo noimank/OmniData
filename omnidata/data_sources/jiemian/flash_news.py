@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -52,11 +53,12 @@ class JiemianFlashNewsSpider(BaseWebSpider):
         try:
             async with self.new_page("jiemian") as page:
                 # 先访问快讯页面建立上下文
-                await page.goto(
-                    "https://www.jiemian.com/lists/4.html",
-                    wait_until="domcontentloaded",
-                    timeout=15000,
-                )
+                await page.goto("https://www.jiemian.com/lists/4.html")
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 # 使用当前时间减去24小时作为 end_time，获取最近的快讯
                 end_time = int(time.time()) - 86400

@@ -6,10 +6,10 @@
 支持输入股票代码或指数代码查询实时行情
 """
 
-import random
 import re
 from datetime import datetime
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -87,7 +87,11 @@ class StockQuoteSpider(BaseWebSpider):
                 await page.route("**push2.eastmoney.com**", capture_ut)
 
                 await page.goto("https://quote.eastmoney.com/")
-                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程：ut 拿不到时会回退到 DEFAULT_UT
+                    pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 

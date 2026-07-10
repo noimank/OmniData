@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 import pandas as pd
 from bs4 import BeautifulSoup
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -82,15 +83,21 @@ class FundIndustryAllocationSpider(BaseWebSpider):
                 await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # 先访问基金档案主页建立 referrer，避免反爬
-                await page.goto(
-                    self.REFERRER_URL,
-                    wait_until="domcontentloaded",
-                    timeout=15000,
-                )
+                await page.goto(self.REFERRER_URL)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 # 导航到行业配置页面
                 page_url = self.PAGE_URL.format(code=params.fund_code)
-                await page.goto(page_url, wait_until="domcontentloaded", timeout=20000)
+                await page.goto(page_url)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=20000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 # 等待 #hypztable 容器渲染完毕
                 await page.wait_for_selector(

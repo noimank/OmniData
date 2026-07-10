@@ -10,6 +10,7 @@ from typing import Literal
 
 import pandas as pd
 from bs4 import BeautifulSoup
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -149,11 +150,12 @@ class FundNAVHistorySpider(BaseWebSpider):
                 await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
                 # 先访问基金档案主页建立 referrer
-                await page.goto(
-                    self.REFERRER_URL,
-                    wait_until="domcontentloaded",
-                    timeout=15000,
-                )
+                await page.goto(self.REFERRER_URL)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 # 转换日期格式
                 sdate = self._ymd_to_date(params.start_date) if params.start_date else ""

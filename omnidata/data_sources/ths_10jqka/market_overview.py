@@ -30,6 +30,7 @@ import json
 import logging
 from typing import Any
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -107,11 +108,12 @@ class MarketOverviewSpider(BaseWebSpider):
             async with self.new_page("ths_10jqka") as page:
                 # 加载页面获取 cookie / session
                 logger.info("加载同花顺行情中心页面...")
-                await page.goto(
-                    self.PAGE_URL,
-                    wait_until="domcontentloaded",
-                    timeout=30000,
-                )
+                await page.goto(self.PAGE_URL)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
                 await asyncio.sleep(3)  # 等待 Chameleon 反爬脚本和 JS 渲染
 
                 # 调用 indexflash JSON API

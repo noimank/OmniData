@@ -8,6 +8,7 @@ import json
 import re
 from typing import Literal
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -106,7 +107,11 @@ class EastMoneySearchSpider(BaseWebSpider):
                 await page.goto(url)
 
                 # 等待 API 响应被拦截（最多等待 10 秒）
-                await page.wait_for_load_state("domcontentloaded")
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 # 检查是否成功获取数据
                 if captured_response is None:

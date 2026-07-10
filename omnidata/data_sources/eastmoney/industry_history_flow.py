@@ -12,12 +12,11 @@
 API 来源：https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get
 """
 
-import random
 import re
-from datetime import datetime
 from typing import Literal
 
 import pandas as pd
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
@@ -86,7 +85,11 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
                 await page.route("**push2his.eastmoney.com**", capture_ut)
 
                 await page.goto(self.PAGE_URL)
-                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except PlaywrightTimeoutError:
+                    # DOMContentLoaded 超时不影响后续流程
+                    pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
