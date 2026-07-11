@@ -316,3 +316,12 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
+    async def test_run34(self, browser_pool):
+        """测试板块当日异动爬虫 - 融资融券板块"""
+        spider_name = "eastmoney_index_intraday"
+        params = {"index_code": "000001", "limit": 0}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
