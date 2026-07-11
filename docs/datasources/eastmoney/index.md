@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 30 |
+| **接口数量** | 31 |
 
 ## 接口列表
 
@@ -26,6 +26,7 @@
 | [获取指定行业板块的历史资金流向数据（日线/周线/月线）](eastmoney_industry_history_flow.md) | `eastmoney_industry_history_flow` | 1.0.0 |
 | [获取指定行业板块的实时资金流向数据（分钟级）](eastmoney_industry_realtime_flow.md) | `eastmoney_industry_realtime_flow` | 1.0.0 |
 | [获取行业板块最新资金流向排行数据](eastmoney_industry_sector_flow.md) | `eastmoney_industry_sector_flow` | 1.0.0 |
+| [获取沪深两市主力资金净流入排行数据，支持分页、排序（主力净占比/主力净流入/涨跌幅等）和市场筛选](eastmoney_main_force_ranking.md) | `eastmoney_main_force_ranking` | 1.0.0 |
 | [获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期](eastmoney_margin_trading.md) | `eastmoney_margin_trading` | 1.1.0 |
 | [获取沪深两市大盘资金流向历史数据](eastmoney_market_flow.md) | `eastmoney_market_flow` | 1.0.0 |
 | [获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向](eastmoney_realtime_stock_fund_flow.md) | `eastmoney_realtime_stock_fund_flow` | 1.0.0 |
