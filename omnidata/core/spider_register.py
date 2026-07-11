@@ -131,7 +131,7 @@ class SpiderRegister:
             return
 
         self._spiders[spider_name] = spider_class
-        logger.info(f"Registered spider: {spider_name}")
+        # logger.info(f"Registered spider: {spider_name}")
 
     def register_spider(self, spider_class: type[BaseWebSpider]) -> None:
         """

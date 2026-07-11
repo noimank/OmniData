@@ -245,7 +245,7 @@ class LoginRegister:
             return
 
         self._logins[login_name] = login_class
-        logger.info(f"Registered login class: {login_name}")
+        # logger.info(f"Registered login class: {login_name}")
 
     def get_login_instance(self, login_name: str) -> BaseQRLogin:
         if login_name in self._instances:
