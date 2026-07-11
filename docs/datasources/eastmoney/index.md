@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 31 |
+| **接口数量** | 32 |
 
 ## 接口列表
 
@@ -23,6 +23,7 @@
 | [获取东方财富全球财经快讯新闻列表，包括标题、摘要、时间、评论数、分享数等](eastmoney_fast_news.md) | `eastmoney_fast_news` | 1.2.1 |
 | [获取基金（ETF/LOF/普通基金等）的行业配置数据，包括行业类别、占净值比例、市值、行业变动详情链接等信息，支持按年份筛选（最新年份仅返回当前报告期，历史年份返回该年度所有季度报告）](eastmoney_fund_industry_allocation.md) | `eastmoney_fund_industry_allocation` | 1.0.0 |
 | [获取ETF/LOF基金历史净值数据，包括单位净值、累计净值、日增长率、申赎状态、分红送配等信息，支持日期范围筛选](eastmoney_fund_nav_history.md) | `eastmoney_fund_nav_history` | 1.0.0 |
+| [获取全球主要指数涨跌幅排行数据，支持分页、排序和地区筛选（美股/港股/亚太/欧洲）](eastmoney_global_index_ranking.md) | `eastmoney_global_index_ranking` | 1.0.0 |
 | [获取指定行业板块的历史资金流向数据（日线/周线/月线）](eastmoney_industry_history_flow.md) | `eastmoney_industry_history_flow` | 1.0.0 |
 | [获取指定行业板块的实时资金流向数据（分钟级）](eastmoney_industry_realtime_flow.md) | `eastmoney_industry_realtime_flow` | 1.0.0 |
 | [获取行业板块最新资金流向排行数据](eastmoney_industry_sector_flow.md) | `eastmoney_industry_sector_flow` | 1.0.0 |
