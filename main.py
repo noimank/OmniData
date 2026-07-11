@@ -36,9 +36,9 @@ async def list_spiders():
     for spider in spiders:
         print(f"Name: {spider['name']}")
         print(f"  Description: {spider.get('description', 'N/A')}")
-        print(f"  Version: {spider.get('version', 'N/A')}")
-        print(f"  Author: {spider.get('author', 'N/A')}")
-        print(f"  Enabled: {spider.get('enabled', True)}")
+        # print(f"  Version: {spider.get('version', 'N/A')}")
+        # print(f"  Author: {spider.get('author', 'N/A')}")
+        # print(f"  Enabled: {spider.get('enabled', True)}")
         print()
 
     await register.shutdown()
