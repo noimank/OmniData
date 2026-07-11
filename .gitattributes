@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────
+# 行尾符与文件类型规范
+# 工作区保留平台自然行尾符（Windows=CRLF / Unix=LF），
+# 入库统一为 LF；批处理/脚本类文件按需锁定。
+# ──────────────────────────────────────────────
+
+# 默认让 Git 自动识别文本/二进制，文本文件入库归一为 LF
+* text=auto
+
+# 源代码与配置文件：强制 LF
+*.py            text eol=lf
+*.pyi           text eol=lf
+*.toml          text eol=lf
+*.cfg           text eol=lf
+*.ini           text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf
+*.txt           text eol=lf
+*.html          text eol=lf
+*.css           text eol=lf
+*.js            text eol=lf
+*.ts            text eol=lf
+*.vue           text eol=lf
+*.sh            text eol=lf
+*.bash          text eol=lf
+*.zsh           text eol=lf
+*.gitignore     text eol=lf
+*.gitattributes text eol=lf
+*.env           text eol=lf
+*.env.example   text eol=lf
+Dockerfile      text eol=lf
+Makefile        text eol=lf
+
+# Windows 批处理/脚本：强制 CRLF
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# 显式标记二进制（避免 Git 误判导致行尾符污染）
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.svg           binary
+*.pdf           binary
+*.zip           binary
+*.tar           binary
+*.gz            binary
+*.7z            binary
+*.rar           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.otf           binary
+*.eot           binary
+*.mp4           binary
+*.mp3           binary
+*.webp          binary
