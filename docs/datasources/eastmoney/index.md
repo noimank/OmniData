@@ -5,13 +5,14 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 33 |
+| **接口数量** | 34 |
 
 ## 接口列表
 
 | 接口说明 | 爬虫名称 | 版本 |
 | :--- | :--- | :---: |
 | [获取指定日期范围的龙虎榜活跃营业部数据，包括营业部买卖金额、净买入额、上榜次数等](eastmoney_active_department.md) | `eastmoney_active_department` | 1.0.0 |
+| [获取沪深两市大宗交易市场每日统计数据，包括成交总额、溢价/折价成交金额、上证指数等](eastmoney_block_trade_market_stats.md) | `eastmoney_block_trade_market_stats` | 1.0.0 |
 | [获取指定板块的当日盘口异动数据，包括各种异动类型（涨停板/火箭发射/大笔买卖等）的次数和个股](eastmoney_board_changes.md) | `eastmoney_board_changes` | 1.0.0 |
 | [获取全市场板块的当日盘口异动详情，包括每个板块的异动总次数、涨跌幅、主力资金流、最大异动股以及各类型异动次数明细（28 种）](eastmoney_board_changes_list.md) | `eastmoney_board_changes_list` | 1.0.0 |
 | [获取概念板块资金流向排行数据，支持今日、5日、10日排行查询](eastmoney_concept_sector_flow.md) | `eastmoney_concept_sector_flow` | 2.0.0 |
