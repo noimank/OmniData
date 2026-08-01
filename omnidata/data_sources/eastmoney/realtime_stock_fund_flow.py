@@ -6,6 +6,7 @@
 支持输入股票代码或指数代码查询资金流向
 """
 
+import random
 import re
 from datetime import datetime
 
@@ -13,6 +14,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class RealtimeStockFundFlowParams(BaseModel):
@@ -35,7 +37,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
 
     name = "eastmoney_realtime_stock_fund_flow"
     description = "获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -87,19 +89,18 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
                     "secids": params.secid,
                     "fields": self.FIELDS,
                     "ut": ut,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                result = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.json();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                # 暖手 push2 域：先访问 quote 域建立 cookies
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="json",
                 )
 
                 if result is None:

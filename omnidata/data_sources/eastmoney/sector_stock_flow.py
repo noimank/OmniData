@@ -13,6 +13,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class SectorStockFlowParams(BaseModel):
@@ -33,7 +34,7 @@ class SectorStockFlowSpider(BaseWebSpider):
 
     name = "eastmoney_sector_stock_flow"
     description = "获取指定行业板块内个股的资金流向排行数据"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
     params_model = SectorStockFlowParams
@@ -83,6 +84,7 @@ class SectorStockFlowSpider(BaseWebSpider):
                     pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
+                await warmup_push2(page, fallback_url=page_url)
 
                 config = self.RANK_CONFIG[params.rank_type]
                 api_params = {
@@ -96,6 +98,7 @@ class SectorStockFlowSpider(BaseWebSpider):
                     "ut": ut,
                     "fs": f"b:{params.sector_code}",
                     "fields": config["fields"],
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
                 # 获取全部数据(分页获取,每页50条)
@@ -103,17 +106,12 @@ class SectorStockFlowSpider(BaseWebSpider):
                 page_num = 1
 
                 while True:
-                    result = await page.evaluate(
-                        """
-                        async ([apiUrl, params]) => {
-                            const url = new URL(apiUrl);
-                            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                            const resp = await fetch(url.toString(), { credentials: 'include' });
-                            if (!resp.ok) return null;
-                            return await resp.json();
-                        }
-                        """,
-                        [self.API_URL, api_params],
+                    result = await fetch_with_retry(
+                        page,
+                        self.API_URL,
+                        api_params,
+                        referer=page_url,
+                        response_type="json",
                     )
 
                     if result is None or result.get("rc") != 0:

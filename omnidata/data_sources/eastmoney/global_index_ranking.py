@@ -9,6 +9,7 @@
 """
 
 import json
+import random
 import re
 from datetime import datetime
 from typing import Literal
@@ -17,6 +18,10 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import (
+    fetch_with_retry,
+    warmup_push2,
+)
 
 
 # 热门全球指数代码清单（覆盖美股/港股/亚太/欧洲/其他主要市场）
@@ -115,12 +120,7 @@ class GlobalIndexRankingParams(BaseModel):
     sort_field: Literal["f3", "f2", "f4", "f7", "f12"] = Field(
         default="f3",
         description=(
-            "排序字段，"
-            "f3=涨跌幅, "
-            "f2=最新点位, "
-            "f4=涨跌点位, "
-            "f7=振幅, "
-            "f12=指数代码"
+            "排序字段，" "f3=涨跌幅, " "f2=最新点位, " "f4=涨跌点位, " "f7=振幅, " "f12=指数代码"
         ),
     )
     sort_order: Literal["desc", "asc"] = Field(
@@ -152,7 +152,7 @@ class GlobalIndexRankingSpider(BaseWebSpider):
 
     name = "eastmoney_global_index_ranking"
     description = "获取全球主要指数涨跌幅排行数据，支持分页、排序和地区筛选（美股/港股/亚太/欧洲）"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -168,14 +168,40 @@ class GlobalIndexRankingSpider(BaseWebSpider):
         "us": ["DJI", "SPX", "IXIC", "NDX", "RUI", "SOX"],
         "hk": ["HSI", "HSCEI", "HSTECH", "HSCCI"],
         "asia": [
-            "TWII", "N225", "KOSPI200", "KS11", "STI", "SENSEX",
-            "KLSE", "SET", "PSI", "KSE100", "VNINDEX", "JKSE", "CSEALL",
+            "TWII",
+            "N225",
+            "KOSPI200",
+            "KS11",
+            "STI",
+            "SENSEX",
+            "KLSE",
+            "SET",
+            "PSI",
+            "KSE100",
+            "VNINDEX",
+            "JKSE",
+            "CSEALL",
         ],
         "europe": [
-            "SX5E", "FTSE", "MCX", "GDAXI", "FCHI", "AEX",
-            "IBEX", "FTSEMIB", "PSI20", "OMXC20", "OMXSPI",
-            "SSMI", "ATX", "BEL20", "HEX", "OSEBX", "WIG20",
-            "RTS", "MOEX",
+            "SX5E",
+            "FTSE",
+            "MCX",
+            "GDAXI",
+            "FCHI",
+            "AEX",
+            "IBEX",
+            "FTSEMIB",
+            "PSI20",
+            "OMXC20",
+            "OMXSPI",
+            "SSMI",
+            "ATX",
+            "BEL20",
+            "HEX",
+            "OSEBX",
+            "WIG20",
+            "RTS",
+            "MOEX",
         ],
         "americas": ["BVSP", "MXX", "IPSA", "MERV", "GSPTSE"],
     }
@@ -211,6 +237,7 @@ class GlobalIndexRankingSpider(BaseWebSpider):
 
                 await page.route("**push2.eastmoney.com**", capture_ut)
 
+                # ENTRY_URL 自身在 quote 域，等同暖手，无需额外调用 warmup_push2。
                 await page.goto(self.ENTRY_URL)
                 try:
                     await page.wait_for_load_state("domcontentloaded", timeout=15000)
@@ -237,19 +264,15 @@ class GlobalIndexRankingSpider(BaseWebSpider):
                     "dect": "1",
                     "ut": ut,
                     "wbp2u": "|0|0|0|web",
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                response_text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                response_text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer=self.ENTRY_URL,
+                    response_type="text",
                 )
 
                 if response_text is None:
@@ -399,9 +422,7 @@ class GlobalIndexRankingSpider(BaseWebSpider):
 
         update_ts = safe_int(item.get("f124"))
         update_time = (
-            datetime.fromtimestamp(update_ts).strftime("%Y-%m-%d %H:%M:%S")
-            if update_ts
-            else ""
+            datetime.fromtimestamp(update_ts).strftime("%Y-%m-%d %H:%M:%S") if update_ts else ""
         )
 
         result = {

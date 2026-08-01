@@ -12,6 +12,7 @@
 API 来源：https://push2.eastmoney.com/api/qt/stock/fflow/kline/get
 """
 
+import random
 import re
 from typing import Literal
 
@@ -20,6 +21,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class IndustryRealtimeFlowParams(BaseModel):
@@ -46,7 +48,7 @@ class IndustryRealtimeFlowSpider(BaseWebSpider):
 
     name = "eastmoney_industry_realtime_flow"
     description = "获取指定行业板块的实时资金流向数据（分钟级）"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
     params_model = IndustryRealtimeFlowParams
@@ -82,6 +84,7 @@ class IndustryRealtimeFlowSpider(BaseWebSpider):
                     pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
+                await warmup_push2(page, fallback_url=self.PAGE_URL)
 
                 # 请求实时资金流数据（klt=1表示分钟级）
                 api_params = {
@@ -91,19 +94,15 @@ class IndustryRealtimeFlowSpider(BaseWebSpider):
                     "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
                     "ut": ut,
                     "secid": secid,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                result = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.json();
-                    }
-                    """,
-                    [self.API_URL, api_params],
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    api_params,
+                    referer=self.PAGE_URL,
+                    response_type="json",
                 )
 
                 if result is None:

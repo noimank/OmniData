@@ -12,6 +12,7 @@
 API 来源：https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get
 """
 
+import random
 import re
 from typing import Literal
 
@@ -20,6 +21,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class IndustryHistoryFlowParams(BaseModel):
@@ -49,7 +51,7 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
 
     name = "eastmoney_industry_history_flow"
     description = "获取指定行业板块的历史资金流向数据（日线/周线/月线）"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
     params_model = IndustryHistoryFlowParams
@@ -93,6 +95,9 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # 暖手 quote.eastmoney.com 域，确保后续 API 请求携带正确 cookies
+                await warmup_push2(page, fallback_url=self.PAGE_URL)
+
                 # 请求历史资金流数据
                 api_params = {
                     "lmt": str(params.limit),
@@ -101,19 +106,15 @@ class IndustryHistoryFlowSpider(BaseWebSpider):
                     "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
                     "ut": ut,
                     "secid": secid,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                result = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.json();
-                    }
-                    """,
-                    [self.API_URL, api_params],
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    api_params,
+                    referer=self.PAGE_URL,
+                    response_type="json",
                 )
 
                 if result is None:

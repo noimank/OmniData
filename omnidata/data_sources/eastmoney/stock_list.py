@@ -6,6 +6,8 @@
 支持分页查询和排序
 """
 
+import json
+import random
 import re
 from typing import Literal
 
@@ -13,6 +15,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class StockListParams(BaseModel):
@@ -37,7 +40,7 @@ class StockListSpider(BaseWebSpider):
 
     name = "eastmoney_stock_list"
     description = "获取沪深京A股实时行情列表数据，支持分页和排序"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -90,6 +93,9 @@ class StockListSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # 暖手 push2 域（建立 quote 域 cookies）
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+
                 # 构建请求参数
                 request_params = {
                     "np": "1",
@@ -103,25 +109,19 @@ class StockListSpider(BaseWebSpider):
                     "po": str(params.sort_order),
                     "dect": "1",
                     "ut": ut,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                response_text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                response_text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="text",
                 )
 
                 if response_text is None:
                     return SpiderResult(success=False, message="请求失败")
-
-                import json
 
                 # 尝试解析JSONP响应（去除jQuery回调函数）
                 json_match = re.search(r"\((.*)\)$", response_text, re.DOTALL)

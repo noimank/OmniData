@@ -9,6 +9,7 @@
 """
 
 import json
+import random
 import re
 from typing import Literal
 
@@ -17,6 +18,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class IndexIntradayParams(BaseModel):
@@ -44,7 +46,7 @@ class IndexIntradaySpider(BaseWebSpider):
 
     name = "eastmoney_index_intraday"
     description = "获取指数最新分时数据（分钟级别），包括开高低收、成交量、成交额"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -110,19 +112,18 @@ class IndexIntradaySpider(BaseWebSpider):
                     "iscr": "0",
                     "ndays": "1",
                     "ut": ut,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                # 当前页面在 data 域，未持有 quote 域 cookies，先暖手
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+
+                text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="text",
                 )
 
                 if text is None:

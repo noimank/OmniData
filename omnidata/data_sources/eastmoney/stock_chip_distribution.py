@@ -20,6 +20,10 @@ from pydantic import BaseModel, Field
 from py_mini_racer import MiniRacer
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import (
+    fetch_with_retry,
+    warmup_push2,
+)
 
 
 class StockChipDistributionParams(BaseModel):
@@ -65,7 +69,7 @@ class StockChipDistributionSpider(BaseWebSpider):
 
     name = "eastmoney_stock_chip_distribution"
     description = "获取A股/ETF筹码分布数据，包括获利比例、平均成本、90%/70%筹码集中度等指标，用于分析筹码结构和成本分布"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -258,6 +262,7 @@ class StockChipDistributionSpider(BaseWebSpider):
                     pass
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
 
                 # 构建 K 线请求参数
                 end_date = datetime.now().strftime("%Y%m%d")
@@ -270,19 +275,15 @@ class StockChipDistributionSpider(BaseWebSpider):
                     "secid": secid,
                     "end": end_date,
                     "lmt": str(params.kline_limit),
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                response_text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                response_text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="text",
                 )
 
                 if response_text is None:

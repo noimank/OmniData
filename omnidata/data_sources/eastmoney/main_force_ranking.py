@@ -2,12 +2,12 @@
 东方财富主力净流入排名 Spider
 获取沪深A股主力资金净流入排行榜数据
 
-从 https://data.eastmoney.com/zjlx/list.html 入口页面加载，
-通过浏览器原生请求访问 https://push2.eastmoney.com/api/qt/clist/get，
-服务端看到的是带 cookie / referer / sec-ch-ua 等真实浏览器指纹的请求，
-反爬风险最低。
+通过直接调用 push2.eastmoney.com JSONP 接口获取数据（参考 etf_holdings.py），
+避免在浏览器 evaluate(fetch()) 中因 CORS/网络抖动偶发 Failed to fetch。
 """
 
+import json
+import random
 import re
 from datetime import datetime
 from typing import Literal
@@ -16,6 +16,10 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import (
+    fetch_with_retry,
+    warmup_push2,
+)
 
 
 class MainForceRankingParams(BaseModel):
@@ -57,10 +61,8 @@ class MainForceRankingSpider(BaseWebSpider):
     """
 
     name = "eastmoney_main_force_ranking"
-    description = (
-        "获取沪深两市主力资金净流入排行数据，支持分页、排序（主力净占比/主力净流入/涨跌幅等）和市场筛选"
-    )
-    version = "1.0.0"
+    description = "获取沪深两市主力资金净流入排行数据，支持分页、排序（主力净占比/主力净流入/涨跌幅等）和市场筛选"
+    version = "2.0.1"
     author = "noimank"
     platform = "东方财富"
 
@@ -127,6 +129,9 @@ class MainForceRankingSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # ── 暖手 push2 域：建立 push2 接口所需的 cookies（参考 etf_holdings.py） ──
+                await warmup_push2(page, fallback_url=self.ENTRY_URL)
+
                 market_filter = self.MARKET_FILTERS.get(params.market, self.MARKET_FILTERS["all"])
 
                 # 构建请求参数
@@ -141,25 +146,19 @@ class MainForceRankingSpider(BaseWebSpider):
                     "pz": str(params.page_size),
                     "po": "1" if params.sort_order == "desc" else "0",
                     "ut": ut,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                response_text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                response_text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer=self.ENTRY_URL,
+                    response_type="text",
                 )
 
                 if response_text is None:
                     return SpiderResult(success=False, message="请求失败")
-
-                import json
 
                 # 尝试解析JSONP响应（去除jQuery回调函数）
                 json_match = re.search(r"\((.*)\)$", response_text, re.DOTALL)
@@ -289,9 +288,7 @@ class MainForceRankingSpider(BaseWebSpider):
 
         update_ts = safe_int(item.get("f124"))
         update_time = (
-            datetime.fromtimestamp(update_ts).strftime("%Y-%m-%d %H:%M:%S")
-            if update_ts
-            else ""
+            datetime.fromtimestamp(update_ts).strftime("%Y-%m-%d %H:%M:%S") if update_ts else ""
         )
 
         result = {

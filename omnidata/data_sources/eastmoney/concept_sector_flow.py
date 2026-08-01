@@ -1,6 +1,9 @@
 """
 东方财富网概念板块资金流 Spider
 获取概念板块资金流向排行数据，支持今日、5日、10日排行
+
+通过直接调用 push2.eastmoney.com JSONP 接口获取数据（参考 etf_holdings.py），
+避免在浏览器 evaluate(fetch()) 中因 CORS/网络抖动偶发 Failed to fetch。
 """
 
 import random
@@ -13,6 +16,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class ConceptSectorFlowParams(BaseModel):
@@ -32,7 +36,7 @@ class ConceptSectorFlowSpider(BaseWebSpider):
 
     name = "eastmoney_concept_sector_flow"
     description = "获取概念板块资金流向排行数据，支持今日、5日、10日排行查询"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
     params_model = ConceptSectorFlowParams
@@ -81,8 +85,19 @@ class ConceptSectorFlowSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # ── 暖手 push2 域：建立 push2 接口所需的 cookies（参考 etf_holdings.py） ──
+                try:
+                    await page.goto("https://quote.eastmoney.com/center/gridlist.html")
+                    try:
+                        await page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    except PlaywrightTimeoutError:
+                        pass
+                    await page.goto(self.PAGE_URL)
+                except Exception:
+                    pass
+
                 config = self.RANK_TYPE_CONFIG[params.rank_type]
-                api_params = {
+                base_api_params = {
                     "fid": config["fid"],
                     "po": "1",
                     "pz": "50",
@@ -93,23 +108,16 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                     "ut": ut,
                     "fs": "m:90+t:3",
                     "fields": config["fields"],
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                all_items = []
+                all_items: list[dict] = []
                 page_num = 1
 
                 while True:
-                    result = await page.evaluate(
-                        """
-                        async ([apiUrl, params]) => {
-                            const url = new URL(apiUrl);
-                            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                            const resp = await fetch(url.toString(), { credentials: 'include' });
-                            if (!resp.ok) return null;
-                            return await resp.json();
-                        }
-                        """,
-                        [self.API_URL, api_params],
+                    api_params = {**base_api_params, "pn": str(page_num)}
+                    result = await fetch_with_retry(
+                        page, self.API_URL, api_params, referer=self.PAGE_URL, response_type="json"
                     )
 
                     if result is None or result.get("rc") != 0:
@@ -124,8 +132,6 @@ class ConceptSectorFlowSpider(BaseWebSpider):
                         break
 
                     page_num += 1
-                    api_params["pn"] = str(page_num)
-
                     if len(all_items) >= params.limit:
                         break
 

@@ -17,6 +17,10 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import (
+    fetch_with_retry,
+    warmup_push2,
+)
 
 
 class StockDailyKlineParams(BaseModel):
@@ -58,7 +62,7 @@ class StockDailyKlineSpider(BaseWebSpider):
 
     name = "eastmoney_stock_daily_kline"
     description = "获取A股/ETF基金历史日线K线数据，包括开高低收、成交量成交额、涨跌幅等完整K线数据，支持前复权/后复权/不复权，支持日期范围查询"
-    version = "1.1.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -134,6 +138,9 @@ class StockDailyKlineSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # 暖手 quote 域（push2his 走 push2his，跳过 quote 暖手）
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+
                 # 构建请求参数
                 request_params = {
                     "cb": self._generate_jsonp_callback(),  # 动态生成 JSONP 回调函数名
@@ -148,17 +155,12 @@ class StockDailyKlineSpider(BaseWebSpider):
                     "_": str(int(time.time() * 1000)),  # 添加时间戳参数
                 }
 
-                response_text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                response_text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="text",
                 )
 
                 if response_text is None:

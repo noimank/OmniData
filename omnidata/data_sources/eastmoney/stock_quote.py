@@ -2,10 +2,11 @@
 东方财富网个股行情报价 Spider
 获取个股或指数的实时行情报价数据
 
-从 https://quote.eastmoney.com/ 页面获取数据
-支持输入股票代码或指数代码查询实时行情
+通过直接调用 push2.eastmoney.com JSONP 接口获取数据（参考 etf_holdings.py），
+避免在浏览器 evaluate(fetch()) 中因 CORS/网络抖动偶发 Failed to fetch。
 """
 
+import random
 import re
 from datetime import datetime
 
@@ -13,6 +14,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class StockQuoteParams(BaseModel):
@@ -37,7 +39,7 @@ class StockQuoteSpider(BaseWebSpider):
 
     name = "eastmoney_stock_quote"
     description = "获取A股/ETF基金实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据"
-    version = "1.2.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -95,6 +97,9 @@ class StockQuoteSpider(BaseWebSpider):
 
                 ut = captured_ut.get("token") or self.DEFAULT_UT
 
+                # 暖手 push2 域：建立 push2 接口所需的 cookies
+                await warmup_push2(page, fallback_url="https://quote.eastmoney.com/")
+
                 # 构建请求参数
                 request_params = {
                     "fltt": "2",
@@ -102,19 +107,15 @@ class StockQuoteSpider(BaseWebSpider):
                     "fields": self.FIELDS,
                     "secid": secid,
                     "ut": ut,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                result = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.json();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://quote.eastmoney.com/",
+                    response_type="json",
                 )
 
                 if result is None:

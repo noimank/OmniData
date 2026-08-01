@@ -7,6 +7,7 @@
 """
 
 import json
+import random
 import re
 from typing import Literal
 
@@ -15,6 +16,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
 
 
 class StockHistoryFlowParams(BaseModel):
@@ -42,7 +44,7 @@ class StockHistoryFlowSpider(BaseWebSpider):
 
     name = "eastmoney_stock_history_flow"
     description = "获取个股/ETF历史资金流向数据"
-    version = "1.0.0"
+    version = "2.0.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -111,19 +113,18 @@ class StockHistoryFlowSpider(BaseWebSpider):
                     "fields2": self.FIELDS2,
                     "ut": ut,
                     "secid": secid,
+                    "_": str(random.randint(10**12, 10**13 - 1)),
                 }
 
-                text = await page.evaluate(
-                    """
-                    async ([apiUrl, params]) => {
-                        const url = new URL(apiUrl);
-                        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                        const resp = await fetch(url.toString(), { credentials: 'include' });
-                        if (!resp.ok) return null;
-                        return await resp.text();
-                    }
-                    """,
-                    [self.API_URL, request_params],
+                # 暖手 quote 域，建立 push2 接口所需 cookies
+                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+
+                text = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    request_params,
+                    referer="https://data.eastmoney.com/",
+                    response_type="text",
                 )
 
                 if text is None:
