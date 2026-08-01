@@ -1,60 +1,64 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import * as api from '@/api/spider_audit'
-import type { SpiderAuditRecord, SpiderAuditStats, SpiderAuditQuery } from '@/api/types'
+import { defineStore } from "pinia";
+import { ref } from "vue";
+import * as api from "@/api/spider_audit";
+import type {
+  SpiderAuditRecord,
+  SpiderAuditStats,
+  SpiderAuditQuery,
+} from "@/api/types";
 
-export const useSpiderAuditStore = defineStore('spiderAudit', () => {
+export const useSpiderAuditStore = defineStore("spiderAudit", () => {
   // 状态
-  const stats = ref<SpiderAuditStats | null>(null)
-  const records = ref<SpiderAuditRecord[]>([])
-  const totalRecords = ref(0)
-  const platforms = ref<string[]>([])
-  const spiders = ref<string[]>([])
-  const loading = ref<boolean>(false)
+  const stats = ref<SpiderAuditStats | null>(null);
+  const records = ref<SpiderAuditRecord[]>([]);
+  const totalRecords = ref(0);
+  const platforms = ref<string[]>([]);
+  const spiders = ref<string[]>([]);
+  const loading = ref<boolean>(false);
 
   // 查询参数
   const queryParams = ref<SpiderAuditQuery>({
     page: 1,
     page_size: 20,
-  })
+  });
 
   // ========== 统计信息 ==========
 
   const fetchStats = async () => {
     try {
-      loading.value = true
-      const response = await api.getAuditStats()
-      stats.value = response.data
-      return stats.value
+      loading.value = true;
+      const response = await api.getAuditStats();
+      stats.value = response.data;
+      return stats.value;
     } catch (err: any) {
-      console.error('Failed to fetch audit stats:', err)
-      throw err
+      console.error("Failed to fetch audit stats:", err);
+      throw err;
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
   // ========== 审计记录 ==========
 
   const fetchRecords = async () => {
     try {
-      loading.value = true
-      const response = await api.getAuditRecords(queryParams.value)
+      loading.value = true;
+      const response = await api.getAuditRecords(queryParams.value);
       if (response.data) {
-        records.value = response.data.items || []
-        totalRecords.value = response.data.count
+        records.value = response.data.items || [];
+        totalRecords.value = response.data.count;
       }
-      return response.data
+      return response.data;
     } catch (err: any) {
-      console.error('Failed to fetch audit records:', err)
-      throw err
+      console.error("Failed to fetch audit records:", err);
+      throw err;
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
   const setQueryParams = (params: Partial<SpiderAuditQuery>) => {
-    queryParams.value = { ...queryParams.value, ...params }
+    queryParams.value = { ...queryParams.value, ...params };
     // 如果修改了筛选条件，重置到第一页
     if (
       params.spider_name !== undefined ||
@@ -63,77 +67,94 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
       params.start_date !== undefined ||
       params.end_date !== undefined
     ) {
-      queryParams.value.page = 1
+      queryParams.value.page = 1;
     }
-  }
+  };
 
   const resetQueryParams = () => {
     queryParams.value = {
       page: 1,
       page_size: 20,
-    }
-  }
+    };
+  };
 
   // ========== 平台和爬虫列表 ==========
 
   const fetchPlatforms = async () => {
     try {
-      const response = await api.getAuditPlatforms()
-      platforms.value = response.data || []
-      return platforms.value
+      const response = await api.getAuditPlatforms();
+      platforms.value = response.data || [];
+      return platforms.value;
     } catch (err: any) {
-      console.error('Failed to fetch platforms:', err)
-      return []
+      console.error("Failed to fetch platforms:", err);
+      return [];
     }
-  }
+  };
 
   const fetchSpiders = async (platform?: string) => {
     try {
-      const response = await api.getAuditSpiders(platform)
-      spiders.value = response.data || []
-      return spiders.value
+      const response = await api.getAuditSpiders(platform);
+      spiders.value = response.data || [];
+      return spiders.value;
     } catch (err: any) {
-      console.error('Failed to fetch spiders:', err)
-      return []
+      console.error("Failed to fetch spiders:", err);
+      return [];
     }
-  }
+  };
 
   // ========== 删除和清理 ==========
 
   const deleteRecord = async (recordId: number) => {
     try {
-      loading.value = true
-      await api.deleteAuditRecord(recordId)
+      loading.value = true;
+      await api.deleteAuditRecord(recordId);
       // 从本地列表中移除
-      records.value = records.value.filter((r) => r.id !== recordId)
-      totalRecords.value = Math.max(0, totalRecords.value - 1)
-      return true
+      records.value = records.value.filter((r) => r.id !== recordId);
+      totalRecords.value = Math.max(0, totalRecords.value - 1);
+      return true;
     } catch (err: any) {
-      console.error('Failed to delete audit record:', err)
-      throw err
+      console.error("Failed to delete audit record:", err);
+      throw err;
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
+
+  const deleteRecordsBatch = async (recordIds: number[]) => {
+    try {
+      loading.value = true;
+      const response = await api.deleteAuditRecordsBatch(recordIds);
+      // 从本地列表中移除已删除的记录
+      const idSet = new Set(recordIds);
+      records.value = records.value.filter((r) => !idSet.has(r.id));
+      totalRecords.value = Math.max(0, totalRecords.value - recordIds.length);
+      return response.data?.count || 0;
+    } catch (err: any) {
+      console.error("Failed to batch delete audit records:", err);
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
 
   const cleanupOldRecords = async (days: number = 30) => {
     try {
-      loading.value = true
-      const response = await api.cleanupAuditRecords(days)
+      loading.value = true;
+      const response = await api.cleanupAuditRecords(days);
       // 刷新数据
-      await Promise.all([fetchStats(), fetchRecords()])
-      return response.data?.count || 0
+      await Promise.all([fetchStats(), fetchRecords()]);
+      return response.data?.count || 0;
     } catch (err: any) {
-      console.error('Failed to cleanup audit records:', err)
-      throw err
+      console.error("Failed to cleanup audit records:", err);
+      throw err;
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  }
+  };
 
   const refresh = async () => {
-    await Promise.all([fetchStats(), fetchRecords()])
-  }
+    await Promise.all([fetchStats(), fetchRecords()]);
+  };
 
   return {
     // 状态
@@ -154,6 +175,7 @@ export const useSpiderAuditStore = defineStore('spiderAudit', () => {
     fetchSpiders,
     refresh,
     deleteRecord,
+    deleteRecordsBatch,
     cleanupOldRecords,
-  }
-})
+  };
+});

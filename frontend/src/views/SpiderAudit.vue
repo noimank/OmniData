@@ -59,7 +59,10 @@
               <el-icon color="#e6a23c"><TrendCharts /></el-icon>
             </div>
           </template>
-          <div v-if="stats && stats.hourly_stats.length > 0" class="hourly-chart">
+          <div
+            v-if="stats && stats.hourly_stats.length > 0"
+            class="hourly-chart"
+          >
             <div
               v-for="(item, index) in stats.hourly_stats"
               :key="index"
@@ -69,12 +72,18 @@
               <div class="hourly-bar-wrapper">
                 <div
                   class="hourly-bar success"
-                  :style="{ width: getHourlyBarWidth(item.count, stats.hourly_stats) + '%' }"
+                  :style="{
+                    width:
+                      getHourlyBarWidth(item.count, stats.hourly_stats) + '%',
+                  }"
                   :title="`成功: ${item.success_count}`"
                 ></div>
                 <div
                   class="hourly-bar failure"
-                  :style="{ width: getHourlyBarWidth(item.count, stats.hourly_stats) + '%' }"
+                  :style="{
+                    width:
+                      getHourlyBarWidth(item.count, stats.hourly_stats) + '%',
+                  }"
                   :title="`失败: ${item.failure_count}`"
                 ></div>
               </div>
@@ -97,8 +106,15 @@
               <el-icon color="#e6a23c"><PieChart /></el-icon>
             </div>
           </template>
-          <div v-if="stats && stats.platform_stats.length > 0" class="platform-stats">
-            <div v-for="item in stats.platform_stats" :key="item.platform" class="platform-item">
+          <div
+            v-if="stats && stats.platform_stats.length > 0"
+            class="platform-stats"
+          >
+            <div
+              v-for="item in stats.platform_stats"
+              :key="item.platform"
+              class="platform-item"
+            >
               <div class="platform-info">
                 <span class="platform-name">{{ item.platform }}</span>
                 <span class="platform-count">{{ item.count }}次</span>
@@ -122,13 +138,18 @@
               <el-icon color="#409eff"><Trophy /></el-icon>
             </div>
           </template>
-          <div v-if="stats && stats.spider_ranking.length > 0" class="spider-ranking">
+          <div
+            v-if="stats && stats.spider_ranking.length > 0"
+            class="spider-ranking"
+          >
             <div
               v-for="(item, index) in stats.spider_ranking"
               :key="item.spider_name"
               class="spider-ranking-item"
             >
-              <div class="ranking-number" :class="getRankingClass(index)">{{ index + 1 }}</div>
+              <div class="ranking-number" :class="getRankingClass(index)">
+                {{ index + 1 }}
+              </div>
               <div class="ranking-info">
                 <div class="spider-name">{{ item.spider_name }}</div>
                 <div class="spider-count">{{ item.count }}次调用</div>
@@ -148,7 +169,10 @@
               <el-icon color="#f56c6c"><Warning /></el-icon>
             </div>
           </template>
-          <div v-if="stats && stats.recent_failures.length > 0" class="recent-failures">
+          <div
+            v-if="stats && stats.recent_failures.length > 0"
+            class="recent-failures"
+          >
             <div
               v-for="item in stats.recent_failures"
               :key="item.id"
@@ -156,7 +180,9 @@
             >
               <div class="failure-spider">{{ item.spider_name }}</div>
               <div class="failure-error">{{ item.error_message }}</div>
-              <div class="failure-time">{{ formatDateTime(item.started_at) }}</div>
+              <div class="failure-time">
+                {{ formatDateTime(item.started_at) }}
+              </div>
             </div>
           </div>
           <div v-else class="no-data">暂无失败记录</div>
@@ -170,7 +196,23 @@
         <div class="table-header">
           <span>调用记录</span>
           <div class="header-actions">
-            <el-button type="danger" size="small" @click="handleCleanup">
+            <el-button
+              v-if="selectedRecords.length > 0"
+              type="danger"
+              size="small"
+              @click="handleBatchDelete"
+            >
+              <el-icon><Delete /></el-icon>
+              批量删除 ({{ selectedRecords.length }})
+            </el-button>
+            <el-button
+              v-if="selectedRecords.length > 0"
+              size="small"
+              @click="handleClearSelection"
+            >
+              取消选择
+            </el-button>
+            <el-button type="danger" plain size="small" @click="handleCleanup">
               <el-icon><Delete /></el-icon>
               清理
             </el-button>
@@ -205,13 +247,15 @@
           <el-form-item label="爬虫">
             <el-select
               v-model="queryParams.spider_name"
-              placeholder="全部爬虫"
+              placeholder="输入或选择爬虫"
               clearable
+              filterable
+              :filter-method="filterSpiders"
               @change="auditStore.fetchRecords()"
               style="width: 200px"
             >
               <el-option
-                v-for="spider in spiders"
+                v-for="spider in filteredSpiderOptions"
                 :key="spider"
                 :label="spider"
                 :value="spider"
@@ -253,13 +297,24 @@
       </div>
 
       <!-- 数据表格 -->
-      <el-table :data="records" stripe>
+      <el-table
+        ref="tableRef"
+        :data="records"
+        row-key="id"
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column
+          type="selection"
+          width="50"
+          :reserve-selection="true"
+        />
         <el-table-column prop="spider_name" label="爬虫名称" width="200" />
         <el-table-column prop="platform" label="平台" width="120" />
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.success ? 'success' : 'danger'" size="small">
-              {{ row.success ? '成功' : '失败' }}
+              {{ row.success ? "成功" : "失败" }}
             </el-tag>
           </template>
         </el-table-column>
@@ -275,17 +330,29 @@
         </el-table-column>
         <el-table-column prop="error_message" label="错误信息" min-width="200">
           <template #default="{ row }">
-            <span v-if="!row.success" class="error-message">{{ row.error_message }}</span>
+            <span v-if="!row.success" class="error-message">{{
+              row.error_message
+            }}</span>
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleViewDetail(row)">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="handleViewDetail(row)"
+            >
               详情
             </el-button>
             <el-divider direction="vertical" />
-            <el-button type="danger" link size="small" @click="handleDelete(row)">
+            <el-button
+              type="danger"
+              link
+              size="small"
+              @click="handleDelete(row)"
+            >
               删除
             </el-button>
           </template>
@@ -321,14 +388,18 @@
           </el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="currentRecord.success ? 'success' : 'danger'">
-              {{ currentRecord.success ? '成功' : '失败' }}
+              {{ currentRecord.success ? "成功" : "失败" }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="开始时间">
             {{ formatDateTime(currentRecord.started_at) }}
           </el-descriptions-item>
           <el-descriptions-item label="完成时间">
-            {{ currentRecord.completed_at ? formatDateTime(currentRecord.completed_at) : '-' }}
+            {{
+              currentRecord.completed_at
+                ? formatDateTime(currentRecord.completed_at)
+                : "-"
+            }}
           </el-descriptions-item>
           <el-descriptions-item label="执行时长">
             {{ currentRecord.duration_seconds.toFixed(2) }} 秒
@@ -339,11 +410,15 @@
         </el-descriptions>
 
         <el-divider>参数</el-divider>
-        <pre v-if="currentRecord.params" class="json-content">{{ formatJson(currentRecord.params) }}</pre>
+        <pre v-if="currentRecord.params" class="json-content">{{
+          formatJson(currentRecord.params)
+        }}</pre>
         <div v-else class="text-muted">无参数</div>
 
         <el-divider>元数据</el-divider>
-        <pre v-if="currentRecord.metadata" class="json-content">{{ formatJson(currentRecord.metadata) }}</pre>
+        <pre v-if="currentRecord.metadata" class="json-content">{{
+          formatJson(currentRecord.metadata)
+        }}</pre>
         <div v-else class="text-muted">无元数据</div>
       </div>
     </el-dialog>
@@ -351,10 +426,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { useSpiderAuditStore } from '@/stores/spider_audit'
-import type { SpiderAuditRecord } from '@/api/types'
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ElMessageBox, ElMessage } from "element-plus";
+import { useSpiderAuditStore } from "@/stores/spider_audit";
+import type { SpiderAuditRecord } from "@/api/types";
 import {
   DataLine,
   FolderOpened,
@@ -364,201 +439,260 @@ import {
   Warning,
   Refresh,
   Delete,
-} from '@element-plus/icons-vue'
+} from "@element-plus/icons-vue";
 
-const auditStore = useSpiderAuditStore()
+const auditStore = useSpiderAuditStore();
 
-const stats = computed(() => auditStore.stats)
-const records = computed(() => auditStore.records)
-const totalRecords = computed(() => auditStore.totalRecords)
-const platforms = computed(() => auditStore.platforms)
-const spiders = computed(() => auditStore.spiders)
-const loading = computed(() => auditStore.loading)
-const queryParams = ref(auditStore.queryParams)
+const stats = computed(() => auditStore.stats);
+const records = computed(() => auditStore.records);
+const totalRecords = computed(() => auditStore.totalRecords);
+const platforms = computed(() => auditStore.platforms);
+const spiders = computed(() => auditStore.spiders);
+const loading = computed(() => auditStore.loading);
+const queryParams = ref(auditStore.queryParams);
 
-const dateRange = ref<[string, string] | null>(null)
-const detailDialogVisible = ref(false)
-const currentRecord = ref<SpiderAuditRecord | null>(null)
+const dateRange = ref<[string, string] | null>(null);
+const detailDialogVisible = ref(false);
+const currentRecord = ref<SpiderAuditRecord | null>(null);
 
-let timer: number | null = null
+// 表格多选状态
+const tableRef = ref();
+const selectedRecords = ref<SpiderAuditRecord[]>([]);
+
+// 当记录列表变化时清空选择
+watch(records, () => {
+  selectedRecords.value = [];
+  tableRef.value?.clearSelection();
+});
+
+// 爬虫筛选输入关键字
+const spiderSearchKeyword = ref("");
+const filteredSpiderOptions = computed(() => {
+  const keyword = spiderSearchKeyword.value.trim().toLowerCase();
+  if (!keyword) return spiders.value;
+  return spiders.value.filter((s) => s.toLowerCase().includes(keyword));
+});
+
+let timer: number | null = null;
 
 // 格式化日期时间
 const formatDateTime = (isoString: string) => {
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
+  const date = new Date(isoString);
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
 
 // 格式化 JSON
 const formatJson = (jsonString: string) => {
   try {
-    return JSON.stringify(JSON.parse(jsonString), null, 2)
+    return JSON.stringify(JSON.parse(jsonString), null, 2);
   } catch {
-    return jsonString
+    return jsonString;
   }
-}
+};
 
 // 获取平台百分比
 const getPlatformPercentage = (count: number) => {
-  if (!stats.value || stats.value.today_count === 0) return 0
-  return Math.round((count / stats.value.today_count) * 100)
-}
+  if (!stats.value || stats.value.today_count === 0) return 0;
+  return Math.round((count / stats.value.today_count) * 100);
+};
 
 // 获取小时柱状图宽度
 const getHourlyBarWidth = (count: number, allStats: any[]) => {
-  const maxCount = Math.max(...allStats.map((s) => s.count))
-  if (maxCount === 0) return 0
-  return Math.max((count / maxCount) * 100, 5) // 最小5%宽度
-}
+  const maxCount = Math.max(...allStats.map((s) => s.count));
+  if (maxCount === 0) return 0;
+  return Math.max((count / maxCount) * 100, 5); // 最小5%宽度
+};
 
 // 获取排行样式
 const getRankingClass = (index: number) => {
-  if (index === 0) return 'gold'
-  if (index === 1) return 'silver'
-  if (index === 2) return 'bronze'
-  return ''
-}
+  if (index === 0) return "gold";
+  if (index === 1) return "silver";
+  if (index === 2) return "bronze";
+  return "";
+};
 
 // 加载数据
 const loadData = async () => {
-  await auditStore.refresh()
-}
+  await auditStore.refresh();
+};
 
 // 加载筛选选项
 const loadFilters = async () => {
   await Promise.all([
     auditStore.fetchPlatforms(),
     auditStore.fetchSpiders(queryParams.value.platform),
-  ])
-}
+  ]);
+};
 
 // 平台变化
 const handlePlatformChange = async () => {
-  queryParams.value.spider_name = undefined
-  await auditStore.fetchSpiders(queryParams.value.platform)
-  await auditStore.fetchRecords()
-}
+  queryParams.value.spider_name = undefined;
+  spiderSearchKeyword.value = "";
+  await auditStore.fetchSpiders(queryParams.value.platform);
+  await auditStore.fetchRecords();
+};
 
 // 日期范围变化
 const handleDateRangeChange = async () => {
   if (dateRange.value) {
-    queryParams.value.start_date = dateRange.value[0]
-    queryParams.value.end_date = dateRange.value[1]
+    queryParams.value.start_date = dateRange.value[0];
+    queryParams.value.end_date = dateRange.value[1];
   } else {
-    queryParams.value.start_date = undefined
-    queryParams.value.end_date = undefined
+    queryParams.value.start_date = undefined;
+    queryParams.value.end_date = undefined;
   }
-  await auditStore.fetchRecords()
-}
+  await auditStore.fetchRecords();
+};
 
 // 重置
 const handleReset = async () => {
-  dateRange.value = null
-  auditStore.resetQueryParams()
-  await auditStore.fetchRecords()
-}
+  dateRange.value = null;
+  spiderSearchKeyword.value = "";
+  auditStore.resetQueryParams();
+  await auditStore.fetchRecords();
+};
 
 // 刷新
 const handleRefresh = async () => {
-  await loadData()
-}
+  await loadData();
+};
 
 // 分页变化 - v-model 已自动更新值
 const handlePageChange = async () => {
-  await auditStore.fetchRecords()
-}
+  await auditStore.fetchRecords();
+};
 
 const handleSizeChange = async () => {
   // 改变每页数量时需要重置到第一页
-  queryParams.value.page = 1
-  await auditStore.fetchRecords()
-}
+  queryParams.value.page = 1;
+  await auditStore.fetchRecords();
+};
+
+// 爬虫筛选输入过滤
+const filterSpiders = (keyword: string) => {
+  spiderSearchKeyword.value = keyword;
+};
+
+// 表格选择变化
+const handleSelectionChange = (rows: SpiderAuditRecord[]) => {
+  selectedRecords.value = rows;
+};
+
+// 取消选择
+const handleClearSelection = () => {
+  tableRef.value?.clearSelection();
+  selectedRecords.value = [];
+};
+
+// 批量删除
+const handleBatchDelete = async () => {
+  const count = selectedRecords.value.length;
+  if (count === 0) return;
+
+  await ElMessageBox.confirm(
+    `确定要删除选中的 ${count} 条审计记录吗？此操作不可恢复。`,
+    "批量删除确认",
+    {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  );
+
+  try {
+    const ids = selectedRecords.value.map((r) => r.id);
+    const deletedCount = await auditStore.deleteRecordsBatch(ids);
+    ElMessage.success(`已删除 ${deletedCount} 条记录`);
+    handleClearSelection();
+  } catch (err: any) {
+    if (err !== "cancel") {
+      console.error("Batch delete error:", err);
+    }
+  }
+};
 
 // 查看详情
 const handleViewDetail = (record: SpiderAuditRecord) => {
-  currentRecord.value = record
-  detailDialogVisible.value = true
-}
+  currentRecord.value = record;
+  detailDialogVisible.value = true;
+};
 
 // 删除记录
 const handleDelete = async (record: SpiderAuditRecord) => {
-  await ElMessageBox.confirm(
-    `确定要删除这条审计记录吗？`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  )
+  await ElMessageBox.confirm(`确定要删除这条审计记录吗？`, "删除确认", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    type: "warning",
+  });
 
   try {
-    await auditStore.deleteRecord(record.id)
-    ElMessage.success('删除成功')
+    await auditStore.deleteRecord(record.id);
+    ElMessage.success("删除成功");
   } catch (err: any) {
     // 用户取消或删除失败，不显示错误（已通过拦截器处理）
-    if (err !== 'cancel') {
-      console.error('Delete error:', err)
+    if (err !== "cancel") {
+      console.error("Delete error:", err);
     }
   }
-}
+};
 
 // 清理旧记录
 const handleCleanup = async () => {
   const { value } = await ElMessageBox.prompt(
-    '请输入要保留的天数（将删除此天数之前的记录）',
-    '清理审计记录',
+    "请输入要保留的天数（将删除此天数之前的记录）",
+    "清理审计记录",
     {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputValue: '30',
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      inputValue: "30",
       inputPattern: /^\d+$/,
-      inputErrorMessage: '请输入有效的天数',
-      inputPlaceholder: '30',
-    }
-  )
+      inputErrorMessage: "请输入有效的天数",
+      inputPlaceholder: "30",
+    },
+  );
 
-  const days = parseInt(value, 10)
+  const days = parseInt(value, 10);
   if (days < 1 || days > 365) {
-    ElMessage.warning('天数必须在 1-365 之间')
-    return
+    ElMessage.warning("天数必须在 1-365 之间");
+    return;
   }
 
   await ElMessageBox.confirm(
     `确定要删除 ${days} 天之前的所有审计记录吗？此操作不可恢复。`,
-    '清理确认',
+    "清理确认",
     {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  )
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  );
 
   try {
-    const count = await auditStore.cleanupOldRecords(days)
-    ElMessage.success(`已清理 ${count} 条记录`)
+    const count = await auditStore.cleanupOldRecords(days);
+    ElMessage.success(`已清理 ${count} 条记录`);
   } catch (err: any) {
-    if (err !== 'cancel') {
-      console.error('Cleanup error:', err)
+    if (err !== "cancel") {
+      console.error("Cleanup error:", err);
     }
   }
-}
+};
 
 onMounted(async () => {
-  await Promise.all([loadData(), loadFilters()])
+  await Promise.all([loadData(), loadFilters()]);
   // 定时刷新（每30秒）
-  timer = window.setInterval(loadData, 30000)
-})
+  timer = window.setInterval(loadData, 30000);
+});
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+  if (timer) clearInterval(timer);
+});
 </script>
 
 <style scoped lang="scss">

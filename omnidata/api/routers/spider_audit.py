@@ -5,8 +5,8 @@
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Query
-from sqlalchemy import and_, case, func, select
+from fastapi import APIRouter, Body, Query
+from sqlalchemy import and_, case, delete as sql_delete, func, select
 
 from omnidata.api.responses import (
     error_response,
@@ -364,10 +364,6 @@ async def cleanup_audit_records(
                 return success_response({"count": 0}, "没有需要清理的记录")
 
             # 执行删除
-            await session.execute(select(SpiderAudit).where(SpiderAudit.created_at < cutoff_time))
-            # 使用 delete 语句
-            from sqlalchemy import delete as sql_delete
-
             await session.execute(
                 sql_delete(SpiderAudit).where(SpiderAudit.created_at < cutoff_time)
             )
@@ -377,6 +373,41 @@ async def cleanup_audit_records(
     except Exception as e:
         logger.error(f"Error cleaning up audit records: {e}")
         return error_response(f"清理记录失败: {str(e)}")
+
+
+@router.delete("/records/batch")
+async def delete_audit_records_batch(ids: list[int] = Body(..., embed=True)):
+    """
+    批量删除审计记录
+
+    Args:
+        ids: 要删除的记录ID列表
+
+    Returns:
+        删除的记录数量
+    """
+    if not ids:
+        return error_response("记录ID列表不能为空")
+
+    try:
+        async with get_db_session() as session:
+            # 查询存在的记录数量
+            count_result = await session.execute(
+                select(func.count(SpiderAudit.id)).where(SpiderAudit.id.in_(ids))
+            )
+            count = count_result.scalar() or 0
+
+            if count == 0:
+                return success_response({"count": 0}, "没有需要删除的记录")
+
+            # 执行批量删除
+            await session.execute(sql_delete(SpiderAudit).where(SpiderAudit.id.in_(ids)))
+
+            return success_response({"count": count}, f"已删除 {count} 条记录")
+
+    except Exception as e:
+        logger.error(f"Error batch deleting audit records: {e}")
+        return error_response(f"批量删除记录失败: {str(e)}")
 
 
 @router.delete("/records/{record_id}")
