@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 35 |
+| **接口数量** | 36 |
 
 ## 接口列表
 
@@ -44,6 +44,7 @@
 | [获取沪深京A股实时行情列表数据，支持分页和排序](eastmoney_stock_list.md) | `eastmoney_stock_list` | 2.0.0 |
 | [获取单只股票的融资融券历史数据，支持1日/3日/5日/10日统计周期](eastmoney_stock_margin_trading.md) | `eastmoney_stock_margin_trading` | 1.0.0 |
 | [获取单只股票的机构买卖统计数据，包括龙虎榜机构交易明细、买卖金额、上榜原因等](eastmoney_stock_organization_trade.md) | `eastmoney_stock_organization_trade` | 1.0.0 |
+| [获取指定股票的历史业绩报表数据，包括每股收益、营收、净利润等关键财务指标](eastmoney_stock_performance_report.md) | `eastmoney_stock_performance_report` | 1.0.0 |
 | [获取A股/ETF基金实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据](eastmoney_stock_quote.md) | `eastmoney_stock_quote` | 2.0.0 |
 | [东方财富条件选股，通过自然语言查询获取符合条件的股票列表](eastmoney_stock_selection.md) | `eastmoney_stock_selection` | 2.0.0 |
 

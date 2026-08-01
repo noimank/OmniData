@@ -343,3 +343,12 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
+    async def test_run37(self, browser_pool):
+        """测试外汇市场行情爬虫"""
+        spider_name = "eastmoney_stock_performance_report"
+        params = {"page": 1, "page_size": 20, "stock_code": "688313"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
