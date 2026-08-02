@@ -104,13 +104,23 @@ export const useSpiderAuditStore = defineStore("spiderAudit", () => {
 
   // ========== 删除和清理 ==========
 
+  // 删除后重新加载：删除当前页全部记录后页码可能越界（最后一页变空），
+  // 需先回退到有效页码，再从服务端刷新统计与列表，确保表格始终填满有效数据
+  const reloadAfterDelete = async () => {
+    const pageSize = queryParams.value.page_size ?? 20;
+    const maxPage = Math.max(1, Math.ceil(totalRecords.value / pageSize));
+    if ((queryParams.value.page ?? 1) > maxPage) {
+      queryParams.value.page = maxPage;
+    }
+    await Promise.all([fetchStats(), fetchRecords()]);
+  };
+
   const deleteRecord = async (recordId: number) => {
     try {
       loading.value = true;
       await api.deleteAuditRecord(recordId);
-      // 从本地列表中移除
-      records.value = records.value.filter((r) => r.id !== recordId);
       totalRecords.value = Math.max(0, totalRecords.value - 1);
+      await reloadAfterDelete();
       return true;
     } catch (err: any) {
       console.error("Failed to delete audit record:", err);
@@ -124,11 +134,10 @@ export const useSpiderAuditStore = defineStore("spiderAudit", () => {
     try {
       loading.value = true;
       const response = await api.deleteAuditRecordsBatch(recordIds);
-      // 从本地列表中移除已删除的记录
-      const idSet = new Set(recordIds);
-      records.value = records.value.filter((r) => !idSet.has(r.id));
-      totalRecords.value = Math.max(0, totalRecords.value - recordIds.length);
-      return response.data?.count || 0;
+      const deletedCount = response.data?.count || 0;
+      totalRecords.value = Math.max(0, totalRecords.value - deletedCount);
+      await reloadAfterDelete();
+      return deletedCount;
     } catch (err: any) {
       console.error("Failed to batch delete audit records:", err);
       throw err;

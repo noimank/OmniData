@@ -251,7 +251,7 @@
               clearable
               filterable
               :filter-method="filterSpiders"
-              @change="auditStore.fetchRecords()"
+              @change="reloadRecords"
               style="width: 200px"
             >
               <el-option
@@ -268,7 +268,7 @@
               v-model="queryParams.success"
               placeholder="全部状态"
               clearable
-              @change="auditStore.fetchRecords()"
+              @change="reloadRecords"
               style="width: 120px"
             >
               <el-option label="成功" :value="true" />
@@ -426,7 +426,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { useSpiderAuditStore } from "@/stores/spider_audit";
 import type { SpiderAuditRecord } from "@/api/types";
@@ -458,12 +458,6 @@ const currentRecord = ref<SpiderAuditRecord | null>(null);
 // 表格多选状态
 const tableRef = ref();
 const selectedRecords = ref<SpiderAuditRecord[]>([]);
-
-// 当记录列表变化时清空选择
-watch(records, () => {
-  selectedRecords.value = [];
-  tableRef.value?.clearSelection();
-});
 
 // 爬虫筛选输入关键字
 const spiderSearchKeyword = ref("");
@@ -536,7 +530,7 @@ const handlePlatformChange = async () => {
   queryParams.value.spider_name = undefined;
   spiderSearchKeyword.value = "";
   await auditStore.fetchSpiders(queryParams.value.platform);
-  await auditStore.fetchRecords();
+  await reloadRecords();
 };
 
 // 日期范围变化
@@ -548,7 +542,7 @@ const handleDateRangeChange = async () => {
     queryParams.value.start_date = undefined;
     queryParams.value.end_date = undefined;
   }
-  await auditStore.fetchRecords();
+  await reloadRecords();
 };
 
 // 重置
@@ -556,7 +550,7 @@ const handleReset = async () => {
   dateRange.value = null;
   spiderSearchKeyword.value = "";
   auditStore.resetQueryParams();
-  await auditStore.fetchRecords();
+  await reloadRecords();
 };
 
 // 刷新
@@ -572,7 +566,7 @@ const handlePageChange = async () => {
 const handleSizeChange = async () => {
   // 改变每页数量时需要重置到第一页
   queryParams.value.page = 1;
-  await auditStore.fetchRecords();
+  await reloadRecords();
 };
 
 // 爬虫筛选输入过滤
@@ -589,6 +583,13 @@ const handleSelectionChange = (rows: SpiderAuditRecord[]) => {
 const handleClearSelection = () => {
   tableRef.value?.clearSelection();
   selectedRecords.value = [];
+};
+
+// 重新加载记录并清空多选：筛选条件变化、重置、改变每页数量时调用。
+// 注意：翻页与定时刷新由 reserve-selection 保留选择，不在此清空。
+const reloadRecords = async () => {
+  handleClearSelection();
+  await auditStore.fetchRecords();
 };
 
 // 批量删除
