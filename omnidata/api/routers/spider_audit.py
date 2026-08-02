@@ -96,37 +96,39 @@ async def get_audit_stats():
 
             # ========== 扩展统计 ==========
 
-            # 按小时统计趋势（最近24小时）
-            hourly_stats = []
-            for i in range(24):
-                hour_start = now - timedelta(hours=i + 1)
-                hour_end = now - timedelta(hours=i)
-                hour_result = await session.execute(
-                    select(
-                        func.count(SpiderAudit.id).label("count"),
-                        func.sum(case((SpiderAudit.success == True, 1), else_=0)).label(
-                            "success_count"
-                        ),
-                    ).where(
-                        and_(
-                            SpiderAudit.started_at >= hour_start,
-                            SpiderAudit.started_at < hour_end,
-                        )
+            # 按小时统计趋势（最近24小时）：单次查询取出 24 小时窗口内的记录，
+            # 在内存中按小时分桶，替代原先的 24 次逐小时查询（N+1）。
+            # 分桶用 timedelta 整除，与原先逐小时 WHERE 的左闭右开边界完全一致。
+            window_start = now - timedelta(hours=24)
+            hourly_result = await session.execute(
+                select(SpiderAudit.started_at, SpiderAudit.success).where(
+                    and_(
+                        SpiderAudit.started_at >= window_start,
+                        SpiderAudit.started_at < now,
                     )
                 )
-                hour_row = hour_result.one()
-                hour_count = hour_row.count or 0
-                hour_success = hour_row.success_count or 0
+            )
+            hour_delta = timedelta(hours=1)
+            hourly_counts = [0] * 24
+            hourly_success = [0] * 24
+            for started_at, success in hourly_result:
+                slot = (started_at - window_start) // hour_delta
+                hourly_counts[slot] += 1
+                if success:
+                    hourly_success[slot] += 1
+            hourly_stats = []
+            for slot in range(24):
+                count = hourly_counts[slot]
+                success_count = hourly_success[slot]
+                hour_start = window_start + timedelta(hours=slot)
                 hourly_stats.append(
                     {
                         "hour": hour_start.strftime("%H:00"),
-                        "count": hour_count,
-                        "success_count": hour_success,
-                        "failure_count": hour_count - hour_success,
+                        "count": count,
+                        "success_count": success_count,
+                        "failure_count": count - success_count,
                     }
                 )
-            # 反转列表，从最远的时间到最近
-            hourly_stats.reverse()
 
             # 热门爬虫排行（今日 Top 10）
             spider_result = await session.execute(
