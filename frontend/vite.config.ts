@@ -3,9 +3,18 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import { execSync } from 'child_process'
 
-// 构建版本号：优先取最近一次 git commit 的日期（YYYY-MM-DD），
-// 失败时回退到构建机器时间，保证版本号随每次代码变更更新
+// 构建版本号：取构建所基于的 main 分支提交日期（YYYY-MM-DD），用于
+// 1) 头部显示版本 2) 与远端最新提交日期比对，判断是否有新版本可升级。
+// 优先级：CI 注入的 BUILD_DATE（Docker 构建时由 GitHub Actions 传入 main 最新提交时间戳）
+// → git commit 日期 → 当前日期（兜底）
 function getBuildVersion() {
+  // CI 通过 --build-arg BUILD_DATE 注入 main 最新提交时间戳
+  const buildDate = process.env.BUILD_DATE
+  if (buildDate) {
+    const date = buildDate.slice(0, 10)
+    if (date) return date
+  }
+
   try {
     // 从任意子目录向上定位到 git 仓库根目录，避免在 Docker 容器内
     // 因 WORKDIR 不在仓库根而找不到 .git

@@ -324,3 +324,12 @@ export interface SpiderAuditResponse {
   items: SpiderAuditRecord[]
   count: number
 }
+
+// ============== 版本检查 ==============
+// 远端仓库 main 分支最新提交信息
+export interface RemoteVersion {
+  commit_sha: string
+  commit_date: string
+  message: string
+  html_url: string
+}
