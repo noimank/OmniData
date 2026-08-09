@@ -352,3 +352,12 @@ class TestEastMoneySpider:
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
         print(res)
+
+    async def test_run38(self, browser_pool):
+        """测试批量实时行情爬虫 - 混合股票/指数/ETF/北交所"""
+        spider_name = "eastmoney_realtime_quote"
+        params = {"secids": "600519,000001,1.000001,300750,510050,0.920002,600519"}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)

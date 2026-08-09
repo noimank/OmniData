@@ -5,7 +5,7 @@
 | 统计项 | 数值 |
 | :--- | :--- |
 | **平台标识** | `eastmoney` |
-| **接口数量** | 36 |
+| **接口数量** | 37 |
 
 ## 接口列表
 
@@ -33,6 +33,7 @@
 | [获取沪深两市主力资金净流入排行数据，支持分页、排序（主力净占比/主力净流入/涨跌幅等）和市场筛选](eastmoney_main_force_ranking.md) | `eastmoney_main_force_ranking` | 2.0.1 |
 | [获取沪深北三市融资融券历史数据，支持查询全部/沪市/深市/京市，支持1日/3日/5日/10日统计周期](eastmoney_margin_trading.md) | `eastmoney_margin_trading` | 1.1.0 |
 | [获取沪深两市大盘资金流向历史数据](eastmoney_market_flow.md) | `eastmoney_market_flow` | 1.0.0 |
+| [批量获取多只股票/指数/ETF实时行情报价，包括最新价、涨跌幅、成交量、成交额、振幅、换手率、量比、市盈率、市净率、总市值等完整行情数据，支持自动分批](eastmoney_realtime_quote.md) | `eastmoney_realtime_quote` | 1.0.0 |
 | [获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向](eastmoney_realtime_stock_fund_flow.md) | `eastmoney_realtime_stock_fund_flow` | 2.0.0 |
 | [东方财富网通用搜索，支持资讯、公告、研报、问董秘四种搜索类型](eastmoney_search.md) | `eastmoney_search` | 1.0.0 |
 | [获取指定行业板块内个股的资金流向排行数据](eastmoney_sector_stock_flow.md) | `eastmoney_sector_stock_flow` | 2.0.0 |
