@@ -9,6 +9,7 @@ import pytest
 from omnidata.core.browser_context_pool import BrowserContextPool
 from omnidata.core import get_spider_register, spider_register, close_spider_register
 from omnidata.core.config import BrowserConfig
+from omnidata.data_sources.sina.realtime_quote import RealtimeQuoteSpider
 
 
 @pytest.fixture
@@ -41,6 +42,14 @@ class TestSinaSpider:
     async def test_run(self, browser_pool):
         spider_name = "sina_finance_news"
         params = {"page": 1, "page_size": 50, "tag_id": 0}
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        res = await instance.run(params)
+        print(res)
+
+    async def test_run2(self, browser_pool):
+        spider_name = "sina_realtime_quote"
+        params = {"symbols": "600519,sz000001,sh000001,510050,159919,920002"}
         register = spider_register()
         instance = register.get_spider_instance(spider_name)
         res = await instance.run(params)
