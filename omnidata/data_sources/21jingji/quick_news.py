@@ -7,6 +7,7 @@
 """
 
 import re
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -127,10 +128,21 @@ class JingjiQuickNewsSpider(BaseWebSpider):
         Returns:
             解析后的新闻字典
         """
+        # 发布时间：源数据为 %Y-%m-%d %H:%M（分钟精度），补秒统一为 %Y-%m-%d %H:%M:%S
+        pub_time = ""
+        inputtime = item.get("inputtime", "")
+        if inputtime:
+            try:
+                pub_time = datetime.strptime(inputtime, "%Y-%m-%d %H:%M").strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            except ValueError:
+                pub_time = inputtime
+
         return {
             "title": item.get("title", ""),
             "content": item.get("content", ""),
-            "pub_time": item.get("inputtime", ""),
+            "pub_time": pub_time,
             "url": item.get("url", ""),
             # "source": item.get("source", ""),
             # "author": item.get("author", ""),

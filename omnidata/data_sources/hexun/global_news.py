@@ -9,6 +9,7 @@
 import json
 import re
 import random
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -161,11 +162,22 @@ class HexunGlobalNewsSpider(BaseWebSpider):
         Returns:
             解析后的新闻字典
         """
+        # 发布时间：源数据为 %Y-%m-%d %H:%M（分钟精度），补秒统一为 %Y-%m-%d %H:%M:%S
+        pub_time = ""
+        entitytime = item.get("entitytime", "")
+        if entitytime:
+            try:
+                pub_time = datetime.strptime(entitytime, "%Y-%m-%d %H:%M").strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            except ValueError:
+                pub_time = entitytime
+
         return {
             # "id": item.get("id", 0),
             "title": item.get("title", ""),
             "content": item.get("abstract", ""),
-            "pub_time": item.get("entitytime", ""),
+            "pub_time": pub_time,
             "source": item.get("medianame", ""),
             # "author": item.get("author", ""),
             "url": item.get("entityurl", ""),

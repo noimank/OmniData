@@ -6,6 +6,7 @@
 支持分页查询
 """
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -126,10 +127,19 @@ class YicaiQuickNewsSpider(BaseWebSpider):
         if not url and item.get("url"):
             url = f"https://www.yicai.com{item['url']}"
 
+        # 发布时间：ISO格式（2026-08-12T08:27:21）转为 2026-08-12 08:27:21
+        pub_time = ""
+        create_date = item.get("CreateDate", "")
+        if create_date:
+            try:
+                pub_time = datetime.fromisoformat(create_date).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                pub_time = create_date
+
         return {
             "title": title,
             "content": content,
-            "pub_time": item.get("CreateDate", ""),
+            "pub_time": pub_time,
             "url": url,
             # "images": item.get("LiveImages", ""),
             # "id": item.get("LiveID", 0),
