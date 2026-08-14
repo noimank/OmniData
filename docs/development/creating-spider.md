@@ -193,13 +193,14 @@ return SpiderResult(
 ### 错误处理
 
 ```python
+# crawl() 中的异常会被 run() 统一捕获并记录，也可以直接返回失败结果：
 try:
     data = await self._extract_data(page)
     return SpiderResult(success=True, data=data)
 except Exception as e:
     return SpiderResult(
         success=False,
-        error=str(e)
+        message=str(e)
     )
 ```
 
@@ -247,7 +248,7 @@ class EastmoneyStockQuoteSpider(BaseWebSpider):
 
             return SpiderResult(
                 success=False,
-                error="获取数据失败"
+                message="获取数据失败"
             )
 ```
 
@@ -256,11 +257,11 @@ class EastmoneyStockQuoteSpider(BaseWebSpider):
 ## 测试爬虫
 
 ```bash
-# 命令行测试
-uv run python main.py --run eastmoney_stock_quote --secucode 000001
+# 命令行测试（参数使用 --params 传 JSON 字符串）
+uv run python main.py --run eastmoney_stock_quote --params '{"secucode": "000001"}'
 
 # API 测试
-curl -X POST http://localhost:8380/spiders/run \
+curl -X POST http://localhost:8380/api/v1/spiders/run \
   -H "Content-Type: application/json" \
   -d '{
     "spider_name": "eastmoney_stock_quote",

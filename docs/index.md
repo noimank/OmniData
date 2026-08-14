@@ -14,7 +14,7 @@ OmniData 是一个基于 **Playwright** 和 **FastAPI** 的可扩展网页爬虫
 | 特性 | 说明 |
 | :--- | :--- |
 | **自动注册** | 在 `data_sources/` 下创建爬虫文件即可自动发现 |
-| **浏览器池** | 单 Browser + 多 Context 架构，LRU 缓存管理 |
+| **浏览器池** | 单 Browser + 多 Context 架构，7×24 自愈（空闲回收 / 整体回收 / 崩溃自愈） |
 | **登录管理** | 统一的二维码登录管理，状态持久化到 Redis |
 | **MCP 协议** | 原生支持 Model Context Protocol，可创建 MCP 服务 |
 | **审计日志** | 自动记录爬虫执行日志到 SQLite |
@@ -42,7 +42,7 @@ OmniData 是一个基于 **Playwright** 和 **FastAPI** 的可扩展网页爬虫
 
 ```bash
 # 拉取镜像
-docker pull noimank/omnidata:latest
+docker pull noimankdocker/omnidata:latest
 
 # 启动服务
 docker run -d \
@@ -140,7 +140,7 @@ omnidata/
 ### 运行爬虫
 
 ```bash
-curl -X POST http://localhost:8380/spiders/run \
+curl -X POST http://localhost:8380/api/v1/spiders/run \
   -H "Content-Type: application/json" \
   -d '{
     "spider_name": "eastmoney_stock_quote",
@@ -157,9 +157,13 @@ curl -X POST http://localhost:8380/api/v1/mcp-services \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-mcp",
+    "display_name": "我的 MCP 服务",
     "description": "我的 MCP 服务",
-    "spider_names": ["eastmoney_stock_quote", "sina_global_news"],
-    "transport": "streamable-http"
+    "transport": "streamable-http",
+    "tools": [
+      {"spider_name": "eastmoney_stock_quote"},
+      {"spider_name": "sina_global_news"}
+    ]
   }'
 ```
 

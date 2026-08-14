@@ -11,16 +11,13 @@ stateDiagram-v2
     [*] --> 注册: SpiderRegister 扫描
     注册 --> 已注册: 发现 BaseWebSpider 子类
     已注册 --> 参数验证: 接收请求
-    参数验证 --> 预处理: 验证通过
+    参数验证 --> 执行: 验证通过
     参数验证 --> 执行失败: 验证失败
-    预处理 --> 执行: preprocess() 钩子
-    执行 --> 后处理: crawl() 返回
-    执行 --> 重试: 执行失败
-    重试 --> 执行: 未达重试上限
-    重试 --> 执行失败: 达到重试上限
-    后处理 --> 审计日志: postprocess() 处理
+    执行 --> 后处理: crawl() 返回 SpiderResult
+    执行 --> 执行失败: 抛出异常（由 run() 统一捕获）
+    后处理 --> 审计日志: postprocess() 返回
     审计日志 --> [*]: 返回结果
-    执行失败 --> [*]: 返回错误
+    执行失败 --> [*]: 返回错误结果
 ```
 
 ---
@@ -31,7 +28,6 @@ stateDiagram-v2
 
 ```python
 # omnidata/core/spider_register.py
-
 class SpiderRegister:
     def _discover_spiders(self):
         """扫描 data_sources/ 目录"""
@@ -44,12 +40,12 @@ class SpiderRegister:
 
 ### 命名约定
 
-爬虫类命名格式：`{Platform}{Action}Spider`
+爬虫 `name` 属性格式：`{数据源}_{功能描述}`
 
-| 类名 | spider_name | 平台 | 动作 |
-| :--- | :--- | :--- | :--- |
-| `EastmoneyStockQuoteSpider` | `eastmoney_stock_quote` | 东方财富 | 股票行情 |
-| `SinaGlobalNewsSpider` | `sina_global_news` | 新浪 | 全球新闻 |
+| name | 平台 | 动作 |
+| :--- | :--- | :--- |
+| `eastmoney_stock_quote` | 东方财富 | 股票行情 |
+| `sina_global_news` | 新浪 | 全球新闻 |
 
 ---
 
@@ -67,38 +63,28 @@ class StockQuoteParams(BaseModel):
 
 ### 自动验证
 
+`run()` 通过 `params_model.model_validate(params)` 自动验证并转换参数：
+
 ```python
 async def run(self, params: dict) -> SpiderResult:
     # 自动验证并转换
-    validated_params = self.params_model(**params)
-    return await self.crawl(validated_params)
+    validated_params = self.params_model.model_validate(params)
+    result = await self.crawl(validated_params)
+    final_result = await self.postprocess(result, validated_params)
+    # 设置 spider_name 和时间字段，记录审计日志
+    ...
 ```
 
 ---
 
-## 3. 预处理阶段
-
-### 钩子方法
-
-```python
-class MySpider(BaseWebSpider):
-    async def preprocess(self, params: MyParams) -> MyParams:
-        """在执行前修改或增强参数"""
-        # 示例：添加时间戳
-        params.timestamp = int(time.time())
-        return params
-```
-
----
-
-## 4. 执行阶段
+## 3. 执行阶段
 
 ### 核心方法
 
 ```python
 async def crawl(self, params: MyParams) -> SpiderResult:
     """爬虫核心逻辑，必须实现"""
-    async with self.new_page(namespace=f"spider_{self.name}") as page:
+    async with self.new_page(namespace="东方财富") as page:
         await page.goto(url)
 
         data = await self._extract_data(page)
@@ -106,55 +92,43 @@ async def crawl(self, params: MyParams) -> SpiderResult:
         return SpiderResult(
             success=True,
             data=data,
-            metadata={"url": page.url}
+            metadata={"url": page.url},
         )
 ```
 
-### 重试机制
+### 异常处理
 
-```python
-async def run(self, params: dict) -> SpiderResult:
-    for attempt in range(self.retry_times):
-        try:
-            return await self._execute_with_lifecycle(params)
-        except Exception as e:
-            if attempt == self.retry_times - 1:
-                raise
-            await asyncio.sleep(self.retry_delay * (2 ** attempt))
-```
+`crawl()` 中**无需自行 try/except**——抛出的异常会被 `run()` 统一捕获并记录 traceback，包装为 `success=False` 的错误结果，同时记录审计日志。
 
 ---
 
-## 5. 后处理阶段
+## 4. 后处理阶段
 
 ### 结果处理
 
 ```python
-async def postprocess(self, result: SpiderResult) -> SpiderResult:
-    """处理爬虫返回结果"""
+async def postprocess(self, result: SpiderResult, params: MyParams) -> SpiderResult:
+    """处理爬虫返回结果（可选，接收并返回 SpiderResult）"""
     # 示例：数据清洗
     if result.data:
         result.data = self._clean_data(result.data)
     return result
 ```
 
+注意：`postprocess` 的签名是 `(result, params)`，两个参数都是必传的。
+
 ---
 
-## 6. 审计日志
+## 5. 审计日志
 
-### 自动记录
+每次爬虫执行（含成功与失败）都会自动记录到 SQLite：
 
-```python
-async def _log_audit(self, spider_name: str, params: dict, result: SpiderResult):
-    """记录到 SQLite"""
-    await SpiderAudit.create(
-        spider_name=spider_name,
-        params=json.dumps(params),
-        status="success" if result.success else "failed",
-        execution_time=result.execution_time,
-        error_message=result.error
-    )
-```
+- `spider_name`、`platform`、`spider_version`
+- `success`、`error_message`
+- `started_at`、`completed_at`、`duration_seconds`
+- `params`、`result_metadata`（JSON）
+
+审计记录失败不会影响爬虫执行，仅记录 warning 日志。
 
 ---
 
@@ -163,19 +137,27 @@ async def _log_audit(self, spider_name: str, params: dict, result: SpiderResult)
 ```python
 @dataclass
 class SpiderResult:
-    success: bool                    # 是否成功
-    data: Any = None                 # 返回数据
+    success: bool = True                 # 是否成功
+    data: Any = None                     # 返回数据
     metadata: dict = field(default_factory=dict)  # 元数据
-    error: str | None = None         # 错误信息
-    execution_time: float = 0.0      # 执行耗时（秒）
+    message: str | None = None           # 错误信息（success=False 时）
+    # 以下字段由 run() 自动设置，开发者无需关注
+    spider_name: str | None = None
+    started_at: datetime = ...
+    completed_at: datetime | None = None
+    duration_seconds: float = 0
 ```
+
+!!! warning "不要手动设置时间字段"
+    `spider_name`、`started_at`、`completed_at`、`duration_seconds` 会自动被 `run()` 覆盖，
+    开发者只关注 `success` / `data` / `metadata` / `message` 即可。
 
 ---
 
 ## 最佳实践
 
 1. **参数验证**：使用 Pydantic 模型定义严格的参数规则
-2. **错误处理**：在 `crawl()` 中捕获并处理预期异常
+2. **错误处理**：直接在 `crawl()` 中抛出异常，由 `run()` 统一处理
 3. **元数据**：在 `metadata` 中返回调试信息
 4. **幂等性**：相同参数应返回相同结果
 

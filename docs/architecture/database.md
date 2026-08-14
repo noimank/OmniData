@@ -1,6 +1,6 @@
 # 数据库设计
 
-OmniData 使用 SQLite 存储审计日志和配置数据。
+OmniData 使用 SQLite 存储 MCP 服务配置、提示词版本和审计日志。
 
 ---
 
@@ -8,134 +8,103 @@ OmniData 使用 SQLite 存储审计日志和配置数据。
 
 - **ORM**：SQLAlchemy 2.0+
 - **驱动**：aiosqlite（异步 SQLite）
-- **数据库文件**：`omnidata.db`
+- **数据库文件**：`data/omnidata.db`（随项目目录自动创建，容器部署建议挂载）
 
 ---
 
 ## 数据表
 
-### 1. spider_audit
+### 1. spider_prompt
 
-爬虫执行审计日志。
+爬虫级提示词版本（全系统共享）。每个 Spider 可有多个版本，默认版本自动创建且不可删除，工具可选择指定版本，为空则使用默认版本。
 
 ```sql
-CREATE TABLE spider_audit (
+CREATE TABLE spider_prompt (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    spider_name VARCHAR(100) NOT NULL,
-    params TEXT,                    -- JSON 格式的请求参数
-    status VARCHAR(20) NOT NULL,    -- success/failed
-    execution_time FLOAT,           -- 执行耗时（秒）
-    error_message TEXT,             -- 错误信息
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_spider_name (spider_name),
-    INDEX idx_created_at (created_at),
-    INDEX idx_status (status)
+    spider_name VARCHAR(200) NOT NULL,          -- 关联的 Spider 名称（带索引）
+    version_name VARCHAR(100) NOT NULL,          -- 版本名称（如：默认、详细版）
+    description TEXT NOT NULL,                   -- 提示词内容
+    is_default BOOLEAN NOT NULL DEFAULT false,   -- 是否为默认版本（不可删除）
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (spider_name, version_name)
 );
 ```
 
-### 2. mcp_services
+### 2. mcp_service
 
 MCP 服务配置。
 
 ```sql
-CREATE TABLE mcp_services (
+CREATE TABLE mcp_service (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) UNIQUE NOT NULL,           -- 服务名称（用于路由，唯一）
+    display_name VARCHAR(200) NOT NULL,          -- 显示名称
     description TEXT,
-    spider_names TEXT NOT NULL,     -- JSON 数组
-    transport VARCHAR(20) NOT NULL, -- http/streamable-http/sse
-    tool_prompts TEXT,              -- JSON 对象，工具提示词
-    enabled BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    transport VARCHAR(50) NOT NULL DEFAULT 'http',  -- http/streamable-http/sse
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-### 3. login_state
+### 3. mcp_tool
 
-登录状态记录（可选，主要使用 Redis）。
+MCP 工具表，关联 Spider 到服务。每个工具通过 `selected_prompt_version` 选择使用哪个版本的 `spider_prompt`（为空则使用默认版本）。
 
 ```sql
-CREATE TABLE login_state (
+CREATE TABLE mcp_tool (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform VARCHAR(50) NOT NULL,
-    namespace VARCHAR(100) NOT NULL,
-    status VARCHAR(20) NOT NULL,    -- pending/success/expired
-    qr_data TEXT,                   -- 二维码数据
-    expires_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (platform, namespace)
+    service_id INTEGER NOT NULL REFERENCES mcp_service(id) ON DELETE CASCADE,
+    spider_name VARCHAR(200) NOT NULL,           -- 关联的 Spider
+    tool_name VARCHAR(200) NOT NULL,             -- 自定义工具名称
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    selected_prompt_version VARCHAR(100),        -- 指定提示词版本（为空用默认）
+    UNIQUE (service_id, spider_name)
+);
+```
+
+### 4. spider_audit
+
+爬虫调用审计记录，记录每次爬虫调用的详细信息。
+
+```sql
+CREATE TABLE spider_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spider_name VARCHAR(200) NOT NULL,           -- 爬虫名称（带索引）
+    platform VARCHAR(100) NOT NULL,              -- 平台名称（带索引）
+    spider_version VARCHAR(50) NOT NULL,         -- 爬虫版本
+    success BOOLEAN NOT NULL,                    -- 执行是否成功（带索引）
+    error_message TEXT,                          -- 错误信息
+    started_at DATETIME NOT NULL,                -- 开始时间（带索引）
+    completed_at DATETIME,                       -- 完成时间
+    duration_seconds FLOAT NOT NULL,             -- 执行时长（秒）
+    params TEXT,                                 -- 爬虫参数（JSON）
+    result_metadata TEXT,                        -- 返回元数据（JSON）
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 ---
 
-## ORM 模型
+## ORM 使用
 
-### SpiderAudit
+所有数据库操作均为 SQLAlchemy 2.0 异步会话方式：
 
 ```python
+from sqlalchemy import select
+from omnidata.database import get_db_session
 from omnidata.database.models import SpiderAudit
 
-# 创建记录
-await SpiderAudit.create(
-    spider_name="eastmoney_stock_quote",
-    params={"secucode": "000001"},
-    status="success",
-    execution_time=1.23
-)
-
-# 查询统计
-stats = await SpiderAudit.get_stats()
-```
-
-### MCPService
-
-```python
-from omnidata.database.models import MCPService
-
-# 创建服务
-service = await MCPService.create(
-    name="financial-data",
-    description="金融数据服务",
-    spider_names=["eastmoney_stock_quote"],
-    transport="streamable-http"
-)
-
-# 获取服务
-service = await MCPService.get_by_name("financial-data")
-```
-
----
-
-## 数据库操作
-
-### 会话管理
-
-```python
-from omnidata.database.session import get_session
-
-async with get_session() as session:
-    # 使用 session 执行操作
-    result = await session.execute(select(SpiderAudit))
+# 查询最近的审计记录
+async with get_db_session() as session:
+    result = await session.execute(
+        select(SpiderAudit)
+        .where(SpiderAudit.spider_name == "eastmoney_stock_quote")
+        .order_by(SpiderAudit.created_at.desc())
+        .limit(10)
+    )
     audits = result.scalars().all()
-```
-
-### 异步执行
-
-所有数据库操作都是异步的：
-
-```python
-# 查询
-audits = await SpiderAudit.filter(
-    SpiderAudit.spider_name == "eastmoney_stock_quote"
-).limit(10).all()
-
-# 统计
-count = await SpiderAudit.filter(
-    SpiderAudit.status == "success"
-).count()
 ```
 
 ---
@@ -146,17 +115,6 @@ count = await SpiderAudit.filter(
 
 ```bash
 GET /api/v1/spider-audit/stats
-```
-
-```json
-{
-  "total_runs": 1234,
-  "success_rate": 0.95,
-  "avg_execution_time": 1.23,
-  "top_spiders": [
-    {"spider_name": "eastmoney_stock_quote", "count": 456}
-  ]
-}
 ```
 
 ### 查询记录
@@ -171,64 +129,30 @@ GET /api/v1/spider-audit/records?spider_name=eastmoney_stock_quote&limit=10
 DELETE /api/v1/spider-audit/cleanup?days=30
 ```
 
+### 批量删除记录
+
+```bash
+DELETE /api/v1/spider-audit/records/batch
+```
+
 ---
 
 ## 数据备份
 
-### 备份脚本
-
 ```bash
 # 备份数据库
-cp omnidata.db omnidata.db.backup.$(date +%Y%m%d)
+cp data/omnidata.db data/omnidata.db.backup.$(date +%Y%m%d)
 
 # 或使用 SQLite 导出
-sqlite3 omnidata.db .dump > backup.sql
-```
-
-### 恢复数据
-
-```bash
-# 从备份恢复
-cp omnidata.db.backup.20260211 omnidata.db
-
-# 或从 SQL 恢复
-sqlite3 omnidata.db < backup.sql
-```
-
----
-
-## 性能优化
-
-### 索引策略
-
-- `spider_name`：高频查询字段
-- `created_at`：时间范围查询
-- `status`：状态过滤
-
-### 清理策略
-
-```python
-# 定期清理旧数据
-async def cleanup_old_audits(days: int = 90):
-    cutoff = datetime.now() - timedelta(days=days)
-    await SpiderAudit.filter(
-        SpiderAudit.created_at < cutoff
-    ).delete()
+sqlite3 data/omnidata.db .dump > backup.sql
 ```
 
 ---
 
 ## 配置
 
-通过环境变量配置：
-
-```bash
-# 数据库路径
-OMNIDATA_DB__PATH=omnidata.db
-
-# 审计日志保留天数
-OMNIDATA_AUDIT__RETENTION_DAYS=90
-```
+数据库路径为固定值 `data/omnidata.db`，随项目目录创建，不通过环境变量配置。
+容器部署时挂载 `/app/data` 目录即可持久化（见 [部署指南](../development/deployment.md)）。
 
 ---
 

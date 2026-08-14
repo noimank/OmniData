@@ -17,7 +17,7 @@ OmniData 是一个企业级的可扩展网页爬虫框架，基于 Playwright �
 
 - **浏览器自动化**: 基于 Playwright 实现完整的浏览器自动化能力，支持 Headers、Cookie、LocalStorage 等全流程控制
 - **LRU 单例模式**: 核心组件使用 LRU 缓存实现线程安全单例，优化资源管理
-- **Context 池化**: 单 Browser 多 Context 架构，Context 自动复用与回收，显著降低内存占用
+- **7×24 自愈浏览器池**: 单 Browser + 多 Context 架构，Context 自动复用与空闲回收，浏览器按存活时长/建页数自动整体回收，崩溃自愈、登录态自动恢复
 - **自动注册机制**: 扫描 `data_sources/` 目录自动发现爬虫和登录器，轻松拓展爬虫任务，零配置启动
 - **Redis 状态持久化**: cookies 和 localStorage 自动持久化到 Redis，支持登录态长期保持
 - **MCP 协议集成**: 完整实现 MCP (Model Context Protocol) 协议，支持 HTTP/SSE 传输，自由选择任意多个爬虫接口任意组成多个mcp服务
@@ -44,7 +44,7 @@ docker run -d \
 
 访问服务：
 - 前端界面：`http://localhost`
-- API 文档：`http://localhost:8000/docs`
+- API 文档：`http://localhost/docs`
 
 ### 本地开发
 
@@ -85,21 +85,22 @@ class MySpider(BaseWebSpider):
     params_model = MySpiderParams
 
     async def crawl(self, params: MySpiderParams) -> SpiderResult:
-        async with self.browser_context_pool.get_context() as context:
-            page = await context.new_page()
+        async with self.new_page("我的平台") as page:
             await page.goto(params.url)
             title = await page.title()
             return SpiderResult(success=True, data={"title": title})
 ```
 
+> `new_page(namespace)` 自动管理 Context 与 Page 生命周期，无需手动关闭。
+
 ### API 调用
 
 ```bash
 # 列出所有爬虫
-curl http://localhost:8000/api/v1/spiders
+curl http://localhost:8380/api/v1/spiders
 
 # 运行爬虫
-curl -X POST http://localhost:8000/api/v1/spiders/run \
+curl -X POST http://localhost:8380/api/v1/spiders/run \
   -H "Content-Type: application/json" \
   -d '{"spider_name": "my_spider", "params": {"url": "https://example.com"}}'
 ```

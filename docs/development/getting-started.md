@@ -52,7 +52,6 @@ OMNIDATA_REDIS__DB=0
 
 # 浏览器配置
 OMNIDATA_BROWSER__HEADLESS=true
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=10
 ```
 
 ---
@@ -84,18 +83,18 @@ npm run dev
 ### 列出所有爬虫
 
 ```bash
-curl http://localhost:8380/spiders
+curl http://localhost:8380/api/v1/spiders
 ```
 
 ### 运行示例爬虫
 
 ```bash
-curl -X POST http://localhost:8380/spiders/run \
+curl -X POST http://localhost:8380/api/v1/spiders/run \
   -H "Content-Type: application/json" \
   -d '{
-    "spider_name": "example_hello",
+    "spider_name": "example_spider",
     "params": {
-      "name": "OmniData"
+      "url": "https://example.com"
     }
   }'
 ```
@@ -110,10 +109,10 @@ curl -X POST http://localhost:8380/spiders/run \
 
 ```bash
 # 运行测试
-uv run pytest
+uv run pytest tests/ -v --cov=omnidata
 
 # 查看浏览器池状态
-curl http://localhost:8380/monitor/browser-pool
+curl http://localhost:8380/api/v1/monitor/browser-pool
 ```
 
 ---
@@ -143,10 +142,10 @@ uv run playwright install chromium
 
 ### 端口冲突
 
-修改 `.env` 文件：
+使用 `--port` 参数修改端口：
 
 ```bash
-OMNIDATA_API__PORT=8381
+uv run python main.py --port 8381
 ```
 
 ---
@@ -161,13 +160,18 @@ OMNIDATA_API__PORT=8381
 
 ## 使用 Docker（可选）
 
-```bash
-# 构建镜像
-docker build -t omnidata .
+镜像内置 Redis、Nginx、后端，对外暴露 **80** 端口：
 
-# 运行容器
+```bash
+# 拉取已发布镜像
 docker run -d \
-  -p 8380:8380 \
-  -e OMNIDATA_REDIS__HOST=host.docker.internal \
-  omnidata
+  --name omnidata \
+  -p 80:80 \
+  -v ./data:/app/data \
+  --restart unless-stopped \
+  noimankdocker/omnidata:latest
+
+# 或本地构建
+docker build -t omnidata .
+docker run -d --name omnidata -p 80:80 -v ./data:/app/data omnidata
 ```

@@ -9,84 +9,118 @@
 ### 获取浏览器池状态
 
 ```http
-GET /monitor/browser-pool
+GET /api/v1/monitor/browser-pool
 ```
 
-**响应示例**：
+**响应示例**（统一 `ApiResponse` 包装）：
 
 ```json
 {
-  "total_contexts": 5,
-  "active_contexts": 3,
-  "idle_contexts": 2,
-  "cache_stats": {
-    "hits": 120,
-    "misses": 15,
-    "hit_rate": 0.889
-  },
-  "contexts": [
+  "success": true,
+  "message": "获取浏览器池状态成功",
+  "data": {
+    "browser_count": 1,
+    "context_count": 5,
+    "active_pages": 2,
+    "total_contexts_created": 120,
+    "total_contexts_reused": 480,
+    "reuse_rate": 0.8,
+    "total_contexts_closed": 100,
+    "total_browser_recycles": 3,
+    "total_browser_recoveries": 1,
+    "pages_since_recycle": 1234,
+    "last_recycle_at": 1752552000.0,
+    "config": {
+      "idle_timeout": 600,
+      "headless": true,
+      "user_agent": "Mozilla/5.0 ... Chrome/143.0.0.0 Safari/537.36"
+    }
+  }
+}
+```
+
+### 获取 Context Pool 状态
+
+与浏览器池状态相同：
+
+```http
+GET /api/v1/monitor/context-pool
+```
+
+### 获取当前 Context 列表
+
+```http
+GET /api/v1/monitor/contexts
+```
+
+```json
+{
+  "success": true,
+  "message": "获取 Context 列表成功",
+  "data": [
     {
-      "namespace": "eastmoney_login",
-      "created_at": "2026-02-11T10:00:00",
-      "last_used_at": "2026-02-11T10:30:00",
-      "page_count": 0,
-      "status": "idle"
+      "namespace": "eastmoney",
+      "key": "eastmoney",
+      "created_at": 1752552000.0,
+      "last_used_at": 1752555600.0,
+      "idle_time": 12.3,
+      "pages_count": 0
     }
   ]
 }
 ```
 
----
-
-## 审计日志
-
-### 获取统计数据
+### 获取性能指标
 
 ```http
-GET /api/v1/spider-audit/stats
+GET /api/v1/monitor/performance
 ```
-
-**响应示例**：
 
 ```json
 {
-  "total_runs": 1234,
-  "success_rate": 0.95,
-  "avg_execution_time": 1.23,
-  "top_spiders": [
-    {"spider_name": "eastmoney_stock_quote", "count": 456}
-  ]
-}
-```
-
-### 查询记录
-
-```http
-GET /api/v1/spider-audit/records?spider_name=eastmoney_stock_quote&limit=10&offset=0
-```
-
-**响应示例**：
-
-```json
-{
-  "total": 456,
-  "records": [
-    {
-      "id": 1,
-      "spider_name": "eastmoney_stock_quote",
-      "params": "{\"secucode\": \"000001\"}",
-      "status": "success",
-      "execution_time": 1.23,
-      "created_at": "2026-02-11T10:00:00"
+  "success": true,
+  "message": "获取性能指标成功",
+  "data": {
+    "browser": {
+      "browser_count": 1,
+      "total_browser_recycles": 3,
+      "last_recycle_at": 1752552000.0,
+      "pages_since_recycle": 1234
+    },
+    "context": {
+      "total_contexts": 5,
+      "reuse_rate": 0.8,
+      "total_contexts_created": 120,
+      "total_contexts_reused": 480
+    },
+    "health": {
+      "total_contexts_closed": 100,
+      "active_pages": 2
     }
-  ]
+  }
 }
 ```
 
-### 清理旧数据
+### 获取系统资源
 
 ```http
-DELETE /api/v1/spider-audit/cleanup?days=30
+GET /api/v1/monitor/system
+```
+
+```json
+{
+  "success": true,
+  "message": "获取系统状态成功",
+  "data": {
+    "status": "healthy",
+    "uptime_seconds": 86400.0,
+    "memory_usage_mb": 356.2,
+    "memory_percent": 4.5,
+    "cpu_percent": 2.3,
+    "redis_connected": true,
+    "timestamp": "2026-08-14T10:00:00"
+  }
+}
 ```
 
 ---
@@ -103,14 +137,59 @@ GET /health
 
 ```json
 {
-  "status": "healthy",
-  "version": "0.1.0",
-  "components": {
-    "redis": "ok",
-    "database": "ok",
-    "browser_pool": "ok"
+  "success": true,
+  "message": "服务正常",
+  "data": {
+    "status": "healthy",
+    "service": "omnidata"
   }
 }
+```
+
+---
+
+## 审计日志
+
+### 获取统计数据
+
+```http
+GET /api/v1/spider-audit/stats
+```
+
+### 查询记录
+
+```http
+GET /api/v1/spider-audit/records?spider_name=eastmoney_stock_quote&limit=10&offset=0
+```
+
+### 查询平台列表
+
+```http
+GET /api/v1/spider-audit/platforms
+```
+
+### 查询爬虫列表
+
+```http
+GET /api/v1/spider-audit/spiders
+```
+
+### 清理旧数据
+
+```http
+DELETE /api/v1/spider-audit/cleanup?days=30
+```
+
+### 批量删除记录
+
+```http
+DELETE /api/v1/spider-audit/records/batch
+```
+
+### 删除单条记录
+
+```http
+DELETE /api/v1/spider-audit/records/{record_id}
 ```
 
 ---

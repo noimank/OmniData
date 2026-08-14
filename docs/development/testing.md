@@ -12,118 +12,106 @@
 
 ---
 
-## 测试爬虫
+## 优先使用 CLI 快速验证爬虫
 
-### 基础测试
+**重要**：爬虫测试优先使用 CLI 命令进行快速验证，也可在 `tests/data_sources/` 目录下创建 pytest 测试文件进行集成测试。
+
+### 基本测试（无参数）
+
+```bash
+uv run python main.py --run <spider_name>
+```
+
+### 带参数测试（JSON 格式）
+
+```bash
+uv run python main.py --run <spider_name> --params '{"url": "https://example.com", "keyword": "test"}'
+```
+
+### 列出所有可用爬虫
+
+```bash
+uv run python main.py --list
+```
+
+!!! note "注意事项"
+    1. `--params` 后必须跟 JSON 字符串，使用单引号包裹
+    2. 参数会根据爬虫的 `params_model` 自动验证
+    3. 测试结果会直接输出到控制台，包括 `SpiderResult` 的完整信息
+
+---
+
+## 集成测试（tests/data_sources/）
+
+可在 `tests/data_sources/` 下创建测试文件，文件名格式 `test_{platform}.py`。
+
+### 测试 fixture
 
 ```python
-# tests/test_spiders.py
+# tests/data_sources/test_example.py
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 import pytest
-from omnidata.core.spider_register import SpiderRegister
-from omnidata.data_sources.example.example_spider import ExampleHelloSpider, HelloParams
 
-@pytest.mark.asyncio
-async def test_example_spider():
+from omnidata.core.browser_context_pool import BrowserContextPool
+from omnidata.core import get_spider_register, close_spider_register
+from omnidata.core.config import BrowserConfig
+from omnidata.data_sources.example.example_spider import ExampleSpider
+
+
+@pytest.fixture
+async def browser_pool():
+    """创建浏览器上下文池实例，完成环境初始化（无头模式）"""
+    pool = BrowserContextPool(BrowserConfig(headless=True))
+    await pool.initialize()
+
+    # 初始化爬虫注册器
+    spider_reg = get_spider_register()
+    await spider_reg.initialize()
+
+    yield pool
+
+    # 清理
+    await close_spider_register()
+    await pool.shutdown()
+
+
+class TestExampleSpider:
     """测试示例爬虫"""
-    spider = ExampleHelloSpider()
 
-    result = await spider.run(
-        params={"name": "Test"}
-    )
-
-    assert result.success is True
-    assert result.data["message"] == "Hello, Test!"
-```
-
-### 参数验证测试
-
-```python
-@pytest.mark.asyncio
-async def test_invalid_params():
-    """测试参数验证"""
-    spider = ExampleHelloSpider()
-
-    # 缺少必填参数
-    with pytest.raises(ValidationError):
-        await spider.run(params={})
-```
-
-### Mock 测试
-
-```python
-from unittest.mock import AsyncMock, patch
-
-@pytest.mark.asyncio
-async def test_with_mock():
-    """使用 Mock 测试"""
-    spider = ExampleHelloSpider()
-
-    # Mock new_page 方法
-    with patch.object(spider, 'new_page') as mock_page:
-        mock_page.return_value.__aenter__.return_value = AsyncMock()
-
-        result = await spider.run(params={"name": "Test"})
+    async def test_run(self, browser_pool):
+        """运行示例爬虫"""
+        register = get_spider_register()
+        instance = register.get_spider_instance("example_spider")
+        result = await instance.run({"url": "https://example.com"})
 
         assert result.success is True
-        mock_page.assert_called_once()
+        assert result.data["title"] is not None
+
+    async def test_invalid_params(self, browser_pool):
+        """参数验证失败时返回错误结果（而非抛异常）"""
+        register = get_spider_register()
+        instance = register.get_spider_instance("example_spider")
+
+        # 缺少必填参数 url
+        result = await instance.run({})
+
+        assert result.success is False
+        assert result.message is not None
 ```
 
----
+### 断言建议
 
-## 测试登录
+`SpiderResult` 的可用字段：
 
-```python
-# tests/test_logins.py
-import pytest
-from omnidata.core.login_register import LoginRegister
-from omnidata.data_sources.bilibili.login import BilibiliLogin
-
-@pytest.mark.asyncio
-async def test_bilibili_login_get_qr():
-    """测试获取二维码"""
-    login = BilibiliLogin()
-
-    qr_id = await login.get_qr_code()
-
-    assert qr_id is not None
-    assert qr_id.startswith("bilibili_")
-
-@pytest.mark.asyncio
-async def test_bilibili_login_wait():
-    """测试等待登录（需要手动扫码）"""
-    login = BilibiliLogin()
-
-    # 这个测试需要手动扫码
-    # 在 CI/CD 中应该被跳过
-    pytest.skip("需要手动扫码")
-
-    result = await login.wait_for_login()
-
-    assert result["status"] == "success"
-```
-
----
-
-## 测试 fixtures
-
-```python
-# tests/conftest.py
-import pytest
-from omnidata.core.spider_register import SpiderRegister
-
-@pytest.fixture
-async def spider_register():
-    """爬虫注册器 fixture"""
-    register = SpiderRegister()
-    await register.initialize()
-    yield register
-    await register.cleanup()
-
-@pytest.fixture
-def example_spider():
-    """示例爬虫 fixture"""
-    return SpiderRegister.get_spider("example_hello")
-```
+- `success`：是否成功（bool）
+- `data`：返回数据
+- `message`：错误信息（`success=False` 时）
+- `metadata`：元数据
+- `spider_name` / `started_at` / `completed_at` / `duration_seconds`：由 `run()` 自动设置
 
 ---
 
@@ -131,101 +119,27 @@ def example_spider():
 
 ```bash
 # 运行所有测试
-uv run pytest
+uv run pytest tests/ -v
 
 # 运行特定文件
-uv run pytest tests/test_spiders.py
+uv run pytest tests/data_sources/test_example.py -v
 
 # 运行特定测试
-uv run pytest tests/test_spiders.py::test_example_spider
+uv run pytest tests/data_sources/test_example.py::TestExampleSpider::test_run
 
-# 显示输出
-uv run pytest -v
-
-# 生成覆盖率报告
-uv run pytest --cov=omnidata --cov-report=html
-```
-
----
-
-## 集成测试
-
-### 测试 API
-
-```python
-# tests/test_api.py
-import pytest
-from httpx import AsyncClient
-from omnidata.api.main import app
-
-@pytest.mark.asyncio
-async def test_list_spiders():
-    """测试列出所有爬虫"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        response = await client.get("/spiders")
-
-        assert response.status_code == 200
-        assert "spiders" in response.json()
-
-@pytest.mark.asyncio
-async def test_run_spider():
-    """测试运行爬虫"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        response = await client.post(
-            "/spiders/run",
-            json={
-                "spider_name": "example_hello",
-                "params": {"name": "Test"}
-            }
-        )
-
-        assert response.status_code == 200
-        result = response.json()
-        assert result["success"] is True
+# 显示覆盖率
+uv run pytest tests/ -v --cov=omnidata
 ```
 
 ---
 
 ## 测试最佳实践
 
-1. **隔离测试**：每个测试独立运行
-2. **使用 Mock**：避免真实网络请求
-3. **清理资源**：使用 fixture 清理
-4. **覆盖率目标**：保持 80% 以上覆盖率
-5. **异步测试**：使用 `@pytest.mark.asyncio`
-
----
-
-## CI/CD 集成
-
-```yaml
-# .github/workflows/test.yml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install uv
-          uv sync
-
-      - name: Run tests
-        run: uv run pytest --cov=omnidata
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-```
+1. **CLI 优先**：单爬虫验证用 `uv run python main.py --run`，无需写测试文件
+2. **集成测试**：需要断言断言结果时，在 `tests/data_sources/` 下按平台建文件
+3. **隔离测试**：每个测试独立运行，使用 fixture 初始化/清理浏览器池
+4. **无头模式**：测试中默认使用 `BrowserConfig(headless=True)`
+5. **异步测试**：使用 `@pytest.fixture` + `async def` 编写异步 fixture
 
 ---
 

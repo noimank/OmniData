@@ -15,7 +15,29 @@
 
 ## Docker 部署
 
-### 1. 使用项目提供的 Dockerfile
+镜像为**一体化镜像**：内置 Redis、Nginx、后端（supervisord 统一管理），对外只暴露 **80** 端口。
+
+### 1. 使用已发布镜像（推荐）
+
+```bash
+docker run -d \
+  --name omnidata \
+  -p 80:80 \
+  -e TZ=Asia/Shanghai \
+  -v ./data:/app/data \
+  -v ./logs:/var/log/supervisor \
+  --restart unless-stopped \
+  noimankdocker/omnidata:latest
+```
+
+访问：
+- 前端界面：`http://localhost`
+- API 文档：`http://localhost/docs`
+
+!!! tip "数据持久化"
+    项目使用 SQLite 数据库（位于 `/app/data/omnidata.db`），建议把 `/app/data` 挂载到本地，防止容器重建造成数据丢失。
+
+### 2. 使用项目提供的 Dockerfile 本地构建
 
 ```bash
 # 构建镜像
@@ -24,47 +46,34 @@ docker build -t omnidata:latest .
 # 运行容器
 docker run -d \
   --name omnidata \
-  -p 8380:8380 \
-  -e OMNIDATA_REDIS__HOST=host.docker.internal \
+  -p 80:80 \
+  -v ./data:/app/data \
   -e OMNIDATA_BROWSER__HEADLESS=true \
   omnidata:latest
 ```
 
-### 2. 使用 Docker Compose
+### 3. 使用 Docker Compose
 
 ```yaml
-version: '3.8'
-
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   omnidata:
-    build: .
-    ports:
-      - "8380:8380"
-    environment:
-      - OMNIDATA_REDIS__HOST=redis
-      - OMNIDATA_BROWSER__HEADLESS=true
-    depends_on:
-      - redis
-
-  nginx:
-    image: nginx:alpine
+    image: noimankdocker/omnidata:latest   # 或改为 build: .
+    container_name: omnidata
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - omnidata
+      - ./data:/app/data
+      - ./logs:/var/log/supervisor
+    environment:
+      - TZ=Asia/Shanghai
+      - OMNIDATA_BROWSER__HEADLESS=true
+    restart: unless-stopped
 ```
 
 启动：
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ---
@@ -115,13 +124,15 @@ OMNIDATA_REDIS__PASSWORD=your_password
 
 # 浏览器
 OMNIDATA_BROWSER__HEADLESS=true
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=20
+OMNIDATA_BROWSER__DEFAULT_TIMEOUT=8000
 
-# API
-OMNIDATA_API__HOST=0.0.0.0
-OMNIDATA_API__PORT=8380
-OMNIDATA_API__WORKERS=4
+# 登录器
+OMNIDATA_LOGIN__CHECK_CONCURRENCY=5
+OMNIDATA_LOGIN__CHECK_TIMEOUT=30
 ```
+
+!!! note
+    浏览器池容量、空闲回收、整体回收、自愈等机制为内核固定策略，**不提供环境变量配置**。
 
 ### 4. 使用 Supervisor 管理进程
 
@@ -198,7 +209,7 @@ curl http://localhost:8380/health
 ### 浏览器池监控
 
 ```bash
-curl http://localhost:8380/monitor/browser-pool
+curl http://localhost:8380/api/v1/monitor/browser-pool
 ```
 
 ### 日志查看
@@ -217,25 +228,14 @@ docker logs -f omnidata
 
 ### 1. 调整 Worker 数量
 
-```bash
-# 根据 CPU 核心数调整
-OMNIDATA_API__WORKERS=4
-```
+> 本地开发模式下通过 `uv run python main.py --port 8380` 指定端口启动。
+> 生产部署建议使用 Docker 镜像（supervisord + uvicorn 管理），或通过 gunicorn/uvicorn 多进程方式部署。
 
-### 2. 增加 Context Pool 大小
+### 2. 浏览器池
 
-```bash
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=20
-```
+浏览器池容量、空闲回收、整体回收、自愈等为内核固定策略，自动运行，**无需也不支持调整**。
 
-### 3. 启用缓存
-
-```bash
-# Redis 缓存
-OMNIDATA_REDIS__CACHE_TTL=3600
-```
-
-### 4. 数据库优化
+### 3. 数据库优化
 
 ```bash
 # 定期清理旧审计日志

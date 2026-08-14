@@ -33,10 +33,10 @@ sudo systemctl start redis
 
 ### Q: 如何修改监听端口？
 
-在 `.env` 文件中设置：
+使用 `--port` 参数启动：
 
 ```bash
-OMNIDATA_API__PORT=8381
+uv run python main.py --port 8381
 ```
 
 ---
@@ -55,14 +55,10 @@ curl http://localhost:8380/api/v1/spider-audit/records?spider_name=xxx&limit=10
 
 ### Q: 如何提高爬取速度？
 
-1. 增加浏览器池大小：
-   ```bash
-   OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=20
-   ```
-
+1. 浏览器池为内核固定策略（空闲回收/整体回收/自愈），自动运行，无需调整
 2. 使用批量运行：
    ```bash
-   POST /spiders/run-batch
+   POST /api/v1/spiders/run-batch
    ```
 
 ### Q: 需要登录的网站如何处理？
@@ -70,15 +66,16 @@ curl http://localhost:8380/api/v1/spider-audit/records?spider_name=xxx&limit=10
 使用二维码登录功能：
 
 ```bash
-# 1. 启动登录
-curl -X POST http://localhost:8380/logins/start \
+# 1. 获取二维码
+curl -X POST http://localhost:8380/api/v1/logins/bilibili/qrcode \
   -H "Content-Type: application/json" \
-  -d '{"login_name": "bilibili"}'
+  -d '{"qr_type": "扫码登录"}'
 
-# 2. 获取二维码后扫码
+# 2. 用户扫码后轮询验证
+curl -X POST http://localhost:8380/api/v1/logins/bilibili/verify
 
 # 3. 检查登录状态
-curl http://localhost:8380/logins/status/bilibili
+curl http://localhost:8380/api/v1/logins/bilibili/status
 ```
 
 ---
@@ -97,11 +94,13 @@ curl http://localhost:8380/logins/status/bilibili
   "mcpServers": {
     "omnidata": {
       "url": "http://localhost:8380/mcp/financial-data",
-      "transport": "sse"
+      "transport": "streamable-http"
     }
   }
 }
 ```
+
+> `transport` 需与创建服务时指定的传输协议一致（`http` / `streamable-http` / `sse`）。
 
 ### Q: MCP 服务返回错误？
 
@@ -131,14 +130,14 @@ services:
 ```bash
 # 浏览器
 OMNIDATA_BROWSER__HEADLESS=true
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=20
+OMNIDATA_BROWSER__DEFAULT_TIMEOUT=8000
 
-# API
-OMNIDATA_API__WORKERS=4
-
-# 审计日志
-OMNIDATA_AUDIT__RETENTION_DAYS=30
+# 登录器
+OMNIDATA_LOGIN__CHECK_CONCURRENCY=5
+OMNIDATA_LOGIN__CHECK_TIMEOUT=30
 ```
+
+> 浏览器池容量、空闲回收、整体回收、自愈等为内核固定策略，自动运行，无需配置。
 
 ---
 

@@ -30,12 +30,13 @@ graph LR
 ```json
 {
   "name": "financial-data",
+  "display_name": "金融数据服务",
   "description": "金融数据查询服务",
-  "spider_names": [
-    "eastmoney_stock_quote",
-    "eastmoney_market_flow"
-  ],
-  "transport": "streamable-http"
+  "transport": "streamable-http",
+  "tools": [
+    {"spider_name": "eastmoney_stock_quote"},
+    {"spider_name": "eastmoney_market_flow"}
+  ]
 }
 ```
 
@@ -59,9 +60,13 @@ curl -X POST http://localhost:8380/api/v1/mcp-services \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-finance",
+    "display_name": "我的金融数据服务",
     "description": "我的金融数据服务",
-    "spider_names": ["eastmoney_stock_quote", "eastmoney_market_flow"],
-    "transport": "streamable-http"
+    "transport": "streamable-http",
+    "tools": [
+      {"spider_name": "eastmoney_stock_quote"},
+      {"spider_name": "eastmoney_market_flow"}
+    ]
   }'
 ```
 
@@ -120,11 +125,13 @@ curl -X POST http://localhost:8380/api/v1/mcp-services \
   "mcpServers": {
     "omnidata": {
       "url": "http://localhost:8380/mcp/financial-data",
-      "transport": "sse"
+      "transport": "streamable-http"
     }
   }
 }
 ```
+
+> `transport` 需与创建服务时指定的传输协议一致。
 
 ### Python 客户端
 
@@ -158,20 +165,22 @@ response = client.messages.create(
 
 ---
 
-## 自定义工具提示
+## 自定义工具提示词
 
-为每个爬虫工具自定义 AI 提示词：
+每个工具通过选择「提示词版本」来控制 AI 工具描述。提示词（`spider_prompt`）按爬虫维度管理多个版本，全系统共享：
 
 ```bash
-# 获取工具提示
-GET /api/v1/mcp-services/{id}/prompts
-
-# 更新工具提示
-PUT /api/v1/mcp-services/{id}/tools/{tool_id}/prompt
+# 设置工具使用的提示词版本
+PUT /api/v1/mcp-services/{id}/tools/{tool_id}/prompt-version
 {
-  "user_prompt": "你是股票查询助手，帮助用户获取实时股价..."
+  "version_name": "详细版"
 }
+
+# 获取工具当前使用的提示词版本
+GET /api/v1/mcp-services/{id}/tools/{tool_id}/prompt-version
 ```
+
+提示词版本的完整管理接口见 [MCP API](../api/mcp.md)。
 
 ---
 

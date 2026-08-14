@@ -9,7 +9,7 @@ OmniData 的完整配置说明。
 OmniData 使用 `pydantic-settings` 管理配置，支持：
 
 - **环境变量**：优先级最高
-- **.env 文件**：开发环境推荐
+- **.env 文件**：开发环境推荐（`main.py` 启动时自动加载）
 - **默认值**：代码中的默认配置
 
 ---
@@ -26,22 +26,33 @@ OmniData 使用 `pydantic-settings` 管理配置，支持：
 
 ---
 
+## 应用配置
+
+| 变量 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `OMNIDATA_APP_NAME` | `OmniData` | 应用名称 |
+| `OMNIDATA_APP_VERSION` | `0.1.0` | 应用版本 |
+| `OMNIDATA_DEBUG` | `false` | 调试模式 |
+
+---
+
 ## 浏览器配置
 
 | 变量 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `OMNIDATA_BROWSER__HEADLESS` | `true` | 无头模式 |
-| `OMNIDATA_BROWSER__CHANNEL` | `chromium` | 浏览器类型 |
-| `OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE` | `10` | Context 池最大容量 |
-| `OMNIDATA_BROWSER__CONTEXT_POOL_IDLE_TIMEOUT` | `300` | 空闲超时（秒） |
-| `OMNIDATA_BROWSER__USER_DATA_DIR` | `null` | 用户数据目录 |
-| `OMNIDATA_BROWSER__DEVTOOLS` | `false` | 是否启用开发者工具 |
+| `OMNIDATA_BROWSER__DEFAULT_TIMEOUT` | `8000` | Playwright 操作超时（毫秒） |
+| `OMNIDATA_BROWSER__ARGS` | 见代码 | 浏览器启动参数（反爬虫优化） |
+| `OMNIDATA_BROWSER__IGNORE_DEFAULT_ARGS` | 见代码 | 需忽略的默认启动参数 |
+
+!!! note "浏览器稳定机制不对外配置"
+    Context 池化复用、空闲回收、浏览器整体回收、自愈策略等均为内核内置固定策略
+    （见 `BrowserContextPool` 类常量），自动运行，**不提供环境变量**，避免误调。
 
 ```bash
 # 示例
 OMNIDATA_BROWSER__HEADLESS=true
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=20
-OMNIDATA_BROWSER__CONTEXT_POOL_IDLE_TIMEOUT=600
+OMNIDATA_BROWSER__DEFAULT_TIMEOUT=10000
 ```
 
 ---
@@ -54,163 +65,70 @@ OMNIDATA_BROWSER__CONTEXT_POOL_IDLE_TIMEOUT=600
 | `OMNIDATA_REDIS__PORT` | `6379` | Redis 端口 |
 | `OMNIDATA_REDIS__DB` | `0` | Redis 数据库编号 |
 | `OMNIDATA_REDIS__PASSWORD` | `null` | Redis 密码 |
-| `OMNIDATA_REDIS__PREFIX` | `omnidata:` | 键前缀 |
-| `OMNIDATA_REDIS__STATE_TTL` | `86400` | 状态过期时间（秒） |
+| `OMNIDATA_REDIS__MAX_CONNECTIONS` | `10` | 连接池最大连接数 |
 
 ```bash
 # 示例
 OMNIDATA_REDIS__HOST=localhost
 OMNIDATA_REDIS__PORT=6379
 OMNIDATA_REDIS__PASSWORD=your_password
-OMNIDATA_REDIS__PREFIX=omnidata:
+OMNIDATA_REDIS__MAX_CONNECTIONS=20
 ```
 
 ---
 
-## 数据库配置
+## 登录器配置
 
 | 变量 | 默认值 | 说明 |
 | :--- | :--- | :--- |
-| `OMNIDATA_DB__PATH` | `omnidata.db` | SQLite 数据库文件路径 |
-| `OMNIDATA_AUDIT__RETENTION_DAYS` | `90` | 审计日志保留天数 |
+| `OMNIDATA_LOGIN__CHECK_CONCURRENCY` | `5` | 登录状态检查的最大并发数 |
+| `OMNIDATA_LOGIN__CHECK_TIMEOUT` | `30` | 单次检查的超时时间（秒） |
 
 ```bash
 # 示例
-OMNIDATA_DB__PATH=/var/lib/omnidata/omnidata.db
-OMNIDATA_AUDIT__RETENTION_DAYS=30
-```
-
----
-
-## API 配置
-
-| 变量 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `OMNIDATA_API__HOST` | `0.0.0.0` | API 监听地址 |
-| `OMNIDATA_API__PORT` | `8380` | API 监听端口 |
-| `OMNIDATA_API__WORKERS` | `1` | Worker 进程数 |
-| `OMNIDATA_API__RELOAD` | `false` | 开发模式热重载 |
-
-```bash
-# 示例
-OMNIDATA_API__HOST=0.0.0.0
-OMNIDATA_API__PORT=8380
-OMNIDATA_API__WORKERS=4
-```
-
----
-
-## 爬虫配置
-
-| 变量 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `OMNIDATA_SPIDER__RETRY_TIMES` | `3` | 重试次数 |
-| `OMNIDATA_SPIDER__RETRY_DELAY` | `1` | 重试延迟（秒） |
-| `OMNIDATA_SPIDER__TIMEOUT` | `30` | 默认超时（秒） |
-
-```bash
-# 示例
-OMNIDATA_SPIDER__RETRY_TIMES=5
-OMNIDATA_SPIDER__RETRY_DELAY=2
-OMNIDATA_SPIDER__TIMEOUT=60
-```
-
----
-
-## MCP 配置
-
-| 变量 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `OMNIDATA_MCP__DEFAULT_TRANSPORT` | `streamable-http` | 默认传输协议 |
-| `OMNIDATA_MCP__ROUTE_PREFIX` | `/mcp/` | 路由前缀 |
-
-```bash
-# 示例
-OMNIDATA_MCP__DEFAULT_TRANSPORT=streamable-http
-OMNIDATA_MCP__ROUTE_PREFIX=/mcp/
-```
-
----
-
-## 健康检查配置
-
-| 变量 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `OMNIDATA_BROWSER__HEALTH_CHECK_INTERVAL` | `60` | 检查间隔（秒） |
-| `OMNIDATA_BROWSER__HEALTH_CHECK_TIMEOUT` | `30` | 检查超时（秒） |
-
-```bash
-# 示例
-OMNIDATA_BROWSER__HEALTH_CHECK_INTERVAL=120
-OMNIDATA_BROWSER__HEALTH_CHECK_TIMEOUT=60
+OMNIDATA_LOGIN__CHECK_CONCURRENCY=10
+OMNIDATA_LOGIN__CHECK_TIMEOUT=60
 ```
 
 ---
 
 ## 完整 .env 示例
 
+参考项目根目录的 `.env.example`：
+
 ```bash
-# ================================
-# OmniData 配置文件
-# ================================
+# 应用配置
+OMNIDATA_APP_NAME=OmniData
+OMNIDATA_APP_VERSION=0.1.0
+OMNIDATA_DEBUG=false
 
-# ----- 浏览器配置 -----
+# 浏览器配置
 OMNIDATA_BROWSER__HEADLESS=true
-OMNIDATA_BROWSER__CHANNEL=chromium
-OMNIDATA_BROWSER__CONTEXT_POOL_MAX_SIZE=10
-OMNIDATA_BROWSER__CONTEXT_POOL_IDLE_TIMEOUT=300
-OMNIDATA_BROWSER__DEVTOOLS=false
+OMNIDATA_BROWSER__DEFAULT_TIMEOUT=8000
 
-# ----- Redis 配置 -----
+# Redis 配置
 OMNIDATA_REDIS__HOST=localhost
 OMNIDATA_REDIS__PORT=6379
 OMNIDATA_REDIS__DB=0
-OMNIDATA_REDIS__PASSWORD=
-OMNIDATA_REDIS__PREFIX=omnidata:
-OMNIDATA_REDIS__STATE_TTL=86400
+OMNIDATA_REDIS__PASSWORD=your_password
+OMNIDATA_REDIS__MAX_CONNECTIONS=10
 
-# ----- 数据库配置 -----
-OMNIDATA_DB__PATH=omnidata.db
-OMNIDATA_AUDIT__RETENTION_DAYS=90
-
-# ----- API 配置 -----
-OMNIDATA_API__HOST=0.0.0.0
-OMNIDATA_API__PORT=8380
-OMNIDATA_API__WORKERS=1
-
-# ----- 爬虫配置 -----
-OMNIDATA_SPIDER__RETRY_TIMES=3
-OMNIDATA_SPIDER__RETRY_DELAY=1
-OMNIDATA_SPIDER__TIMEOUT=30
-
-# ----- MCP 配置 -----
-OMNIDATA_MCP__DEFAULT_TRANSPORT=streamable-http
-OMNIDATA_MCP__ROUTE_PREFIX=/mcp/
+# 登录器配置
+OMNIDATA_LOGIN__CHECK_CONCURRENCY=5
+OMNIDATA_LOGIN__CHECK_TIMEOUT=30
 ```
 
 ---
 
-## 配置验证
-
-启动时验证配置：
-
-```bash
-uv run python main.py --validate-config
-```
-
----
-
-## 运行时配置
-
-某些配置支持运行时修改：
+## 配置读取
 
 ```python
 from omnidata.core.config import settings
 
 # 读取配置
 print(settings.browser.headless)
-
-# 注意：运行时修改不会影响已启动的服务
+print(settings.redis.host)
+print(settings.login.check_concurrency)
 ```
 
 ---
@@ -220,4 +138,3 @@ print(settings.browser.headless)
 1. **开发环境**：使用 `.env` 文件
 2. **生产环境**：使用系统环境变量或 Secrets 管理
 3. **敏感信息**：永远不要提交到 Git
-4. **配置验证**：部署前验证配置是否正确
