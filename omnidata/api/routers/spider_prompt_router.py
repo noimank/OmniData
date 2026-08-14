@@ -15,7 +15,12 @@ from omnidata.api.responses import error_response, success_response
 from omnidata.core.spider_register import get_spider_register
 from omnidata.database import get_db_session
 from omnidata.database.models import MCPTool, SpiderPrompt, MCPService
-from omnidata.utils.mcp_utils import extract_parameter_info, generate_tool_description
+from omnidata.utils.mcp_utils import (
+    ensure_default_spider_prompt,
+    extract_parameter_info,
+    generate_tool_description,
+    get_active_tool_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -649,49 +654,3 @@ async def list_available_spiders():
         )
 
     return success_response(data=responses)
-
-
-# ========== Helper Functions ==========
-
-
-async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None:
-    """获取工具实际使用的提示词版本"""
-    if tool.selected_prompt_version:
-        # 使用指定版本
-        result = await session.execute(
-            select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.version_name == tool.selected_prompt_version,
-            )
-        )
-        return result.scalar_one_or_none()
-    else:
-        # 使用默认版本
-        result = await session.execute(
-            select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name, SpiderPrompt.is_default == True
-            )
-        )
-        return result.scalar_one_or_none()
-
-
-async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> SpiderPrompt:
-    """确保 Spider 有默认提示词版本"""
-    result = await session.execute(
-        select(SpiderPrompt).where(
-            SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
-        )
-    )
-    default = result.scalar_one_or_none()
-
-    if not default:
-        default = SpiderPrompt(
-            spider_name=spider_name,
-            version_name="默认",
-            description=generate_tool_description(spider),
-            is_default=True,
-        )
-        session.add(default)
-        await session.flush()
-
-    return default

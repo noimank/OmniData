@@ -188,3 +188,51 @@ def _enhance_field_description(field_name: str, field_info: FieldInfo) -> str:
     if suffixes:
         return f"{base_desc}，" + "，".join(suffixes)
     return base_desc
+
+
+async def get_active_tool_prompt(session, tool) -> Any:
+    """获取工具实际使用的提示词版本（指定版本或默认版本）"""
+    from sqlalchemy import select
+
+    from omnidata.database.models import SpiderPrompt
+
+    if tool.selected_prompt_version:
+        result = await session.execute(
+            select(SpiderPrompt).where(
+                SpiderPrompt.spider_name == tool.spider_name,
+                SpiderPrompt.version_name == tool.selected_prompt_version,
+            )
+        )
+        return result.scalar_one_or_none()
+    result = await session.execute(
+        select(SpiderPrompt).where(
+            SpiderPrompt.spider_name == tool.spider_name, SpiderPrompt.is_default == True
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def ensure_default_spider_prompt(session, spider_name: str, spider) -> Any:
+    """确保 Spider 有默认提示词版本（不存在则自动创建）"""
+    from sqlalchemy import select
+
+    from omnidata.database.models import SpiderPrompt
+
+    result = await session.execute(
+        select(SpiderPrompt).where(
+            SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
+        )
+    )
+    default = result.scalar_one_or_none()
+
+    if not default:
+        default = SpiderPrompt(
+            spider_name=spider_name,
+            version_name="默认",
+            description=generate_tool_description(spider),
+            is_default=True,
+        )
+        session.add(default)
+        await session.flush()
+
+    return default

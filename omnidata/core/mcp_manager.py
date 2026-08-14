@@ -12,7 +12,6 @@ import asyncio
 import gc
 import inspect
 import logging
-import weakref
 from collections.abc import Callable
 from inspect import Parameter
 from typing import Any, Literal
@@ -47,13 +46,22 @@ class LifespanTaskManager:
         self._startup_complete = asyncio.Event()
         self._startup_error: Exception | None = None
 
-    async def start(self) -> None:
-        """启动 lifespan 管理任务"""
+    async def start(self, timeout: float = 30.0) -> None:
+        """
+        启动 lifespan 管理任务
+
+        Args:
+            timeout: 启动超时（秒）。__aenter__ 挂起时必须超时退出，
+                     否则会死锁持有 _mount_lock 的挂载流程
+
+        Raises:
+            TimeoutError: lifespan 启动超时
+        """
         if self._task is not None:
             return
 
         self._task = asyncio.create_task(self._lifespan_worker())
-        await self._startup_complete.wait()
+        await asyncio.wait_for(self._startup_complete.wait(), timeout=timeout)
         if self._startup_error:
             raise self._startup_error
         self._is_started = True
@@ -298,8 +306,16 @@ class MCPManager:
             # 获取 HTTP 应用，传递 path="/" 避免路径重复
             http_app = mcp_server.http_app(path="/", transport=transport)
 
+            # 先注册服务信息（lifespan 启动失败时卸载流程才能正确清理）
+            service_info = MCPServiceInfo(
+                name=service_name,
+                mcp_server=mcp_server,
+                http_app=http_app,
+                transport=transport,
+            )
+            self._services[service_name] = service_info
+
             # 处理 lifespan（对于 http 和 streamable-http）
-            lifespan_task_manager = None
             if transport in ("http", "streamable-http"):
                 try:
                     # 使用 LifespanTaskManager 在专用任务中管理 lifespan
@@ -309,6 +325,7 @@ class MCPManager:
                         lifespan_context=lifespan_context,
                         service_name=service_name,
                     )
+                    service_info.lifespan_task_manager = lifespan_task_manager
                     # 启动 lifespan 任务（确保同上下文的 __aenter__ 和 __aexit__）
                     await lifespan_task_manager.start()
                     logger.debug(f"Started lifespan task for service '{service_name}'")
@@ -321,14 +338,6 @@ class MCPManager:
             mount_path = f"/mcp/{service_name}"
             self._app.mount(mount_path, http_app)
 
-            # 存储服务信息
-            self._services[service_name] = MCPServiceInfo(
-                name=service_name,
-                mcp_server=mcp_server,
-                http_app=http_app,
-                transport=transport,
-                lifespan_task_manager=lifespan_task_manager,
-            )
             logger.info(
                 f"MCP service '{service_name}' mounted at {mount_path} (transport={transport})"
             )
@@ -472,29 +481,8 @@ class MCPManager:
         params_model = getattr(spider, "params_model", None)
 
         async def wrapper(**kwargs: Any) -> dict[str, Any]:
-            """执行 Spider 并返回结果"""
-            try:
-                # 验证参数
-                if params_model:
-                    params = params_model(**kwargs)
-                else:
-                    params = kwargs
-
-                # 执行爬取
-                result = await spider.crawl(params)
-
-                # 转换结果为 JSON 可序列化格式
-                if isinstance(result, list):
-                    return {"results": result}
-                return result
-            except asyncio.CancelledError:
-                # 请求被取消（例如服务停用时的 lifespan 清理）
-                logger.debug(f"Spider '{spider.name}' execution cancelled")
-                raise
-            except Exception as e:
-                # 捕获所有其他异常，包括 Playwright 相关的错误
-                logger.error(f"Error executing spider '{spider.name}': {e}")
-                raise
+            """执行 Spider 并返回结果（走 run()：统一参数校验、审计与计时字段）"""
+            return await spider.run(kwargs)
 
         # 构建参数签名
         parameters: list[Parameter] = []

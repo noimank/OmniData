@@ -17,8 +17,10 @@ from omnidata.core.spider_register import get_spider_register
 from omnidata.database import get_db_session
 from omnidata.database.models import MCPService, MCPTool, SpiderPrompt
 from omnidata.utils.mcp_utils import (
+    ensure_default_spider_prompt,
     extract_parameter_info,
     generate_tool_description,
+    get_active_tool_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,7 +111,7 @@ async def create_service(request: MCPServiceCreate):
             default_desc = generate_tool_description(spider)
 
             # 确保有默认提示词
-            await _ensure_default_spider_prompt(session, tool_req.spider_name, spider)
+            await ensure_default_spider_prompt(session, tool_req.spider_name, spider)
 
             # 创建工具（selected_prompt_version 为空，表示使用默认版本）
             tool = MCPTool(
@@ -275,7 +277,7 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
                 tool_name = spider.name  # 使用 Spider 名称作为工具名称
 
                 # 确保有默认提示词
-                await _ensure_default_spider_prompt(session, spider_name, spider)
+                await ensure_default_spider_prompt(session, spider_name, spider)
 
                 # 创建工具（使用默认提示词版本）
                 tool = MCPTool(
@@ -294,37 +296,10 @@ async def update_service(service_id: int, request: MCPServiceUpdate):
         await session.commit()
         await session.refresh(service)
 
-        # 重新挂载服务
-        mcp_manager = get_mcp_manager()
-
-        try:
-            await mcp_manager.unmount_service(service.name)
-
-            spider_names = [t.spider_name for t in service.tools if t.enabled]
-            tool_configs = {}
-            for t in service.tools:
-                if t.enabled:
-                    prompt = await _get_active_tool_prompt(session, t)
-                    desc = prompt.description if prompt else ""
-                    tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
-
-            await mcp_manager.mount_service(
-                service_name=service.name,
-                display_name=service.display_name,
-                description=service.description or "",
-                transport=service.transport,
-                spider_names=spider_names,
-                tool_configs=tool_configs,
-            )
-        except Exception as e:
-            # 挂载失败，自动停用服务并返回错误
-            logging.error(f"Failed to remount service {service.name}: {e}, deactivating...")
-            async with get_db_session() as rollback_session:
-                await rollback_session.execute(
-                    update(MCPService).where(MCPService.id == service_id).values(is_active=False)
-                )
-                await rollback_session.commit()
-            return error_response(f"挂载服务失败: {str(e)}。服务已自动停用。")
+        # 重新挂载服务（失败时自动停用并返回错误）
+        error = await _remount_service(session, service)
+        if error:
+            return error
 
         return success_response(
             {
@@ -393,7 +368,7 @@ async def activate_service(service_id: int):
         tool_configs = {}
         for t in service.tools:
             if t.enabled:
-                prompt = await _get_active_tool_prompt(session, t)
+                prompt = await get_active_tool_prompt(session, t)
                 desc = prompt.description if prompt else ""
                 tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
 
@@ -492,7 +467,7 @@ async def list_service_tools(service_id: int):
 
         responses = []
         for t in tools:
-            prompt = await _get_active_tool_prompt(session, t)
+            prompt = await get_active_tool_prompt(session, t)
             responses.append(
                 {
                     "id": t.id,
@@ -539,7 +514,7 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
             return error_response(f"该服务中已存在 Spider '{request.spider_name}' 的工具")
 
         # 确保有默认提示词
-        await _ensure_default_spider_prompt(session, request.spider_name, spider)
+        await ensure_default_spider_prompt(session, request.spider_name, spider)
 
         # 创建工具
         tool_name = request.tool_name or spider.name
@@ -555,30 +530,13 @@ async def add_tool_to_service(service_id: int, request: MCPToolCreate):
         session.add(tool)
         await session.commit()
         await session.refresh(tool)
+        # 刷新服务的 tools 关系，确保重新挂载包含新工具
+        await session.refresh(service, ["tools"])
 
-        # 重新挂载服务
-        mcp_manager = get_mcp_manager()
-        await mcp_manager.unmount_service(service.name)
-
-        spider_names = [t.spider_name for t in service.tools if t.enabled] + [request.spider_name]
-        tool_configs = {
-            t.spider_name: {
-                "tool_name": t.tool_name,
-                "description": (await _get_active_tool_prompt(session, t)).description or "",
-            }
-            for t in service.tools
-            if t.enabled
-        }
-        tool_configs[request.spider_name] = {"tool_name": tool_name, "description": default_desc}
-
-        await mcp_manager.mount_service(
-            service_name=service.name,
-            display_name=service.display_name,
-            description=service.description or "",
-            transport=service.transport,
-            spider_names=spider_names,
-            tool_configs=tool_configs,
-        )
+        # 重新挂载服务（失败时自动停用并返回错误）
+        error = await _remount_service(session, service)
+        if error:
+            return error
 
         return success_response(
             {
@@ -616,36 +574,16 @@ async def remove_tool_from_service(service_id: int, tool_id: int):
         if not tool:
             return error_response("工具不存在")
 
-        spider_name = tool.spider_name
-
         # 删除工具
         await session.execute(delete(MCPTool).where(MCPTool.id == tool_id))
         await session.commit()
+        # 刷新服务的 tools 关系，确保重新挂载不包含已删除工具
+        await session.refresh(service, ["tools"])
 
-        # 重新挂载服务
-        mcp_manager = get_mcp_manager()
-        await mcp_manager.unmount_service(service.name)
-
-        spider_names = [
-            t.spider_name for t in service.tools if t.enabled and t.spider_name != spider_name
-        ]
-        tool_configs = {
-            t.spider_name: {
-                "tool_name": t.tool_name,
-                "description": (await _get_active_tool_prompt(session, t)).description or "",
-            }
-            for t in service.tools
-            if t.enabled and t.spider_name != spider_name
-        }
-
-        await mcp_manager.mount_service(
-            service_name=service.name,
-            display_name=service.display_name,
-            description=service.description or "",
-            transport=service.transport,
-            spider_names=spider_names,
-            tool_configs=tool_configs,
-        )
+        # 重新挂载服务（失败时自动停用并返回错误）
+        error = await _remount_service(session, service)
+        if error:
+            return error
 
         return success_response(None, "工具移除成功")
 
@@ -666,7 +604,7 @@ async def get_tool_prompt_version(service_id: int, tool_id: int):
             return error_response("工具不存在")
 
         # 获取当前使用的提示词
-        current_prompt = await _get_active_tool_prompt(session, tool)
+        current_prompt = await get_active_tool_prompt(session, tool)
 
         # 获取该 Spider 的所有可用提示词版本
         prompts_result = await session.execute(
@@ -735,37 +673,10 @@ async def set_tool_prompt_version(service_id: int, tool_id: int, request: ToolPr
         tool.selected_prompt_version = request.version_name if not prompt.is_default else None
         await session.commit()
 
-        # 重新挂载服务（捕获所有异常，确保提示词版本已更新）
-        mcp_manager = get_mcp_manager()
-        try:
-            await mcp_manager.unmount_service(service.name)
-        except Exception as e:
-            logger.warning(
-                f"Error unmounting service '{service.name}' during prompt version change: {e}"
-            )
-
-        # 重新加载所有工具配置
-        spider_names = [t.spider_name for t in service.tools if t.enabled]
-        tool_configs = {}
-        for t in service.tools:
-            if t.enabled:
-                active_prompt = await _get_active_tool_prompt(session, t)
-                desc = active_prompt.description if active_prompt else ""
-                tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
-
-        try:
-            await mcp_manager.mount_service(
-                service_name=service.name,
-                display_name=service.display_name,
-                description=service.description or "",
-                transport=service.transport,
-                spider_names=spider_names,
-                tool_configs=tool_configs,
-            )
-        except Exception as e:
-            logger.warning(
-                f"Error mounting service '{service.name}' during prompt version change: {e}"
-            )
+        # 重新挂载服务（失败时自动停用并返回错误）
+        error = await _remount_service(session, service)
+        if error:
+            return error
 
         # 获取所有可用版本
         prompts_result = await session.execute(
@@ -821,39 +732,13 @@ async def clear_tool_prompt_version(service_id: int, tool_id: int):
         tool.selected_prompt_version = None
         await session.commit()
 
-        # 重新挂载服务（捕获所有异常，确保提示词版本已更新）
-        mcp_manager = get_mcp_manager()
-        try:
-            await mcp_manager.unmount_service(service.name)
-        except Exception as e:
-            logger.warning(
-                f"Error unmounting service '{service.name}' during prompt version clear: {e}"
-            )
-
-        spider_names = [t.spider_name for t in service.tools if t.enabled]
-        tool_configs = {}
-        for t in service.tools:
-            if t.enabled:
-                active_prompt = await _get_active_tool_prompt(session, t)
-                desc = active_prompt.description if active_prompt else ""
-                tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
-
-        try:
-            await mcp_manager.mount_service(
-                service_name=service.name,
-                display_name=service.display_name,
-                description=service.description or "",
-                transport=service.transport,
-                spider_names=spider_names,
-                tool_configs=tool_configs,
-            )
-        except Exception as e:
-            logger.warning(
-                f"Error mounting service '{service.name}' during prompt version clear: {e}"
-            )
+        # 重新挂载服务（失败时自动停用并返回错误）
+        error = await _remount_service(session, service)
+        if error:
+            return error
 
         # 获取默认提示词
-        default_prompt = await _get_active_tool_prompt(session, tool)
+        default_prompt = await get_active_tool_prompt(session, tool)
 
         # 获取所有可用版本
         prompts_result = await session.execute(
@@ -920,44 +805,46 @@ async def list_available_spiders():
 # ========== Helper Functions ==========
 
 
-async def _get_active_tool_prompt(session, tool: MCPTool) -> SpiderPrompt | None:
-    """获取工具实际使用的提示词版本"""
-    if tool.selected_prompt_version:
-        # 使用指定版本
-        result = await session.execute(
-            select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name,
-                SpiderPrompt.version_name == tool.selected_prompt_version,
+async def _remount_service(session, service: MCPService) -> dict | None:
+    """
+    重新挂载 MCP 服务（统一失败处理）
+
+    挂载失败时自动停用数据库中的服务（避免 DB 显示 active 但实际未挂载的状态漂移），
+    并返回错误响应；成功时返回 None。
+
+    Args:
+        session: 数据库会话
+        service: 已刷新 tools 关系的服务 ORM 对象
+
+    Returns:
+        失败时返回 error_response 字典，成功时返回 None
+    """
+    mcp_manager = get_mcp_manager()
+    try:
+        await mcp_manager.unmount_service(service.name)
+
+        spider_names = [t.spider_name for t in service.tools if t.enabled]
+        tool_configs = {}
+        for t in service.tools:
+            if t.enabled:
+                prompt = await get_active_tool_prompt(session, t)
+                desc = prompt.description if prompt else ""
+                tool_configs[t.spider_name] = {"tool_name": t.tool_name, "description": desc}
+
+        await mcp_manager.mount_service(
+            service_name=service.name,
+            display_name=service.display_name,
+            description=service.description or "",
+            transport=service.transport,
+            spider_names=spider_names,
+            tool_configs=tool_configs,
+        )
+        return None
+    except Exception as e:
+        logging.error(f"Failed to remount service {service.name}: {e}, deactivating...")
+        async with get_db_session() as rollback_session:
+            await rollback_session.execute(
+                update(MCPService).where(MCPService.id == service.id).values(is_active=False)
             )
-        )
-        return result.scalar_one_or_none()
-    else:
-        # 使用默认版本
-        result = await session.execute(
-            select(SpiderPrompt).where(
-                SpiderPrompt.spider_name == tool.spider_name, SpiderPrompt.is_default == True
-            )
-        )
-        return result.scalar_one_or_none()
-
-
-async def _ensure_default_spider_prompt(session, spider_name: str, spider) -> SpiderPrompt:
-    """确保 Spider 有默认提示词版本"""
-    result = await session.execute(
-        select(SpiderPrompt).where(
-            SpiderPrompt.spider_name == spider_name, SpiderPrompt.is_default == True
-        )
-    )
-    default = result.scalar_one_or_none()
-
-    if not default:
-        default = SpiderPrompt(
-            spider_name=spider_name,
-            version_name="默认",
-            description=generate_tool_description(spider),
-            is_default=True,
-        )
-        session.add(default)
-        await session.flush()
-
-    return default
+            await rollback_session.commit()
+        return error_response(f"挂载服务失败: {str(e)}。服务已自动停用。")
