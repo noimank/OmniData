@@ -57,7 +57,7 @@ class ETFHoldingSpider(BaseWebSpider):
     description = (
         "获取ETF基金持仓明细数据，包括持仓股票、占净值比例、持股数、持仓市值等信息，支持按年份筛选"
     )
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -132,18 +132,18 @@ class ETFHoldingSpider(BaseWebSpider):
             return None
 
     @staticmethod
-    def _parse_box(box_html: str) -> tuple[list[dict[str, Any]], list[str], str]:
+    def _parse_box(box_html: str) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
         """
-        解析单个报告期盒子的 HTML，提取表格行、全部股票代码、基金名称
+        解析单个报告期盒子的 HTML，提取表格行、全部股票代码、报告期信息
 
         Args:
             box_html: 一个 boxitem 内的 HTML 片段
 
         Returns:
-            (rows, all_secids, fund_name)
+            (rows, all_secids, meta)
             - rows: 表格行原始数据（来自 <tbody> 中 <tr> 的 <td>）
             - all_secids: 该报告期全部持仓股票代码（含非前十大）
-            - fund_name: 基金名称
+            - meta: 报告期信息，含 基金名称 / 报告期 / 截止日期
         """
         soup = BeautifulSoup(box_html, "lxml")
         table = soup.find("table")
@@ -176,11 +176,28 @@ class ETFHoldingSpider(BaseWebSpider):
         if gpdm:
             secids = [s for s in gpdm.get_text(strip=True).split(",") if s]
 
-        # 提取基金名称
-        name_el = soup.select_one("h4.t a")
-        fund_name = name_el.get_text(strip=True) if name_el else ""
+        # 提取报告期信息（来自 h4.t 标题，含季度与截止日期）
+        meta: dict[str, str] = {"基金名称": "", "报告期": "", "截止日期": ""}
+        h4 = soup.select_one("h4.t")
+        if h4:
+            left = h4.select_one("label.left")
+            if left:
+                a = left.find("a")
+                if a:
+                    meta["基金名称"] = a.get_text(strip=True)
+                # 标题形如 "机器人ETF景顺 2026年2季度股票投资明细"，提取 "2026年2季度"
+                title = left.get_text(" ", strip=True)
+                m = re.search(r"(\d{4}\s*年\s*\d+\s*季度)", title)
+                if m:
+                    meta["报告期"] = re.sub(r"\s+", "", m.group(1))
+            right = h4.select_one("label.right")
+            if right:
+                # 右侧形如 "来源：天天基金  截止至：2026-06-30"
+                m = re.search(r"截止至\s*[:：]\s*([\d-]+)", right.get_text(" ", strip=True))
+                if m:
+                    meta["截止日期"] = m.group(1)
 
-        return rows, secids, fund_name
+        return rows, secids, meta
 
     @staticmethod
     def _build_quote_map(
@@ -326,12 +343,12 @@ class ETFHoldingSpider(BaseWebSpider):
 
             # ── 2. 汇总所有 box 的 secid 用于行情批量查询 ──
             all_secids: list[str] = []
-            box_infos: list[tuple[list[dict[str, Any]], list[str], str]] = []
+            box_infos: list[tuple[list[dict[str, Any]], list[str], dict[str, str]]] = []
             for box in boxes:
-                rows, secids, fund_name = self._parse_box(str(box))
+                rows, secids, meta = self._parse_box(str(box))
                 if not rows:
                     continue
-                box_infos.append((rows, secids, fund_name))
+                box_infos.append((rows, secids, meta))
                 for sid in secids:
                     if sid and sid not in all_secids:
                         all_secids.append(sid)
@@ -369,13 +386,15 @@ class ETFHoldingSpider(BaseWebSpider):
 
             # ── 4. 构造按报告期组织的返回结果 ──
             # 取最近一份报告期的基金名称作为主基金名
-            primary_fund_name = next((name for _, _, name in box_infos if name), "")
+            primary_fund_name = next((m["基金名称"] for _, _, m in box_infos if m["基金名称"]), "")
             reports: list[dict[str, Any]] = []
-            for rows, secids, fund_name in box_infos:
+            for rows, secids, meta in box_infos:
                 holdings = self._build_quote_map(rows, quote_data)
                 reports.append(
                     {
-                        "基金名称": fund_name or primary_fund_name,
+                        "基金名称": meta["基金名称"] or primary_fund_name,
+                        "报告期": meta["报告期"],
+                        "截止日期": meta["截止日期"],
                         "持仓明细": holdings,
                         "持仓总数": len(holdings),
                     }
@@ -398,6 +417,8 @@ class ETFHoldingSpider(BaseWebSpider):
                 result_data = {
                     "基金代码": params.fund_code,
                     "基金名称": single["基金名称"],
+                    "报告期": single["报告期"],
+                    "截止日期": single["截止日期"],
                     "可用年份": arryear,
                     "持仓明细": single["持仓明细"],
                     "持仓总数": single["持仓总数"],
@@ -415,7 +436,7 @@ class ETFHoldingSpider(BaseWebSpider):
                     rows_for_df = []
                     for r in result_data.get("报告期列表", []):
                         for h in r["持仓明细"]:
-                            rows_for_df.append({"报告期": r["基金名称"], **h})
+                            rows_for_df.append({"报告期": r["报告期"], **h})
                 df = pd.DataFrame(rows_for_df)
                 formatter = df.to_markdown if params.data_format == "markdown" else df.to_string
                 return SpiderResult(
