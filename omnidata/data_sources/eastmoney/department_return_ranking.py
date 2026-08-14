@@ -56,158 +56,152 @@ class DepartmentReturnRankingSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://data.eastmoney.com/")
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://data.eastmoney.com/")
 
-                # 构建过滤条件
-                filter_str = f'(STATISTICSCYCLE="{params.statistics_cycle}")'
+            # 构建过滤条件
+            filter_str = f'(STATISTICSCYCLE="{params.statistics_cycle}")'
 
-                # 分页请求获取数据
-                all_data = []
-                page_number = 1
-                page_size = 50  # 每页固定50条
-                total = 0
-                pages = 0
+            # 分页请求获取数据
+            all_data = []
+            page_number = 1
+            page_size = 50  # 每页固定50条
+            total = 0
+            pages = 0
 
-                while len(all_data) < params.limit:
-                    # 构建请求参数
-                    request_params = {
-                        "sortColumns": "TOTAL_BUYER_SALESTIMES_1DAY,OPERATEDEPT_CODE",
-                        "sortTypes": "-1,1",
-                        "pageSize": str(page_size),
-                        "pageNumber": str(page_number),
-                        "reportName": "RPT_RATEDEPT_RETURNT_RANKING",
-                        "columns": "ALL",
-                        "filter": filter_str,
-                        "source": "WEB",
-                        "client": "WEB",
-                    }
-
-                    # 发送请求
-                    response = await page.request.get(
-                        self.API_URL, params=request_params, timeout=30000
-                    )
-
-                    if response.status != 200:
-                        return SpiderResult(
-                            success=False, message=f"请求失败，状态码：{response.status}"
-                        )
-
-                    # 获取响应文本
-                    response_text = await response.text()
-
-                    # 移除 JSONP 回调函数
-                    import re
-
-                    json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
-                    if json_match:
-                        json_str = json_match.group(1)
-                    elif response_text.startswith("jQuery"):
-                        start_idx = response_text.find("(")
-                        end_idx = response_text.rfind(")")
-                        if start_idx != -1 and end_idx != -1:
-                            json_str = response_text[start_idx + 1 : end_idx]
-                        else:
-                            json_str = response_text
-                    else:
-                        json_str = response_text
-
-                    # 解析 JSON
-                    import json
-
-                    try:
-                        data = json.loads(json_str)
-                    except json.JSONDecodeError as e:
-                        return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
-
-                    # 检查返回状态
-                    result = data.get("result", {})
-                    if not result:
-                        if page_number == 1:
-                            return SpiderResult(
-                                success=False, message=f"获取数据失败，请检查统计周期是否正确"
-                            )
-                        break
-
-                    data_list = result.get("data", [])
-                    total = result.get("count", 0)
-                    pages = result.get("pages", 0)
-
-                    if not data_list:
-                        break
-
-                    all_data.extend(data_list)
-
-                    # 如果已获取足够数据或已到最后一页，停止请求
-                    if len(all_data) >= params.limit or page_number >= pages:
-                        break
-
-                    page_number += 1
-                    await page.wait_for_timeout(random.randint(500, 1500))
-
-                # 如果没有数据
-                if not all_data:
-                    return SpiderResult(
-                        success=True,
-                        data=[],
-                        message=f"统计周期 {params.statistics_cycle} 无营业部收益率排行数据",
-                    )
-
-                # 截取到指定数量
-                all_data = all_data[: params.limit]
-
-                # 解析数据
-                result_data = self._parse_ranking_data(all_data)
-
-                # 按上榜次数降序排列
-                df = pd.DataFrame(result_data)
-
-                # 统计周期映射
-                cycle_map = {"01": "近1月", "03": "近3月", "06": "近6月", "12": "近1年"}
-
-                # 构建统计信息
-                stats_info = {
-                    "returned_count": len(result_data),
-                    "total_count": total,
-                    "statistics_cycle": cycle_map.get(
-                        params.statistics_cycle, params.statistics_cycle
-                    ),
+            while len(all_data) < params.limit:
+                # 构建请求参数
+                request_params = {
+                    "sortColumns": "TOTAL_BUYER_SALESTIMES_1DAY,OPERATEDEPT_CODE",
+                    "sortTypes": "-1,1",
+                    "pageSize": str(page_size),
+                    "pageNumber": str(page_number),
+                    "reportName": "RPT_RATEDEPT_RETURNT_RANKING",
+                    "columns": "ALL",
+                    "filter": filter_str,
+                    "source": "WEB",
+                    "client": "WEB",
                 }
 
-                # 格式化输出
-                if params.data_format == "markdown":
+                # 发送请求
+                response = await page.request.get(
+                    self.API_URL, params=request_params, timeout=30000
+                )
+
+                if response.status != 200:
                     return SpiderResult(
-                        success=True,
-                        data={
-                            "stats": stats_info,
-                            "records": df.to_markdown(),
-                        },
-                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data={
-                            "stats": stats_info,
-                            "records": df.to_string(),
-                        },
-                        message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
+                        success=False, message=f"请求失败，状态码：{response.status}"
                     )
 
-                # 默认返回 dict 格式
+                # 获取响应文本
+                response_text = await response.text()
+
+                # 移除 JSONP 回调函数
+                import re
+
+                json_match = re.search(r"jQuery\d+_\d+\((.*)\);?", response_text)
+                if json_match:
+                    json_str = json_match.group(1)
+                elif response_text.startswith("jQuery"):
+                    start_idx = response_text.find("(")
+                    end_idx = response_text.rfind(")")
+                    if start_idx != -1 and end_idx != -1:
+                        json_str = response_text[start_idx + 1 : end_idx]
+                    else:
+                        json_str = response_text
+                else:
+                    json_str = response_text
+
+                # 解析 JSON
+                import json
+
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
+
+                # 检查返回状态
+                result = data.get("result", {})
+                if not result:
+                    if page_number == 1:
+                        return SpiderResult(
+                            success=False, message=f"获取数据失败，请检查统计周期是否正确"
+                        )
+                    break
+
+                data_list = result.get("data", [])
+                total = result.get("count", 0)
+                pages = result.get("pages", 0)
+
+                if not data_list:
+                    break
+
+                all_data.extend(data_list)
+
+                # 如果已获取足够数据或已到最后一页，停止请求
+                if len(all_data) >= params.limit or page_number >= pages:
+                    break
+
+                page_number += 1
+                await page.wait_for_timeout(random.randint(500, 1500))
+
+            # 如果没有数据
+            if not all_data:
+                return SpiderResult(
+                    success=True,
+                    data=[],
+                    message=f"统计周期 {params.statistics_cycle} 无营业部收益率排行数据",
+                )
+
+            # 截取到指定数量
+            all_data = all_data[: params.limit]
+
+            # 解析数据
+            result_data = self._parse_ranking_data(all_data)
+
+            # 按上榜次数降序排列
+            df = pd.DataFrame(result_data)
+
+            # 统计周期映射
+            cycle_map = {"01": "近1月", "03": "近3月", "06": "近6月", "12": "近1年"}
+
+            # 构建统计信息
+            stats_info = {
+                "returned_count": len(result_data),
+                "total_count": total,
+                "statistics_cycle": cycle_map.get(params.statistics_cycle, params.statistics_cycle),
+            }
+
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
                     data={
                         "stats": stats_info,
-                        "records": df.to_dict(orient="records"),
+                        "records": df.to_markdown(),
+                    },
+                    message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data={
+                        "stats": stats_info,
+                        "records": df.to_string(),
                     },
                     message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data={
+                    "stats": stats_info,
+                    "records": df.to_dict(orient="records"),
+                },
+                message=f"成功获取营业部收益率排行数据（共 {len(result_data)} 条，总计 {total} 条）",
+            )
 
     def _parse_ranking_data(self, data: list) -> list[dict]:
         """

@@ -54,73 +54,66 @@ class CPISpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://data.eastmoney.com/")
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://data.eastmoney.com/")
 
-                # 构建请求参数
-                request_params = {
-                    "callback": "datatable5402973",
-                    "columns": self.COLUMNS,
-                    "pageNumber": "1",
-                    "pageSize": str(params.limit),
-                    "sortColumns": "REPORT_DATE",
-                    "sortTypes": "-1",
-                    "source": "WEB",
-                    "client": "WEB",
-                    "reportName": "RPT_ECONOMY_CPI",
-                }
+            # 构建请求参数
+            request_params = {
+                "callback": "datatable5402973",
+                "columns": self.COLUMNS,
+                "pageNumber": "1",
+                "pageSize": str(params.limit),
+                "sortColumns": "REPORT_DATE",
+                "sortTypes": "-1",
+                "source": "WEB",
+                "client": "WEB",
+                "reportName": "RPT_ECONOMY_CPI",
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
 
-                # 获取响应文本
-                text = await response.text()
+            # 获取响应文本
+            text = await response.text()
 
-                # 处理JSONP响应
-                # 响应格式：datatable5402973({...});
-                if not text.startswith("datatable5402973("):
-                    return SpiderResult(success=False, message=f"响应格式错误：{text[:100]}")
+            # 处理JSONP响应
+            # 响应格式：datatable5402973({...});
+            if not text.startswith("datatable5402973("):
+                return SpiderResult(success=False, message=f"响应格式错误：{text[:100]}")
 
-                import json
+            import json
 
-                # 移除 callback 前缀和结尾的 });
-                if text.endswith("});"):
-                    json_str = text[17:-2]
-                else:
-                    json_str = text[17:-1]
+            # 移除 callback 前缀和结尾的 });
+            if text.endswith("});"):
+                json_str = text[17:-2]
+            else:
+                json_str = text[17:-1]
 
-                data = json.loads(json_str)
+            data = json.loads(json_str)
 
-                # 检查返回状态
-                if data.get("code") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('message', '未知错误')}"
-                    )
-
-                # 检查是否有数据
-                result_data = data.get("result", {})
-                items = result_data.get("data", [])
-
-                if not items:
-                    return SpiderResult(success=False, message="未找到CPI数据")
-
-                # 解析数据
-                parsed_data = [self._parse_cpi(item) for item in items]
-
+            # 检查返回状态
+            if data.get("code") != 0:
                 return SpiderResult(
-                    success=True, data=parsed_data, message=f"成功获取 {len(parsed_data)} 条CPI数据"
+                    success=False, message=f"获取数据失败：{data.get('message', '未知错误')}"
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+
+            # 检查是否有数据
+            result_data = data.get("result", {})
+            items = result_data.get("data", [])
+
+            if not items:
+                return SpiderResult(success=False, message="未找到CPI数据")
+
+            # 解析数据
+            parsed_data = [self._parse_cpi(item) for item in items]
+
+            return SpiderResult(
+                success=True, data=parsed_data, message=f"成功获取 {len(parsed_data)} 条CPI数据"
+            )
 
     def _parse_cpi(self, item: dict) -> dict:
         """

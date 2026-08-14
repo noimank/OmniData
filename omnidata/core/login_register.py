@@ -16,6 +16,7 @@ from typing import Any
 
 from .base_qr_login import BaseQRLogin, QRCode
 from .browser_context_pool import BrowserContextPool, get_browser_context_pool
+from .config import settings
 from .exceptions import LoginNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class LoginRegister:
             return
 
         if self._browser_context_pool is None:
-            self._browser_context_pool = await get_browser_context_pool()
+            self._browser_context_pool = get_browser_context_pool()
 
         await self._discover_logins()
 
@@ -114,8 +115,6 @@ class LoginRegister:
 
                     # 并发刷新（但限制并发数）
                     # 使用现有配置中的 check_concurrency 作为并发限制
-                    from omnidata.core.config import settings
-
                     concurrency = settings.login.check_concurrency
 
                     semaphore = asyncio.Semaphore(concurrency)
@@ -123,11 +122,13 @@ class LoginRegister:
                     async def refresh_with_semaphore(login_name: str, instance: BaseQRLogin):
                         async with semaphore:
                             try:
-                                await instance.refresh_login_state()
+                                # 外层超时保护，防止刷新逻辑卡死拖慢整个循环
+                                await asyncio.wait_for(
+                                    instance.refresh_login_state(),
+                                    timeout=settings.login.check_timeout,
+                                )
                                 # 刷新成功后调用 is_login() 获取状态并缓存
                                 try:
-                                    from omnidata.core.config import settings
-
                                     status_info = await asyncio.wait_for(
                                         instance.is_login(), timeout=settings.login.check_timeout
                                     )
@@ -136,7 +137,10 @@ class LoginRegister:
                                     logger.warning(
                                         f"Failed to get login status after refresh for {login_name}: {status_error}"
                                     )
-                                await instance.close()
+                                # 仅在无活跃二维码会话时清理（refresh 使用局部资源，
+                                # 不触碰 _qr_page；若用户正在扫码登录则不能关闭其页面）
+                                if not instance.has_active_qr_session():
+                                    await instance.close()
                                 logger.info(
                                     f"Successfully refreshed {login_name} at second {current_second}"
                                 )
@@ -278,8 +282,6 @@ class LoginRegister:
         使用 asyncio.Semaphore 控制并发数，避免顺序等待导致的性能问题。
         使用 get_login_status() 获取缓存状态，不触发实际验证。
         """
-        from omnidata.core.config import settings
-
         # 获取并发数配置
         concurrency = settings.login.check_concurrency
         semaphore = asyncio.Semaphore(concurrency)
@@ -344,9 +346,8 @@ class LoginRegister:
 @lru_cache(maxsize=1)
 def get_login_register() -> LoginRegister:
     """
-    获取全局登录注册器实例（LRU 单例模式）
+    获取全局登录注册器实例（单例）
 
-    使用 @lru_cache 实现线程安全的单例模式。
     自动注入 BrowserContextPool 依赖。
 
     Returns:

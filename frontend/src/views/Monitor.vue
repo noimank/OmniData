@@ -18,16 +18,9 @@
         </el-col>
         <el-col :span="6">
           <div class="stat-card">
-            <div class="stat-value">
-              {{ contextPool.context_count }}{{ contextPool.config.max_pool_size > 0 ? ` / ${contextPool.config.max_pool_size}` : ' / 无限制' }}
-            </div>
-            <div class="stat-label">Context 数量 / 池容量</div>
-            <el-progress
-              v-if="contextPool.config.max_pool_size > 0"
-              :percentage="(contextPool.context_count / contextPool.config.max_pool_size * 100)"
-              :show-text="false"
-            />
-            <div v-else class="stat-config">LRU 已禁用</div>
+            <div class="stat-value">{{ contextPool.context_count }}</div>
+            <div class="stat-label">Context 数量</div>
+            <div class="stat-config">在途页面: {{ contextPool.active_pages }}</div>
           </div>
         </el-col>
         <el-col :span="6">
@@ -41,7 +34,7 @@
           <div class="stat-card">
             <div class="stat-value">{{ contextPool.total_contexts_closed }}</div>
             <div class="stat-label">已关闭数量</div>
-            <div class="stat-config">淘汰: {{ contextPool.total_contexts_evicted }}</div>
+            <div class="stat-config">回收: {{ contextPool.total_browser_recycles }} | 自愈: {{ contextPool.total_browser_recoveries }}</div>
           </div>
         </el-col>
       </el-row>

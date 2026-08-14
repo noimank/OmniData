@@ -306,9 +306,8 @@ class SpiderRegister:
 @lru_cache(maxsize=1)
 def get_spider_register() -> SpiderRegister:
     """
-    获取全局爬虫注册器实例（LRU 单例模式）
+    获取全局爬虫注册器实例（单例）
 
-    使用 @lru_cache 实现线程安全的单例模式。
     自动注入 BrowserContextPool 依赖。
 
     Returns:

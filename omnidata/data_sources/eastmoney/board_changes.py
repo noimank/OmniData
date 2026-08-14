@@ -113,101 +113,93 @@ class BoardChangesSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://quote.eastmoney.com/")
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://quote.eastmoney.com/")
 
-                # 构建请求参数
-                request_params = {
-                    "ut": self.UT,
-                    "dpt": "wzchanges",
-                    "bk": params.board_code,
-                }
+            # 构建请求参数
+            request_params = {
+                "ut": self.UT,
+                "dpt": "wzchanges",
+                "bk": params.board_code,
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 解析 JSONP 响应
+            raw_text = await response.text()
+            payload = self._parse_jsonp(raw_text)
+
+            if payload is None:
+                return SpiderResult(
+                    success=False, message="解析响应数据失败：返回内容不是合法的 JSONP"
                 )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            rc = payload.get("rc", 0)
+            if rc != 0:
+                return SpiderResult(success=False, message=f"接口返回错误码：{rc}")
 
-                # 解析 JSONP 响应
-                raw_text = await response.text()
-                payload = self._parse_jsonp(raw_text)
-
-                if payload is None:
-                    return SpiderResult(
-                        success=False, message="解析响应数据失败：返回内容不是合法的 JSONP"
-                    )
-
-                rc = payload.get("rc", 0)
-                if rc != 0:
-                    return SpiderResult(success=False, message=f"接口返回错误码：{rc}")
-
-                data = payload.get("data") or {}
-                change_items = data.get("data") or []
-                if not change_items:
-                    return SpiderResult(
-                        success=False,
-                        message=f"板块 {params.board_code} 当日无异动数据",
-                    )
-
-                # 解析异动数据
-                parsed = self._parse_change_items(change_items)
-
-                df = pd.DataFrame(parsed)
-
-                # 统计当日总览
-                board_name = data.get("n", params.board_code)
-                dt = data.get("dt", 0)  # 数据时间戳 YYYYMMDDhhmmss
-                data_date = (
-                    f"{dt // 10000000000:04d}-{(dt // 100000000) % 100:02d}-{(dt // 1000000) % 100:02d}"
-                    if dt
-                    else ""
+            data = payload.get("data") or {}
+            change_items = data.get("data") or []
+            if not change_items:
+                return SpiderResult(
+                    success=False,
+                    message=f"板块 {params.board_code} 当日无异动数据",
                 )
 
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=(
-                            f"成功获取{board_name}({params.board_code})"
-                            f"{data_date}当日盘口异动数据，共{len(parsed)}种异动类型"
-                        ),
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=(
-                            f"成功获取{board_name}({params.board_code})"
-                            f"{data_date}当日盘口异动数据，共{len(parsed)}种异动类型"
-                        ),
-                    )
+            # 解析异动数据
+            parsed = self._parse_change_items(change_items)
 
-                # 默认返回 dict 格式
+            df = pd.DataFrame(parsed)
+
+            # 统计当日总览
+            board_name = data.get("n", params.board_code)
+            dt = data.get("dt", 0)  # 数据时间戳 YYYYMMDDhhmmss
+            data_date = (
+                f"{dt // 10000000000:04d}-{(dt // 100000000) % 100:02d}-{(dt // 1000000) % 100:02d}"
+                if dt
+                else ""
+            )
+
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data={
-                        "板块代码": params.board_code,
-                        "板块名称": board_name,
-                        "数据日期": data_date,
-                        "异动类型数量": len(parsed),
-                        "异动列表": df.to_dict(orient="records"),
-                    },
+                    data=df.to_markdown(),
+                    message=(
+                        f"成功获取{board_name}({params.board_code})"
+                        f"{data_date}当日盘口异动数据，共{len(parsed)}种异动类型"
+                    ),
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=(
                         f"成功获取{board_name}({params.board_code})"
                         f"{data_date}当日盘口异动数据，共{len(parsed)}种异动类型"
                     ),
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data={
+                    "板块代码": params.board_code,
+                    "板块名称": board_name,
+                    "数据日期": data_date,
+                    "异动类型数量": len(parsed),
+                    "异动列表": df.to_dict(orient="records"),
+                },
+                message=(
+                    f"成功获取{board_name}({params.board_code})"
+                    f"{data_date}当日盘口异动数据，共{len(parsed)}种异动类型"
+                ),
+            )
 
     def _parse_jsonp(self, raw_text: str) -> dict | None:
         """

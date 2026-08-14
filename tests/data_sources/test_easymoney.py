@@ -38,14 +38,6 @@ class TestEastMoneySpider:
         assert register is not None
         print(register.list_spiders())
 
-    async def test_run(self, browser_pool):
-        spider_name = "eastmoney_news_spider"
-        params = {"category": "music", "limit": 5}
-        register = spider_register()
-        instance = register.get_spider_instance(spider_name)
-        res = await instance.run(params)
-        print(res)
-
     async def test_run2(self, browser_pool):
         spider_name = "eastmoney_market_flow"
         params = {"day": 40}

@@ -16,10 +16,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import (
-    fetch_with_retry,
-    warmup_push2,
-)
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class StockIntradayFlowParams(BaseModel):
@@ -49,7 +46,7 @@ class StockIntradayFlowSpider(BaseWebSpider):
     description = (
         "获取个股/ETF分时资金流向数据（分钟级别），包括主力、超大单、大单、中单、小单的净流入"
     )
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -74,142 +71,136 @@ class StockIntradayFlowSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            # 判断股票所属市场
-            # 上海市场：600xxx, 601xxx, 603xxx, 605xxx, 688xxx
-            # 深圳市场：000xxx, 001xxx, 002xxx, 003xxx, 300xxx, 301xxx
-            first_char = params.stock_code[0]
+        # 判断股票所属市场
+        # 上海市场：600xxx, 601xxx, 603xxx, 605xxx, 688xxx
+        # 深圳市场：000xxx, 001xxx, 002xxx, 003xxx, 300xxx, 301xxx
+        first_char = params.stock_code[0]
 
-            if first_char == "6" or first_char == "5":
-                market_code = "1"  # 上海市场
-            else:
-                market_code = "0"  # 深圳市场
+        if first_char == "6" or first_char == "5":
+            market_code = "1"  # 上海市场
+        else:
+            market_code = "0"  # 深圳市场
 
-            secid = f"{market_code}.{params.stock_code}"
+        secid = f"{market_code}.{params.stock_code}"
 
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto("https://data.eastmoney.com/")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto("https://data.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
-                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 构建请求参数
-                request_params = {
-                    "lmt": params.limit if params.limit > 0 else 0,
-                    "klt": "1",  # 分时K线（1=分时，101=日K）
-                    "fields1": self.FIELDS1,
-                    "fields2": self.FIELDS2,
-                    "ut": ut,
-                    "secid": secid,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            # 构建请求参数
+            request_params = {
+                "lmt": params.limit if params.limit > 0 else 0,
+                "klt": "1",  # 分时K线（1=分时，101=日K）
+                "fields1": self.FIELDS1,
+                "fields2": self.FIELDS2,
+                "ut": ut,
+                "secid": secid,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                text = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://data.eastmoney.com/",
-                    response_type="text",
-                )
+            text = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="text",
+            )
 
-                if text is None:
-                    return SpiderResult(success=False, message="请求失败")
+            if text is None:
+                return SpiderResult(success=False, message="请求失败")
 
-                # 解析响应（可能是JSONP格式）
-                body = text.encode("utf-8")
-                data = self._parse_response(body)
+            # 解析响应（可能是JSONP格式）
+            body = text.encode("utf-8")
+            data = self._parse_response(body)
 
-                if data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
+            if data is None:
+                return SpiderResult(success=False, message="解析响应数据失败")
 
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败，请检查股票代码是否存在！"
-                    )
-
-                # 获取数据内容
-                klines = data.get("data", {}).get("klines", [])
-
-                if not klines:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的分时资金流数据",
-                    )
-
-                # 解析 K线数据（逗号分隔的字符串）
-                klines = [line.split(",") for line in klines]
-
-                # 构建数据列表
-                data_list = []
-
-                for kline in klines:
-                    if len(kline) >= 6:
-                        datetime_str = kline[0]  # 格式: "2026-01-16 09:31"
-
-                        # 解析数值
-                        # 根据历史资金流的字段对应关系：
-                        # f51=主力净流入净额, f52=小单净流入净额, f53=中单净流入净额
-                        # f54=大单净流入净额, f55=超大单净流入净额
-                        main_net_amount = self._safe_float(kline[1])  # 主力净流入（元）
-                        small_net_amount = self._safe_float(kline[2])  # 小单净流入（元）
-                        medium_net_amount = self._safe_float(kline[3])  # 中单净流入（元）
-                        large_net_amount = self._safe_float(kline[4])  # 大单净流入（元）
-                        super_large_net_amount = self._safe_float(kline[5])  # 超大单净流入（元）
-
-                        data_list.append(
-                            {
-                                "时间": datetime_str,
-                                "主力净流入(万元)": round(main_net_amount / 10000, 2),
-                                "超大单净流入(万元)": round(super_large_net_amount / 10000, 2),
-                                "大单净流入(万元)": round(large_net_amount / 10000, 2),
-                                "中单净流入(万元)": round(medium_net_amount / 10000, 2),
-                                "小单净流入(万元)": round(small_net_amount / 10000, 2),
-                            }
-                        )
-
-                # 转换为 DataFrame
-                df = pd.DataFrame(data_list)
-
-                # 按时间降序排列（最新的在前）
-                df = df.sort_values("时间", ascending=False).reset_index(drop=True)
-
-                # 如果用户指定了限制条数且大于0
-                if params.limit > 0 and len(df) > params.limit:
-                    df = df.head(params.limit)
-
-                result_data = df.to_dict(orient="records")
-                if params.data_format == "markdown":
-                    result_data = df.to_markdown()
-                elif params.data_format == "string":
-                    result_data = df.to_string()
-
+            # 检查返回状态
+            if data.get("rc") != 0:
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取股票代码 {params.stock_code} 的分时资金流数据共{len(df)}条",
+                    success=False, message=f"获取数据失败，请检查股票代码是否存在！"
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 获取数据内容
+            klines = data.get("data", {}).get("klines", [])
+
+            if not klines:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到股票代码 {params.stock_code} 的分时资金流数据",
+                )
+
+            # 解析 K线数据（逗号分隔的字符串）
+            klines = [line.split(",") for line in klines]
+
+            # 构建数据列表
+            data_list = []
+
+            for kline in klines:
+                if len(kline) >= 6:
+                    datetime_str = kline[0]  # 格式: "2026-01-16 09:31"
+
+                    # 解析数值
+                    # 根据历史资金流的字段对应关系：
+                    # f51=主力净流入净额, f52=小单净流入净额, f53=中单净流入净额
+                    # f54=大单净流入净额, f55=超大单净流入净额
+                    main_net_amount = self._safe_float(kline[1])  # 主力净流入（元）
+                    small_net_amount = self._safe_float(kline[2])  # 小单净流入（元）
+                    medium_net_amount = self._safe_float(kline[3])  # 中单净流入（元）
+                    large_net_amount = self._safe_float(kline[4])  # 大单净流入（元）
+                    super_large_net_amount = self._safe_float(kline[5])  # 超大单净流入（元）
+
+                    data_list.append(
+                        {
+                            "时间": datetime_str,
+                            "主力净流入(万元)": round(main_net_amount / 10000, 2),
+                            "超大单净流入(万元)": round(super_large_net_amount / 10000, 2),
+                            "大单净流入(万元)": round(large_net_amount / 10000, 2),
+                            "中单净流入(万元)": round(medium_net_amount / 10000, 2),
+                            "小单净流入(万元)": round(small_net_amount / 10000, 2),
+                        }
+                    )
+
+            # 转换为 DataFrame
+            df = pd.DataFrame(data_list)
+
+            # 按时间降序排列（最新的在前）
+            df = df.sort_values("时间", ascending=False).reset_index(drop=True)
+
+            # 如果用户指定了限制条数且大于0
+            if params.limit > 0 and len(df) > params.limit:
+                df = df.head(params.limit)
+
+            result_data = df.to_dict(orient="records")
+            if params.data_format == "markdown":
+                result_data = df.to_markdown()
+            elif params.data_format == "string":
+                result_data = df.to_string()
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=f"成功获取股票代码 {params.stock_code} 的分时资金流数据共{len(df)}条",
+            )
 
     def _parse_response(self, body: bytes) -> dict | None:
         """

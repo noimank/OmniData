@@ -55,50 +55,44 @@ class JRJNewsFlashSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("jrj") as page:
-                # 先访问网页页面以获取必要的 cookies, 暂时不需要
-                # await page.goto(self.WEB_URL)
-                # await page.wait_for_load_state("domcontentloaded")
+        async with self.new_page("jrj") as page:
+            # 先访问网页页面以获取必要的 cookies, 暂时不需要
+            # await page.goto(self.WEB_URL)
+            # await page.wait_for_load_state("domcontentloaded")
 
-                # 构建请求参数
-                request_data = {
-                    # "pageSize": params.page_size,
-                }
+            # 构建请求参数
+            request_data = {
+                # "pageSize": params.page_size,
+            }
 
-                # 发送 API 请求 (使用 POST 方法)
-                response = await page.request.post(self.API_URL, data=request_data, timeout=30000)
+            # 发送 API 请求 (使用 POST 方法)
+            response = await page.request.post(self.API_URL, data=request_data, timeout=30000)
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
 
-                # 获取响应JSON
-                json_data = await response.json()
+            # 获取响应JSON
+            json_data = await response.json()
 
-                # 检查返回状态
-                if json_data.get("code") != 20000:
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
-                    )
-
-                # 解析新闻列表
-                news_list = json_data.get("data", {}).get("data", [])
-                parsed_news = [self._parse_news_item(item) for item in news_list]
-
+            # 检查返回状态
+            if json_data.get("code") != 20000:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+                    success=False,
+                    message=f"获取数据失败：{json_data.get('message', '未知错误')}",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 解析新闻列表
+            news_list = json_data.get("data", {}).get("data", [])
+            parsed_news = [self._parse_news_item(item) for item in news_list]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

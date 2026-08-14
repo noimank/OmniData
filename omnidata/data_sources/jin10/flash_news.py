@@ -44,52 +44,46 @@ class Jin10FlashNewsSpider(BaseWebSpider):
     API_URL = "https://flash-api.jin10.com/get_flash_list"
 
     async def crawl(self, params: Jin10FlashNewsParams) -> SpiderResult:
-        try:
-            async with self.new_page("jin10") as page:
-                response = await page.request.get(
-                    self.API_URL,
-                    params={
-                        "channel": "-8200",
-                        "vip": "1",
-                        "num": str(params.num),
-                    },
-                    headers={
-                        "x-app-id": "bVBF4FyRTn5NJF5n",
-                        "x-version": "1.0.0",
-                    },
-                    timeout=30000,
-                )
+        async with self.new_page("jin10") as page:
+            response = await page.request.get(
+                self.API_URL,
+                params={
+                    "channel": "-8200",
+                    "vip": "1",
+                    "num": str(params.num),
+                },
+                headers={
+                    "x-app-id": "bVBF4FyRTn5NJF5n",
+                    "x-version": "1.0.0",
+                },
+                timeout=30000,
+            )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}",
-                    )
-
-                json_data = await response.json()
-
-                if json_data.get("status") != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
-                    )
-
-                flash_list = json_data.get("data", [])
-                parsed_news = [
-                    self._parse_news_item(item) for item in flash_list if item.get("time")
-                ]
-
+            if response.status != 200:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯",
+                    success=False,
+                    message=f"请求失败，状态码：{response.status}",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            json_data = await response.json()
+
+            if json_data.get("status") != 200:
+                return SpiderResult(
+                    success=False,
+                    message=f"获取数据失败：{json_data.get('message', '未知错误')}",
+                )
+
+            flash_list = json_data.get("data", [])
+            parsed_news = [self._parse_news_item(item) for item in flash_list if item.get("time")]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """解析单条快讯数据"""

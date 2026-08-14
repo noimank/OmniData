@@ -1,6 +1,6 @@
 """
-Browser Context Pool 模块
-单 Browser + 多 Context 架构，实现 Context 池化管理和状态持久化
+浏览器管理模块
+单 Browser + 按命名空间缓存 Context，配合空闲清理与整体回收实现 7×24 自愈
 """
 
 import asyncio
@@ -8,7 +8,6 @@ import json
 import logging
 import time
 import uuid
-from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
@@ -24,59 +23,61 @@ from omnidata.utils.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
+_UA_TEMPLATE = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+)
+
+
+def _build_user_agent(browser_version: str) -> str:
+    """按驱动返回的 Chromium 版本生成 UA，避免硬编码版本与实际内核不一致成为指纹破绽"""
+    major = browser_version.split(".")[0]
+    return _UA_TEMPLATE.format(major=major)
+
 
 @dataclass
 class ContextMetadata:
     """
-    Context 元数据包装类
+    Context 缓存条目
 
     Attributes:
         context: Playwright BrowserContext 实例
-        namespace: 命名空间（用于状态持久化）
         created_at: 创建时间戳
-        last_used_at: 最后使用时间戳（用于 LRU）
+        last_used_at: 最后使用时间戳（空闲清理依据）
     """
 
     context: BrowserContext
-    namespace: str | None
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
 
 
 class BrowserContextPool:
     """
-    单 Browser + 多 Context 池化管理
+    单 Browser + 按命名空间缓存 Context（7×24 内核级稳定）
 
-    功能特性：
-    - 单 Browser 实例（无健康检查、无扩缩容）
-    - Context 池化（LRU 缓存复用，max_pool_size <= 0 时禁用）
-    - Context 永不关闭（仅淘汰时关闭）
-    - Redis 状态持久化（显式保存，创建时加载）
-    - 后台清理任务（闲置回收，idle_timeout <= 0 时禁用）
-    - Page 自动关闭
-
-    配置说明：
-    - max_pool_size <= 0: 禁用 LRU 容量限制
-    - idle_timeout <= 0: 禁用闲置清理
-
-    用法示例：
-        pool = BrowserContextPool()
-        await pool.initialize()
-
-        # 获取 context（复用或创建）
-        context = await pool.get_context("test_namespace")
-
-        # 使用 new_page 自动管理 Page 生命周期
-        async with pool.new_page("test_namespace") as page:
-            await page.goto("https://example.com")
-
-        # 显式保存状态（如登录成功）
-        await pool.save_context_state(context, "test_namespace")
+    设计原则（对用户透明，无需配置）：
+    - 每个命名空间（数据源）持有一个常驻 Context 复用；命名空间数量由
+      数据源目录天然决定，无需容量限制
+    - Context 空闲 10 分钟自动回收，内存不累积
+    - 浏览器整体回收：存活满 8 小时或累计建页满 5000 次（任一先到）时，
+      在空闲窗口（无在途请求）关闭全部 context + browser 并重启，根治长跑内存增长；
+      连续 16 小时无空闲窗口才强制执行
+    - 自愈覆盖两层：浏览器崩溃（断连）重启 browser；launch 失败视为 playwright
+      驱动死亡，整体重建驱动后重试。锁外创建的 context 若遇回收/自愈会被
+      丢弃重建，死 context 绝不进入缓存
+    - shutdown 后拒绝复活（并发请求不会重新拉起浏览器留下孤儿进程）
+    - 登录态持久化于 Redis，回收/重启后自动恢复，对上层无感
     """
+
+    # 内核稳定策略常量（固定值，不对外配置）
+    _IDLE_TIMEOUT = 600  # Context 空闲回收阈值（秒）
+    _RECYCLE_MAX_AGE = 8 * 3600  # 浏览器最长存活（秒），与建页数任一先到即待回收
+    _RECYCLE_MAX_PAGES = 5000  # 两次回收之间累计建页数上限
+    _RECYCLE_HARD_LIMIT = _RECYCLE_MAX_AGE * 2  # 连续无空闲超过此时长则强制回收
 
     def __init__(self, config: BrowserConfig | None = None):
         """
-        初始化 Browser Context 池
+        初始化浏览器管理器
 
         Args:
             config: 浏览器配置
@@ -84,74 +85,87 @@ class BrowserContextPool:
         self._config = config or settings.browser
         self._playwright: Any = None
         self._browser: Browser | None = None
-        self._contexts: OrderedDict[str, ContextMetadata] = OrderedDict()
+        self._launch_options: dict[str, Any] = {}
+        self._contexts: dict[str, ContextMetadata] = {}
         self._lock = asyncio.Lock()
         self._is_initialized = False
+        self._closing = False  # shutdown 后拒绝复活，防止并发请求重新拉起浏览器
         self._shutdown_event = asyncio.Event()
+        self._user_agent = _build_user_agent("143")
 
-        # Context Pool 配置
-        self._max_pool_size = getattr(self._config, "context_pool_max_size", 10)
-        self._idle_timeout = getattr(self._config, "context_idle_timeout", 300)
+        # 活跃 Page 计数与回收状态
+        self._active_pages = 0
+        self._pages_since_recycle = 0
+        self._last_recycle_at = time.time()
 
         # 统计信息
         self._stats = {
             "total_contexts_created": 0,
             "total_contexts_reused": 0,
-            "total_contexts_evicted": 0,
             "total_contexts_closed": 0,
+            "total_browser_recycles": 0,
+            "total_browser_recoveries": 0,
         }
 
-        # 后台清理任务
-        self._cleanup_task: asyncio.Task[None] | None = None
+        # 后台维护任务（空闲清理 + 回收判定）
+        self._maintenance_task: asyncio.Task[None] | None = None
 
     async def initialize(self) -> None:
-        """初始化 Browser 和清理任务"""
+        """初始化 Browser 和维护任务（双重检查，防并发重复启动）"""
         if self._is_initialized:
             return
 
-        logger.info("Initializing browser context pool...")
-        self._playwright = await async_playwright().start()
+        async with self._lock:
+            if self._is_initialized:
+                return
+            if self._closing:
+                raise BrowserPoolError("Browser pool is shut down and cannot be re-initialized")
 
-        launch_options = {
-            "headless": self._config.headless,
-            "args": self._config.args,
-            "ignore_default_args": self._config.ignore_default_args,
-        }
-        self._browser = await self._playwright.chromium.launch(**launch_options)
-        self._is_initialized = True
-        self._shutdown_event.clear()
+            logger.info("Initializing browser context pool...")
+            # 复用已启动的驱动：launch 失败后重试 initialize 不会泄漏驱动进程
+            if self._playwright is None:
+                self._playwright = await async_playwright().start()
 
-        # 启动后台清理任务
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+            self._launch_options = {
+                "headless": self._config.headless,
+                "args": self._config.args,
+                "ignore_default_args": self._config.ignore_default_args,
+            }
+            await self._launch_browser()
+            self._is_initialized = True
+            self._last_recycle_at = time.time()
+            self._pages_since_recycle = 0
+            self._shutdown_event.clear()
 
-        logger.info(
-            f"Browser context pool initialized with single chromium browser "
-            f"(max_contexts={self._max_pool_size}, idle_timeout={self._idle_timeout}s)"
-        )
+            self._maintenance_task = asyncio.create_task(self._maintenance_loop())
+
+            logger.info(
+                f"Browser context pool initialized with single chromium browser "
+                f"(idle_timeout={self._IDLE_TIMEOUT}s, recycle: max_age={self._RECYCLE_MAX_AGE}s, "
+                f"max_pages={self._RECYCLE_MAX_PAGES})"
+            )
 
     async def shutdown(self) -> None:
-        """关闭所有 Contexts 和 Browser"""
-        if not self._is_initialized:
+        """关闭所有 Contexts 和 Browser（关闭后拒绝复活）"""
+        if self._closing:
             return
 
         logger.info("Shutting down browser context pool...")
+        self._closing = True
         self._is_initialized = False
         self._shutdown_event.set()
 
-        # 取消清理任务
-        if self._cleanup_task:
-            self._cleanup_task.cancel()
+        # 取消维护任务
+        if self._maintenance_task:
+            self._maintenance_task.cancel()
             with suppress(asyncio.CancelledError):
-                await self._cleanup_task
-            self._cleanup_task = None
+                await self._maintenance_task
+            self._maintenance_task = None
 
-        # 关闭所有 context
+        # 关闭所有 context 和 browser
         async with self._lock:
-            for metadata in list(self._contexts.values()):
-                await self._close_context(metadata.context)
-            self._contexts.clear()
+            await self._close_all_contexts()
 
-        # 关闭 browser 和 playwright
         await self._close_resource(self._browser, "Browser", "close")
         self._browser = None
         await self._close_resource(self._playwright, "Playwright", "stop")
@@ -181,11 +195,11 @@ class BrowserContextPool:
 
     async def get_context(self, namespace: str | None = None, **kwargs: Any) -> BrowserContext:
         """
-        获取或创建 Context（LRU 复用）
+        获取或创建指定命名空间的 Context（复用缓存）
 
-        当 max_pool_size <= 0 时，禁用 LRU 限制（不限制池大小）
-
-        优化：将慢速的 context 创建操作移出锁，减少锁竞争
+        慢速的 context 创建操作移出锁外，减少锁竞争。创建期间若浏览器被
+        回收/自愈（Browser 实例被替换），锁外创建的 Context 已随旧浏览器
+        关闭，必须丢弃重建——否则缓存死 Context 会导致该命名空间永久失败。
 
         Args:
             namespace: 命名空间（用于复用和状态持久化）
@@ -195,113 +209,96 @@ class BrowserContextPool:
             BrowserContext: 浏览器上下文
 
         Raises:
-            BrowserPoolError: Context 创建失败
+            BrowserPoolError: Context 创建失败，或池已关闭
         """
-        if not self._is_initialized:
-            await self.initialize()
-
-        if self._browser is None:
-            raise BrowserPoolError("Browser not initialized")
-
-        # 生成 key（使用 namespace 或生成唯一临时 key）
+        # 命名空间使用固定 key 复用；临时请求使用唯一 key（由空闲清理兜底回收）
         key = namespace if namespace else f"_temp_{uuid.uuid4().hex[:12]}"
 
-        # 是否启用 LRU 限制（<= 0 时禁用）
-        enable_lru = self._max_pool_size > 0
+        while True:
+            if self._closing:
+                raise BrowserPoolError("Browser pool is shut down")
+            if not self._is_initialized:
+                await self.initialize()
 
-        # === 阶段1：乐观复用（先尝试，失败再重建） ===
-        async with self._lock:
-            metadata = self._contexts.get(key)
-            if metadata is not None:
-                # 仅在启用 LRU 时更新 LRU 时间戳和位置
-                if enable_lru:
-                    metadata.last_used_at = time.time()
-                    self._contexts.move_to_end(key)
+            browser = await self._ensure_browser()
 
-        # === 阶段1.5：在锁外验证（避免阻塞其他请求） ===
-        if metadata is not None:
-            if self._verify_context_quick(metadata.context):
-                self._stats["total_contexts_reused"] += 1
-                logger.debug(f"Context reused: namespace={namespace}")
-                return metadata.context
-            else:
-                # 验证失败，移除旧 context
-                async with self._lock:
-                    if key in self._contexts and self._contexts[key] is metadata:
-                        await self._close_context(metadata.context)
-                        del self._contexts[key]
-                        logger.warning(
-                            f"Context removed due to failed verification: namespace={namespace}"
-                        )
-
-        # === 阶段2：检查并淘汰（加锁，但只淘汰一次） ===
-        if enable_lru:
+            # === 命中缓存：直接复用 ===
             async with self._lock:
-                if len(self._contexts) >= self._max_pool_size:
-                    await self._evict_lru()
+                cached = self._contexts.get(key)
+                if cached is not None:
+                    cached.last_used_at = time.time()
+                    self._stats["total_contexts_reused"] += 1
+                    return cached.context
 
-        # === 阶段3：慢速创建（无锁，关键优化！） ===
-        # 在锁外创建 context，避免阻塞其他请求
-        context = await self._create_context(namespace, **kwargs)
+            # === 未命中：锁外创建（含 Redis 状态加载，可能耗时） ===
+            context = await self._create_context(browser, namespace, **kwargs)
 
-        # === 阶段4：插入池中（加锁，二次检查防止竞态） ===
-        async with self._lock:
-            # 二次检查：如果已存在（并发创建），关闭新创建的，使用已有的
-            existing_metadata = self._contexts.get(key)
-            if existing_metadata is not None:
-                # 已有其他请求创建了相同的 context，关闭当前创建的
+            # === 插入缓存；并发竞态下保留先创建的，关闭多余的 ===
+            stale = False
+            duplicate: BrowserContext | None = None
+            async with self._lock:
+                # 创建期间浏览器被回收/自愈 → context 已随旧浏览器关闭，不可入缓存
+                if self._browser is not browser or self._closing:
+                    stale = True
+                else:
+                    cached = self._contexts.get(key)
+                    if cached is not None:
+                        duplicate = context
+                        result_context = cached.context
+                        self._stats["total_contexts_reused"] += 1
+                    else:
+                        self._contexts[key] = ContextMetadata(context=context)
+                        self._stats["total_contexts_created"] += 1
+                        result_context = context
+
+            if stale:
                 await self._close_context(context)
-                logger.debug(f"Context already exists, reusing: namespace={namespace}")
-                return existing_metadata.context
+                continue  # 浏览器已更换，重新获取并在新浏览器上重建
+            if duplicate is not None:
+                await self._close_context(duplicate)
 
-            # 仅在启用 LRU 时进行容量检查和淘汰
-            if enable_lru:
-                # 确保不超过 max_pool_size
-                while len(self._contexts) >= self._max_pool_size:
-                    await self._evict_lru()
-
-            metadata = ContextMetadata(
-                context=context,
-                namespace=namespace,
-            )
-            self._contexts[key] = metadata
-            self._stats["total_contexts_created"] += 1
-            logger.debug(f"Context created: namespace={namespace}")
-            return context
+            return result_context
 
     @asynccontextmanager
     async def new_page(
         self, namespace: str | None = None, anti_crawling_strategy: str | list = "advanced"
     ) -> AsyncIterator[Page]:
         """
-        创建新 Page（自动关闭）
+        创建新 Page（自动关闭，维护活跃计数）
 
         Context 不会被关闭，只有 Page 会在退出时自动关闭。
+        活跃 Page 计数用于驱动浏览器在空闲窗口安全回收。
 
         Args:
             namespace: 命名空间（用于复用和状态持久化）
             anti_crawling_strategy: 反检测脚本策略，支持预设(basic/standard/advanced)
                 或单个脚本名称或名称列表。
-                预设: basic(基础), standard(标准), advanced(高级)
-                单个脚本: navigator_webdriver, chrome_runtime, permissions_query,
-                          navigator_languages, webdriver_data, playwright_stealth
 
         Yields:
             Page: Playwright Page 实例
         """
         context = await self.get_context(namespace)
-        page = await context.new_page()
-        if anti_crawling_strategy:
-            scripts = get_anti_scripts_by_names(anti_crawling_strategy)
-            for script in scripts:
-                try:
-                    await script.apply(page)
-                except Exception as e:
-                    logger.warning(f"Failed to apply anti-detection script {script.name}: {e}")
+        # 创建前先占位：否则 await new_page() 期间计数为 0，
+        # 回收判定会把创建中的 page 误判为空闲窗口而将其关闭
+        self._active_pages += 1
+        try:
+            page = await context.new_page()
+        except Exception:
+            self._active_pages -= 1
+            raise
+        self._pages_since_recycle += 1
 
         try:
+            if anti_crawling_strategy:
+                scripts = get_anti_scripts_by_names(anti_crawling_strategy)
+                for script in scripts:
+                    try:
+                        await script.apply(page)
+                    except Exception as e:
+                        logger.warning(f"Failed to apply anti-detection script {script.name}: {e}")
             yield page
         finally:
+            self._active_pages -= 1
             # 自动关闭 page，context 不关闭
             if not page.is_closed():
                 await page.close()
@@ -329,7 +326,7 @@ class BrowserContextPool:
 
     async def remove_context(self, namespace: str) -> None:
         """
-        从池中移除指定 Context
+        从缓存中移除指定命名空间的 Context（锁内移除，锁外关闭）
 
         Args:
             namespace: 命名空间
@@ -338,10 +335,11 @@ class BrowserContextPool:
             return
 
         async with self._lock:
-            if namespace in self._contexts:
-                metadata = self._contexts.pop(namespace)
-                await self._close_context(metadata.context)
-                logger.debug(f"Context removed: namespace={namespace}")
+            metadata = self._contexts.pop(namespace, None)
+
+        if metadata is not None:
+            await self._close_context(metadata.context)
+            logger.debug(f"Context removed: namespace={namespace}")
 
     @property
     def browser(self) -> Browser:
@@ -361,7 +359,7 @@ class BrowserContextPool:
         return self._is_initialized
 
     def get_stats(self) -> dict[str, Any]:
-        """获取池统计信息"""
+        """获取统计信息"""
         reuse_rate = self._stats["total_contexts_reused"] / max(
             1, self._stats["total_contexts_created"] + self._stats["total_contexts_reused"]
         )
@@ -369,15 +367,19 @@ class BrowserContextPool:
         return {
             "browser_count": 1 if self._browser else 0,
             "context_count": len(self._contexts),
+            "active_pages": self._active_pages,
             "total_contexts_created": self._stats["total_contexts_created"],
             "total_contexts_reused": self._stats["total_contexts_reused"],
             "reuse_rate": round(reuse_rate, 4),
-            "total_contexts_evicted": self._stats["total_contexts_evicted"],
             "total_contexts_closed": self._stats["total_contexts_closed"],
+            "total_browser_recycles": self._stats["total_browser_recycles"],
+            "total_browser_recoveries": self._stats["total_browser_recoveries"],
+            "pages_since_recycle": self._pages_since_recycle,
+            "last_recycle_at": self._last_recycle_at,
             "config": {
-                "max_pool_size": self._max_pool_size,
-                "idle_timeout": self._idle_timeout,
+                "idle_timeout": self._IDLE_TIMEOUT,
                 "headless": self._config.headless,
+                "user_agent": self._user_agent,
             },
         }
 
@@ -390,33 +392,33 @@ class BrowserContextPool:
         """
         contexts = []
         for key, metadata in self._contexts.items():
-            context_info = {
-                "namespace": metadata.namespace or "(临时)",
-                "key": key,
-                "created_at": metadata.created_at,
-                "last_used_at": metadata.last_used_at,
-                "idle_time": round(time.time() - metadata.last_used_at, 1),
-                "pages_count": len(metadata.context.pages),
-            }
-            contexts.append(context_info)
+            contexts.append(
+                {
+                    "namespace": key,
+                    "key": key,
+                    "created_at": metadata.created_at,
+                    "last_used_at": metadata.last_used_at,
+                    "idle_time": round(time.time() - metadata.last_used_at, 1),
+                    "pages_count": len(metadata.context.pages),
+                }
+            )
         return contexts
 
-    async def _create_context(self, namespace: str | None = None, **kwargs: Any) -> BrowserContext:
+    async def _create_context(
+        self, browser: Browser, namespace: str | None = None, **kwargs: Any
+    ) -> BrowserContext:
         """
-        创建新的 BrowserContext
+        在指定 Browser 上创建新的 BrowserContext
 
         如果有 namespace，从 Redis 加载保存的状态（cookies + localStorage）。
         使用 Playwright 原生的 storage_state 机制，自动恢复所有状态。
         """
-        if self._browser is None:
-            raise BrowserPoolError("Browser not initialized")
-
         # 准备 context 选项
         context_options = {
             "viewport": {"width": 1920, "height": 1080},
             "locale": "zh-CN",
             "timezone_id": "Asia/Shanghai",
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "user_agent": self._user_agent,
             **kwargs,
         }
 
@@ -428,7 +430,7 @@ class BrowserContextPool:
                 # 使用 storage_state 参数，Playwright 会自动恢复 cookies 和 localStorage
                 context_options["storage_state"] = storage_state
 
-        context = await self._browser.new_context(**context_options)
+        context = await browser.new_context(**context_options)
         context.set_default_timeout(self._config.default_timeout)
 
         return context
@@ -467,36 +469,32 @@ class BrowserContextPool:
             logger.error(f"Failed to get storage state for {namespace}: {e}")
             return None
 
-    def _verify_context_quick(self, context: BrowserContext) -> bool:
+    async def _ensure_browser(self) -> Browser:
         """
-        快速验证 context 是否可用（纯内存检查）
+        获取当前可用的 Browser 实例，不可用时自动自愈。
 
-        优化策略：
-        - 仅检查内部状态，避免任何网络调用
-        - 依赖 browser.is_connected() 和 context._closing_or_closed 状态
-
-        在正常情况下（无浏览器崩溃/进程被杀），这两个状态指示器是 100% 可靠的。
-        即使在极端异常情况下误判为健康，下次使用时会自然失败并触发重建。
-
-        Args:
-            context: 要验证的 BrowserContext
-
-        Returns:
-            bool: Context 是否可用
+        - 回收期间 _browser 短暂为 None（全程持锁），等待锁即可拿到新实例
+        - 浏览器崩溃（断连）时重启 browser，实现内核级自愈
         """
-        try:
-            # 检查 browser 连接状态
-            if not self._browser or not self._browser.is_connected():
-                return False
+        if self._browser is not None and self._browser.is_connected():
+            return self._browser
 
-            # 检查 context 内部状态（纯内存操作）
-            impl_obj = getattr(context, "_impl_obj", None)
-            if impl_obj and getattr(impl_obj, "_closing_or_closed", False):
-                return False
+        async with self._lock:
+            # 双重检查：等待锁期间其他协程可能已完成重启/回收
+            if self._browser is not None and self._browser.is_connected():
+                return self._browser
+            if self._closing:
+                raise BrowserPoolError("Browser pool is shut down")
 
-            return True
-        except Exception:
-            return False
+            logger.warning("Browser unavailable (crashed or failed launch), self-healing relaunch")
+            await self._relaunch_browser()
+            self._stats["total_browser_recoveries"] += 1
+            return self._browser  # launch 失败会抛异常，不会返回 None
+
+    async def _launch_browser(self) -> None:
+        """在当前 playwright 驱动上启动 Browser 并刷新 UA 版本（调用方需持有 _lock）"""
+        self._browser = await self._playwright.chromium.launch(**self._launch_options)
+        self._user_agent = _build_user_agent(self._browser.version)
 
     async def _close_context(self, context: BrowserContext) -> None:
         """
@@ -521,76 +519,107 @@ class BrowserContextPool:
         except Exception as e:
             logger.debug(f"Error closing context: {e}")
 
-    async def _evict_lru(self) -> None:
+    async def _close_all_contexts(self) -> None:
+        """关闭并清空全部缓存 Context（调用方需持有 _lock）"""
+        for metadata in list(self._contexts.values()):
+            await self._close_context(metadata.context)
+        self._contexts.clear()
+
+    async def _relaunch_browser(self) -> None:
         """
-        淘汰最久未使用的 Context
+        关闭现有 browser 并重新 launch，重置回收计数（调用方需持有 _lock）。
 
-        注意：当 max_pool_size <= 0 时，此方法不会被调用（LRU 已禁用）
-
-        移除 is_checked_out 机制后，LRU 淘汰逻辑更简单：
-        - OrderedDict 第一个元素即最久未使用
-        - 即使误淘汰活跃 context，下次 get_context 会重建并从 Redis 恢复状态
+        全部 context 随旧 browser 一起关闭；登录态会在后续 get_context 时
+        从 Redis 自动恢复。
+        launch 失败视为 playwright 驱动可能已死亡（长跑进程 OOM/被杀），
+        整体重建驱动后重试一次，堵住"驱动死亡后永远无法自愈"的缺口。
         """
-        if not self._contexts:
-            return
+        await self._close_all_contexts()
+        await self._close_resource(self._browser, "Browser", "close")
+        self._browser = None
+        try:
+            await self._launch_browser()
+        except Exception as e:
+            logger.warning(f"Browser relaunch failed ({e}), rebuilding playwright driver")
+            await self._close_resource(self._playwright, "Playwright", "stop")
+            self._playwright = await async_playwright().start()
+            await self._launch_browser()
+        self._last_recycle_at = time.time()
+        self._pages_since_recycle = 0
 
-        # 直接淘汰最久未使用的（OrderedDict 第一个元素）
-        key, metadata = next(iter(self._contexts.items()))
-        await self._close_context(metadata.context)
-        del self._contexts[key]
-        self._stats["total_contexts_evicted"] += 1
-        logger.debug(f"Context evicted (LRU): namespace={metadata.namespace}")
+    async def _cleanup_idle_contexts(self) -> None:
+        """清理闲置 Contexts。锁内收集并移除，锁外关闭。"""
+        current_time = time.time()
+        async with self._lock:
+            stale_keys = [
+                key
+                for key, meta in self._contexts.items()
+                if current_time - meta.last_used_at > self._IDLE_TIMEOUT
+            ]
+            victims = [(key, self._contexts.pop(key)) for key in stale_keys]
 
-    async def _cleanup_loop(self) -> None:
-        """后台清理循环"""
+        for key, meta in victims:
+            await self._close_context(meta.context)
+            logger.debug(
+                f"Context cleaned up (idle): namespace={key}, "
+                f"idle_time={current_time - meta.last_used_at:.1f}s"
+            )
+
+    def _should_recycle_now(self) -> bool:
+        """
+        判断是否应立即执行浏览器回收。
+
+        达到回收条件（存活超时或建页超量），且当前处于可安全回收的时机：
+        空闲窗口（无在途请求），或已超过硬上限（不允许再等）。
+        """
+        age = time.time() - self._last_recycle_at
+        if age >= self._RECYCLE_HARD_LIMIT:
+            return True
+        if age >= self._RECYCLE_MAX_AGE or self._pages_since_recycle >= self._RECYCLE_MAX_PAGES:
+            return self._active_pages == 0
+        return False
+
+    async def _maintenance_loop(self) -> None:
+        """后台维护循环：空闲清理 + 浏览器回收"""
         while self._is_initialized and not self._shutdown_event.is_set():
             try:
-                await asyncio.sleep(60)  # 每分钟清理一次
+                await asyncio.sleep(60)  # 每分钟检查一次
                 if self._shutdown_event.is_set():
                     break
 
-                # 仅在启用空闲超时时清理（<= 0 时禁用）
-                if self._idle_timeout > 0:
-                    await self._cleanup_idle_contexts()
+                await self._cleanup_idle_contexts()
+
+                if self._should_recycle_now():
+                    await self._do_recycle()
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Cleanup error: {e}")
+                logger.error(f"Maintenance error: {e}")
 
-    async def _cleanup_idle_contexts(self) -> None:
+    async def _do_recycle(self) -> None:
         """
-        清理闲置 Contexts（超过 idle_timeout）
+        执行浏览器整体回收。
 
-        注意：当 idle_timeout <= 0 时，此方法不会被调用（空闲清理已禁用）
+        全程持锁（关闭 + 重启通常仅数秒，每数小时一次），确保回收期间
+        get_context 阻塞等待而非拿到即将失效的 browser。
         """
-        current_time = time.time()
-        keys_to_remove = []
-
         async with self._lock:
-            for key, metadata in self._contexts.items():
-                # 检查空闲时间（基于 last_used_at）
-                idle_time = current_time - metadata.last_used_at
-                if idle_time > self._idle_timeout:
-                    keys_to_remove.append(key)
-                    logger.debug(
-                        f"Context idle timeout: namespace={metadata.namespace}, "
-                        f"idle_time={idle_time:.1f}s"
-                    )
+            age = time.time() - self._last_recycle_at
+            logger.info(
+                f"Recycling browser (pages_since_recycle={self._pages_since_recycle}, "
+                f"age={age:.0f}s, active_pages={self._active_pages})"
+            )
 
-            # 移除待清理的 context
-            for key in keys_to_remove:
-                metadata = self._contexts.pop(key)
-                await self._close_context(metadata.context)
-                logger.debug(f"Context cleaned up: namespace={metadata.namespace}")
+            await self._relaunch_browser()
+            self._stats["total_browser_recycles"] += 1
+            logger.info("Browser recycled successfully")
 
 
 @lru_cache(maxsize=1)
 def get_browser_context_pool() -> BrowserContextPool:
     """
-    获取全局 BrowserContextPool 实例（LRU 单例模式）
-
-    使用 @lru_cache 实现线程安全的单例模式。
+    获取全局 BrowserContextPool 实例（单例）
 
     Returns:
         BrowserContextPool: 浏览器上下文池实例

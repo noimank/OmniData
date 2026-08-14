@@ -15,7 +15,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class StockListParams(BaseModel):
@@ -40,7 +40,7 @@ class StockListSpider(BaseWebSpider):
 
     name = "eastmoney_stock_list"
     description = "获取沪深京A股实时行情列表数据，支持分页和排序"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -69,117 +69,109 @@ class StockListSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto("https://data.eastmoney.com/")
+            await page.goto("https://data.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
+
+            ut = captured_ut.get("token") or self.DEFAULT_UT
+
+            # 构建请求参数
+            request_params = {
+                "np": "1",
+                "fltt": "1",
+                "invt": "2",
+                "fs": self.MARKET_FILTER,
+                "fields": self.FIELDS,
+                "fid": params.sort_field,
+                "pn": str(params.page),
+                "pz": str(params.page_size),
+                "po": str(params.sort_order),
+                "dect": "1",
+                "ut": ut,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
+
+            response_text = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="text",
+            )
+
+            if response_text is None:
+                return SpiderResult(success=False, message="请求失败")
+
+            # 尝试解析JSONP响应（去除jQuery回调函数）
+            json_match = re.search(r"\((.*)\)$", response_text, re.DOTALL)
+            if json_match:
+                # JSONP格式
+                data = json.loads(json_match.group(1))
+            else:
+                # 尝试直接解析JSON
                 try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+                    data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    return SpiderResult(
+                        success=False,
+                        message=f"响应格式错误，无法解析: {response_text[:200]}",
+                    )
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
-
-                # 暖手 push2 域（建立 quote 域 cookies）
-                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
-
-                # 构建请求参数
-                request_params = {
-                    "np": "1",
-                    "fltt": "1",
-                    "invt": "2",
-                    "fs": self.MARKET_FILTER,
-                    "fields": self.FIELDS,
-                    "fid": params.sort_field,
-                    "pn": str(params.page),
-                    "pz": str(params.page_size),
-                    "po": str(params.sort_order),
-                    "dect": "1",
-                    "ut": ut,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
-
-                response_text = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://data.eastmoney.com/",
-                    response_type="text",
+            # 检查返回状态
+            if data.get("rc") != 0:
+                return SpiderResult(
+                    success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                 )
 
-                if response_text is None:
-                    return SpiderResult(success=False, message="请求失败")
+            # 检查是否有数据
+            data_obj = data.get("data", {})
+            if not data_obj:
+                return SpiderResult(success=False, message="未获取到数据")
 
-                # 尝试解析JSONP响应（去除jQuery回调函数）
-                json_match = re.search(r"\((.*)\)$", response_text, re.DOTALL)
-                if json_match:
-                    # JSONP格式
-                    data = json.loads(json_match.group(1))
-                else:
-                    # 尝试直接解析JSON
-                    try:
-                        data = json.loads(response_text)
-                    except json.JSONDecodeError:
-                        return SpiderResult(
-                            success=False,
-                            message=f"响应格式错误，无法解析: {response_text[:200]}",
-                        )
+            total = data_obj.get("total", 0)
+            diff_list = data_obj.get("diff", [])
 
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                    )
-
-                # 检查是否有数据
-                data_obj = data.get("data", {})
-                if not data_obj:
-                    return SpiderResult(success=False, message="未获取到数据")
-
-                total = data_obj.get("total", 0)
-                diff_list = data_obj.get("diff", [])
-
-                if not diff_list:
-                    return SpiderResult(
-                        success=True,
-                        data={
-                            "total": total,
-                            "stocks": [],
-                            "page": params.page,
-                            "page_size": params.page_size,
-                        },
-                        message="当前页无数据",
-                    )
-
-                # 解析股票列表
-                stocks = [self._parse_stock(item) for item in diff_list]
-
+            if not diff_list:
                 return SpiderResult(
                     success=True,
                     data={
                         "total": total,
-                        "stocks": stocks,
+                        "stocks": [],
                         "page": params.page,
                         "page_size": params.page_size,
                     },
-                    message=f"成功获取第{params.page}页数据，共{len(stocks)}条",
+                    message="当前页无数据",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 解析股票列表
+            stocks = [self._parse_stock(item) for item in diff_list]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": total,
+                    "stocks": stocks,
+                    "page": params.page,
+                    "page_size": params.page_size,
+                },
+                message=f"成功获取第{params.page}页数据，共{len(stocks)}条",
+            )
 
     def _parse_stock(self, item: dict) -> dict:
         """

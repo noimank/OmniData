@@ -74,20 +74,19 @@ class BaseWebSpider(BaseHelper):
             author = "我"
 
             async def crawl(self, params: MyParams) -> SpiderResult:
-                # 通过 browser_context_pool.get_context() 获取上下文
-                async with self.browser_context_pool.get_context() as context:
-                    page = await context.new_page()
-                    try:
-                        await page.goto(params.url)
-                        title = await page.title()
+                # 使用 new_page() 自动管理 page 生命周期（异常时也会自动关闭）
+                # 注意：不要用 async with await self.get_context() ——
+                # BrowserContext 的 __aexit__ 会关闭池化 context，破坏复用
+                async with self.new_page(namespace="我的平台") as page:
+                    await page.goto(params.url)
+                    title = await page.title()
 
-                        # 直接返回 SpiderResult，spider_name 和时间字段由 run 方法自动设置
-                        return SpiderResult(
-                            success=True,
-                            data={"title": title, "url": params.url},
-                        )
-                    finally:
-                        await page.close()
+                    # 直接返回 SpiderResult，spider_name 和时间字段由 run 方法自动设置
+                    # crawl 中抛出的异常由 run() 统一捕获并记录 traceback，无需自行 try/except
+                    return SpiderResult(
+                        success=True,
+                        data={"title": title, "url": params.url},
+                    )
         ```
 
     属性说明:
@@ -95,8 +94,9 @@ class BaseWebSpider(BaseHelper):
         - self.browser_context_pool: 浏览器上下文池实例
 
     可用方法:
-        - async with self.browser_context_pool.get_context(namespace="xxx", use_stealth=True): 获取浏览器上下文
-        - 用户需自行从 context 创建 page: page = await context.new_page()
+        - async with self.new_page(namespace="xxx") as page: 获取自动管理生命周期的页面（推荐）
+        - context = await self.get_context(namespace="xxx"): 获取池化上下文
+          （ContextPool 自动管理其生命周期，用户无需也不应手动关闭 context）
     """
 
     # 爬虫名称，整个系统中需要唯一标识，统一以 数据源+下划线+爬虫名称编码，如 eastmoney_news_query

@@ -55,59 +55,55 @@ class CLSNewsSpider(BaseWebSpider):
     }
 
     async def crawl(self, params: CLSNewsParams) -> SpiderResult:
-        try:
-            async with self.new_page("cls") as page:
-                query_params = {**self.API_PARAMS, "rn": str(params.rn)}
-                qs = "&".join(f"{k}={v}" for k, v in query_params.items())
-                await page.goto(f"{self.API_URL}?{qs}")
-                await page.wait_for_load_state("domcontentloaded")
+        async with self.new_page("cls") as page:
+            query_params = {**self.API_PARAMS, "rn": str(params.rn)}
+            qs = "&".join(f"{k}={v}" for k, v in query_params.items())
+            await page.goto(f"{self.API_URL}?{qs}")
+            await page.wait_for_load_state("domcontentloaded")
 
-                json_data = await page.evaluate(
-                    """() => {
+            json_data = await page.evaluate(
+                """() => {
                     try {
                         return JSON.parse(document.body.innerText);
                     } catch (e) {
                         return { errno: -1, msg: String(e) };
                     }
                 }"""
-                )
+            )
 
-                if json_data.get("errno") != 0:
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('msg', '未知错误')}",
-                    )
-
-                roll_data = json_data.get("data", {}).get("roll_data", [])
-                parsed_news = [self._parse_news_item(item) for item in roll_data]
-
-                if params.symbol == "重点":
-                    parsed_news = [n for n in parsed_news if n["level"] in ["A", "B"]]
-
-                news_data = [
-                    {
-                        "title": item["title"],
-                        "content": item["content"],
-                        "pub_time": item["pub_time"],
-                        "url": item["url"],
-                    }
-                    for item in parsed_news
-                ]
-
-                filter_type = "重点" if params.symbol == "重点" else "全部"
+            if json_data.get("errno") != 0:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "symbol": params.symbol,
-                        "filter_type": filter_type,
-                        "total": len(news_data),
-                        "news_list": news_data,
-                    },
-                    message=f"成功获取 {len(news_data)} 条快讯新闻（筛选：{filter_type}）",
+                    success=False,
+                    message=f"获取数据失败：{json_data.get('msg', '未知错误')}",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            roll_data = json_data.get("data", {}).get("roll_data", [])
+            parsed_news = [self._parse_news_item(item) for item in roll_data]
+
+            if params.symbol == "重点":
+                parsed_news = [n for n in parsed_news if n["level"] in ["A", "B"]]
+
+            news_data = [
+                {
+                    "title": item["title"],
+                    "content": item["content"],
+                    "pub_time": item["pub_time"],
+                    "url": item["url"],
+                }
+                for item in parsed_news
+            ]
+
+            filter_type = "重点" if params.symbol == "重点" else "全部"
+            return SpiderResult(
+                success=True,
+                data={
+                    "symbol": params.symbol,
+                    "filter_type": filter_type,
+                    "total": len(news_data),
+                    "news_list": news_data,
+                },
+                message=f"成功获取 {len(news_data)} 条快讯新闻（筛选：{filter_type}）",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

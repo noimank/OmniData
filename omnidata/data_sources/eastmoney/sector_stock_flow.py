@@ -13,7 +13,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class SectorStockFlowParams(BaseModel):
@@ -34,7 +34,7 @@ class SectorStockFlowSpider(BaseWebSpider):
 
     name = "eastmoney_sector_stock_flow"
     description = "获取指定行业板块内个股的资金流向排行数据"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
     params_model = SectorStockFlowParams
@@ -60,98 +60,93 @@ class SectorStockFlowSpider(BaseWebSpider):
     }
 
     async def crawl(self, params: SectorStockFlowParams) -> SpiderResult:
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                page_url = self.PAGE_URL.format(sector_code=params.sector_code)
-                await page.goto(page_url)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            page_url = self.PAGE_URL.format(sector_code=params.sector_code)
+            await page.goto(page_url)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
-                await warmup_push2(page, fallback_url=page_url)
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                config = self.RANK_CONFIG[params.rank_type]
-                api_params = {
-                    "fid": config["fid"],
-                    "po": "1",
-                    "pz": "50",
-                    "pn": "1",
-                    "np": "1",
-                    "fltt": "2",
-                    "invt": "2",
-                    "ut": ut,
-                    "fs": f"b:{params.sector_code}",
-                    "fields": config["fields"],
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            config = self.RANK_CONFIG[params.rank_type]
+            api_params = {
+                "fid": config["fid"],
+                "po": "1",
+                "pz": "50",
+                "pn": "1",
+                "np": "1",
+                "fltt": "2",
+                "invt": "2",
+                "ut": ut,
+                "fs": f"b:{params.sector_code}",
+                "fields": config["fields"],
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                # 获取全部数据(分页获取,每页50条)
-                all_items = []
-                page_num = 1
+            # 获取全部数据(分页获取,每页50条)
+            all_items = []
+            page_num = 1
 
-                while True:
-                    result = await fetch_with_retry(
-                        page,
-                        self.API_URL,
-                        api_params,
-                        referer=page_url,
-                        response_type="json",
-                    )
-
-                    if result is None or result.get("rc") != 0:
-                        break
-
-                    diff = result.get("data", {}).get("diff", [])
-                    if not diff:
-                        break
-
-                    all_items.extend(diff)
-                    if len(diff) < 50:
-                        break
-
-                    page_num += 1
-                    api_params["pn"] = str(page_num)
-
-                    if len(all_items) >= params.limit:
-                        break
-
-                    await page.wait_for_timeout(random.randint(500, 1500))
-
-                # 解析数据
-                data_list = [
-                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
-                ]
-                df = pd.DataFrame(data_list)
-
-                result_data = df.to_dict(orient="records")
-                if params.data_format == "markdown":
-                    result_data = df.to_markdown()
-                elif params.data_format == "string":
-                    result_data = df.to_string()
-
-                return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取板块 {params.sector_code} 的 {len(data_list)} 条个股数据",
+            while True:
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    api_params,
+                    response_type="json",
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"数据爬取失败:{str(e)}")
+
+                if result is None or result.get("rc") != 0:
+                    break
+
+                diff = result.get("data", {}).get("diff", [])
+                if not diff:
+                    break
+
+                all_items.extend(diff)
+                if len(diff) < 50:
+                    break
+
+                page_num += 1
+                api_params["pn"] = str(page_num)
+
+                if len(all_items) >= params.limit:
+                    break
+
+                await page.wait_for_timeout(random.randint(500, 1500))
+
+            # 解析数据
+            data_list = [
+                self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
+            ]
+            df = pd.DataFrame(data_list)
+
+            result_data = df.to_dict(orient="records")
+            if params.data_format == "markdown":
+                result_data = df.to_markdown()
+            elif params.data_format == "string":
+                result_data = df.to_string()
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=f"成功获取板块 {params.sector_code} 的 {len(data_list)} 条个股数据",
+            )
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
         """解析数据项"""

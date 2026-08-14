@@ -36,11 +36,8 @@ class BilibiliQRLogin(BaseQRLogin):
                 await page.wait_for_load_state("domcontentloaded", timeout=3000)
                 # 保存登录状态实现刷新
                 await self.save_context_state(context, "bilibili")
-        except Exception as e:
-            logger.error(f"Failed to refresh login state: {e}")
         finally:
             await page.close()
-            context = None
 
     async def get_qrcode_types(self) -> list:
         return ["微信", "哔哩哔哩官方"]
@@ -126,33 +123,35 @@ class BilibiliQRLogin(BaseQRLogin):
         """
         获取指定类型的二维码
 
+        持有实例锁保护 _qr_page 生命周期，防止并发调用产生孤儿 page
+
         Args:
             qr_type: 二维码类型
 
         Returns:
             包含二维码信息的字典
         """
+        async with self._lock:
+            # 确保资源关闭，每次调用该函数都是新的操作
+            await self.close()
+            try:
 
-        # 确保资源关闭，每次调用该函数都是新的操作
-        await self.close()
-        try:
+                if qr_type == "微信":
+                    qr_code = await self.get_weixin_qr_code()
+                    return qr_code
+                elif qr_type == "哔哩哔哩官方":
+                    qr_code = await self.get_bilibili_qr_code()
+                    return qr_code
 
-            if qr_type == "微信":
-                qr_code = await self.get_weixin_qr_code()
-                return qr_code
-            elif qr_type == "哔哩哔哩官方":
-                qr_code = await self.get_bilibili_qr_code()
-                return qr_code
+                else:
+                    return QRCode(
+                        success=False,
+                        message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                    )
 
-            else:
-                return QRCode(
-                    success=False,
-                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to get Bilibili qrcode: {e}")
-            return QRCode(success=False, message=f"获取二维码失败: {e}")
+            except Exception as e:
+                logger.error(f"Failed to get Bilibili qrcode: {e}")
+                return QRCode(success=False, message=f"获取二维码失败: {e}")
 
     async def verify_login_state(self) -> QRLoginState:
         """
@@ -168,27 +167,27 @@ class BilibiliQRLogin(BaseQRLogin):
         if self._login_status.status == "success":
             return self._login_status
 
-        if not self._qr_page:
-            return QRLoginState(
-                status="failed",
-                message="QR code page not initialized, please call get_qrcode first",
-            )
+        async with self._lock:
+            if not self._qr_page_alive():
+                return QRLoginState(
+                    status="failed",
+                    message="QR code page not initialized, please call get_qrcode first",
+                )
 
-        try:
+            try:
 
-            flag_text = await self._qr_page.locator(".right-entry li").first.inner_text()
-            if "登录" in flag_text:
-                return QRLoginState(status="waiting", message="正在登录中..........")
-            # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
+                flag_text = await self._qr_page.locator(".right-entry li").first.inner_text()
+                if "登录" in flag_text:
+                    return QRLoginState(status="waiting", message="正在登录中..........")
+                # 如何找不到会异常，不会执行以下代码，相反如果成功执行以下代码
 
-            # 保存登录状态
-            await self.save_context_state(self._qr_context, "bilibili")
-            await self.close()
-            return QRLoginState(status="success", message="登录成功,且保存登录状态")
+                # 保存登录状态
+                await self.save_context_state(self._qr_context, "bilibili")
+                await self.close()
+                return QRLoginState(status="success", message="登录成功,且保存登录状态")
 
-        except Exception as e:
-            # logger.error(f"Failed to verify Bilibili login state: {e}")
-            return QRLoginState(status="waiting", message=f"等待验证登录状态中......")
+            except Exception:
+                return QRLoginState(status="waiting", message=f"等待验证登录状态中......")
 
     async def is_login(self) -> QRLoginState:
         """
@@ -224,4 +223,5 @@ class BilibiliQRLogin(BaseQRLogin):
 
                 return QRLoginState(status="not_logged_in", message="未登录")
         except Exception as e:
+            logger.warning(f"Bilibili is_login check failed: {e}")
             return QRLoginState(status="not_logged_in", message="未登录哔哩哔哩")

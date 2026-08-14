@@ -18,7 +18,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class IndexIntradayParams(BaseModel):
@@ -46,7 +46,7 @@ class IndexIntradaySpider(BaseWebSpider):
 
     name = "eastmoney_index_intraday"
     description = "获取指数最新分时数据（分钟级别），包括开高低收、成交量、成交额"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -76,128 +76,118 @@ class IndexIntradaySpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            # 判断指数所属市场
-            market_code = self._market_of(params.index_code)
-            secid = f"{market_code}.{params.index_code}"
+        # 判断指数所属市场
+        market_code = self._market_of(params.index_code)
+        secid = f"{market_code}.{params.index_code}"
 
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto("https://data.eastmoney.com/")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto("https://data.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 构建请求参数
-                request_params = {
-                    "secid": secid,
-                    "fields1": self.FIELDS1,
-                    "fields2": self.FIELDS2,
-                    "iscr": "0",
-                    "ndays": "1",
-                    "ut": ut,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            # 构建请求参数
+            request_params = {
+                "secid": secid,
+                "fields1": self.FIELDS1,
+                "fields2": self.FIELDS2,
+                "iscr": "0",
+                "ndays": "1",
+                "ut": ut,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                # 当前页面在 data 域，未持有 quote 域 cookies，先暖手
-                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+            text = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="text",
+            )
 
-                text = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://data.eastmoney.com/",
-                    response_type="text",
-                )
+            if text is None:
+                return SpiderResult(success=False, message="请求失败")
 
-                if text is None:
-                    return SpiderResult(success=False, message="请求失败")
+            # 解析响应（可能是JSONP格式）
+            body = text.encode("utf-8")
+            data = self._parse_response(body)
 
-                # 解析响应（可能是JSONP格式）
-                body = text.encode("utf-8")
-                data = self._parse_response(body)
+            if data is None:
+                return SpiderResult(success=False, message="解析响应数据失败")
 
-                if data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
-
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败，请检查指数代码是否存在！"
-                    )
-
-                payload = data.get("data") or {}
-                index_name = payload.get("name") or params.index_code
-                trends = payload.get("trends", [])
-
-                if not trends:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到指数代码 {params.index_code} 的分时数据",
-                    )
-
-                # 解析分时数据
-                # 字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,最新价
-                data_list = []
-                for row in trends:
-                    cols = row.split(",")
-                    if len(cols) < 8:
-                        continue
-                    data_list.append(
-                        {
-                            "时间": cols[0],
-                            "开盘": self._safe_float(cols[1]),
-                            "收盘": self._safe_float(cols[2]),
-                            "最高": self._safe_float(cols[3]),
-                            "最低": self._safe_float(cols[4]),
-                            "成交量": self._safe_int(cols[5]),
-                            # "成交额": self._safe_float(cols[6]),
-                            "成交额(亿元)": round(self._safe_float(cols[6]) / 1e8, 4),
-                            "最新价": self._safe_float(cols[7]),
-                        }
-                    )
-
-                df = pd.DataFrame(data_list)
-
-                # 按时间升序排列（最早的在前，便于阅读）
-                df = df.sort_values("时间", ascending=True).reset_index(drop=True)
-
-                # 如果用户指定了限制条数且大于0
-                if params.limit > 0 and len(df) > params.limit:
-                    df = df.tail(params.limit).reset_index(drop=True)
-
-                result_data = df.to_dict(orient="records")
-                if params.data_format == "markdown":
-                    result_data = df.to_markdown()
-                elif params.data_format == "string":
-                    result_data = df.to_string()
-
+            # 检查返回状态
+            if data.get("rc") != 0:
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=(
-                        f"成功获取指数 {index_name}({params.index_code}) 分时数据共{len(df)}条"
-                    ),
+                    success=False, message=f"获取数据失败，请检查指数代码是否存在！"
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            payload = data.get("data") or {}
+            index_name = payload.get("name") or params.index_code
+            trends = payload.get("trends", [])
+
+            if not trends:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到指数代码 {params.index_code} 的分时数据",
+                )
+
+            # 解析分时数据
+            # 字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,最新价
+            data_list = []
+            for row in trends:
+                cols = row.split(",")
+                if len(cols) < 8:
+                    continue
+                data_list.append(
+                    {
+                        "时间": cols[0],
+                        "开盘": self._safe_float(cols[1]),
+                        "收盘": self._safe_float(cols[2]),
+                        "最高": self._safe_float(cols[3]),
+                        "最低": self._safe_float(cols[4]),
+                        "成交量": self._safe_int(cols[5]),
+                        # "成交额": self._safe_float(cols[6]),
+                        "成交额(亿元)": round(self._safe_float(cols[6]) / 1e8, 4),
+                        "最新价": self._safe_float(cols[7]),
+                    }
+                )
+
+            df = pd.DataFrame(data_list)
+
+            # 按时间升序排列（最早的在前，便于阅读）
+            df = df.sort_values("时间", ascending=True).reset_index(drop=True)
+
+            # 如果用户指定了限制条数且大于0
+            if params.limit > 0 and len(df) > params.limit:
+                df = df.tail(params.limit).reset_index(drop=True)
+
+            result_data = df.to_dict(orient="records")
+            if params.data_format == "markdown":
+                result_data = df.to_markdown()
+            elif params.data_format == "string":
+                result_data = df.to_string()
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=(f"成功获取指数 {index_name}({params.index_code}) 分时数据共{len(df)}条"),
+            )
 
     def _market_of(self, index_code: str) -> str:
         """根据指数代码判断所属市场（secid 第一段：1=沪，0=深）"""

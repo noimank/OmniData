@@ -50,73 +50,69 @@ class JiemianFlashNewsSpider(BaseWebSpider):
     TAGID = "1323"
 
     async def crawl(self, params: JiemianFlashNewsParams) -> SpiderResult:
-        try:
-            async with self.new_page("jiemian") as page:
-                # 先访问快讯页面建立上下文
-                await page.goto("https://www.jiemian.com/lists/4.html")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+        async with self.new_page("jiemian") as page:
+            # 先访问快讯页面建立上下文
+            await page.goto("https://www.jiemian.com/lists/4.html")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                # 使用当前时间减去24小时作为 end_time，获取最近的快讯
-                end_time = int(time.time()) - 86400
+            # 使用当前时间减去24小时作为 end_time，获取最近的快讯
+            end_time = int(time.time()) - 86400
 
-                response = await page.request.get(
-                    self.API_URL,
-                    params={
-                        "cid": self.CID,
-                        "tagid": self.TAGID,
-                        "end_time": str(end_time),
-                    },
-                    headers={
-                        "Referer": "https://www.jiemian.com/lists/4.html",
-                    },
-                    timeout=15000,
-                )
+            response = await page.request.get(
+                self.API_URL,
+                params={
+                    "cid": self.CID,
+                    "tagid": self.TAGID,
+                    "end_time": str(end_time),
+                },
+                headers={
+                    "Referer": "https://www.jiemian.com/lists/4.html",
+                },
+                timeout=15000,
+            )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}",
-                    )
-
-                json_data = await response.json()
-
-                if json_data.get("code") != "0":
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
-                    )
-
-                items = json_data.get("result", [])
-                if not items:
-                    return SpiderResult(
-                        success=False,
-                        message="未获取到快讯数据",
-                    )
-
-                # 按发布时间降序排列，取前 limit 条
-                items = sorted(
-                    items,
-                    key=lambda x: int(x.get("publishtime", 0)),
-                    reverse=True,
-                )[: params.limit]
-
-                news_list = [self._parse_news_item(item) for item in items]
-
+            if response.status != 200:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(news_list),
-                        "news_list": news_list,
-                    },
-                    message=f"成功获取 {len(news_list)} 条快讯",
+                    success=False,
+                    message=f"请求失败，状态码：{response.status}",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            json_data = await response.json()
+
+            if json_data.get("code") != "0":
+                return SpiderResult(
+                    success=False,
+                    message=f"获取数据失败：{json_data.get('message', '未知错误')}",
+                )
+
+            items = json_data.get("result", [])
+            if not items:
+                return SpiderResult(
+                    success=False,
+                    message="未获取到快讯数据",
+                )
+
+            # 按发布时间降序排列，取前 limit 条
+            items = sorted(
+                items,
+                key=lambda x: int(x.get("publishtime", 0)),
+                reverse=True,
+            )[: params.limit]
+
+            news_list = [self._parse_news_item(item) for item in items]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(news_list),
+                    "news_list": news_list,
+                },
+                message=f"成功获取 {len(news_list)} 条快讯",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """解析单条快讯数据"""

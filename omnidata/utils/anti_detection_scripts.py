@@ -126,9 +126,9 @@ class PlaywrightStealthScript(AntiDetectionScript):
     name = "playwright_stealth"
 
     async def apply(self, page: Page) -> None:
-        """应用 playwright-stealth"""
+        """应用 playwright-stealth（page 级，避免在共享 context 上累积 init script）"""
         stealth = Stealth()
-        await stealth.apply_stealth_async(page.context)
+        await stealth.apply_stealth_async(page)
         logger.debug("Applied playwright-stealth script")
 
 
@@ -170,42 +170,41 @@ class WebDriverDataScript(AntiDetectionScript):
         logger.debug("Applied webdriver_data script")
 
 
-# 预定义的脚本组合
-SCRIPT_PRESETS: dict[str, list[type[AntiDetectionScript]]] = {
-    "basic": [
-        NavigatorWebdriverScript,
-        ChromeRuntimeScript,
-    ],
-    "standard": [
-        NavigatorWebdriverScript,
-        ChromeRuntimeScript,
-        PermissionsQueryScript,
-        NavigatorLanguagesScript,
-    ],
-    "advanced": [
-        NavigatorWebdriverScript,
-        ChromeRuntimeScript,
-        PermissionsQueryScript,
-        NavigatorLanguagesScript,
-        WebDriverDataScript,
-    ],
+# 脚本无状态，使用模块级单例（每次建页不再重复实例化）
+ALL_SCRIPTS: dict[str, AntiDetectionScript] = {
+    NavigatorWebdriverScript.name: NavigatorWebdriverScript(),
+    ChromeRuntimeScript.name: ChromeRuntimeScript(),
+    PermissionsQueryScript.name: PermissionsQueryScript(),
+    NavigatorLanguagesScript.name: NavigatorLanguagesScript(),
+    WebDriverDataScript.name: WebDriverDataScript(),
+    PlaywrightStealthScript.name: PlaywrightStealthScript(),
 }
 
-
-# 所有可用的脚本类
-ALL_SCRIPTS: dict[str, type[AntiDetectionScript]] = {
-    NavigatorWebdriverScript.name: NavigatorWebdriverScript,
-    ChromeRuntimeScript.name: ChromeRuntimeScript,
-    PermissionsQueryScript.name: PermissionsQueryScript,
-    NavigatorLanguagesScript.name: NavigatorLanguagesScript,
-    WebDriverDataScript.name: WebDriverDataScript,
-    PlaywrightStealthScript.name: PlaywrightStealthScript,
+# 预定义的脚本组合
+SCRIPT_PRESETS: dict[str, list[AntiDetectionScript]] = {
+    "basic": [
+        ALL_SCRIPTS[NavigatorWebdriverScript.name],
+        ALL_SCRIPTS[ChromeRuntimeScript.name],
+    ],
+    "standard": [
+        ALL_SCRIPTS[NavigatorWebdriverScript.name],
+        ALL_SCRIPTS[ChromeRuntimeScript.name],
+        ALL_SCRIPTS[PermissionsQueryScript.name],
+        ALL_SCRIPTS[NavigatorLanguagesScript.name],
+    ],
+    "advanced": [
+        ALL_SCRIPTS[NavigatorWebdriverScript.name],
+        ALL_SCRIPTS[ChromeRuntimeScript.name],
+        ALL_SCRIPTS[PermissionsQueryScript.name],
+        ALL_SCRIPTS[NavigatorLanguagesScript.name],
+        ALL_SCRIPTS[WebDriverDataScript.name],
+    ],
 }
 
 
 def get_anti_scripts_by_names(names: str | list[str]) -> list[AntiDetectionScript]:
     """
-    根据名称获取反检测脚本实例
+    根据名称获取反检测脚本（返回模块级单例）
 
     Args:
         names: 脚本名称或名称列表，支持预设名称(basic/standard/advanced)或单个脚本名称
@@ -232,11 +231,10 @@ def get_anti_scripts_by_names(names: str | list[str]) -> list[AntiDetectionScrip
     for name in names:
         # 检查是否为预设组合
         if name in SCRIPT_PRESETS:
-            for script_class in SCRIPT_PRESETS[name]:
-                scripts.append(script_class())
+            scripts.extend(SCRIPT_PRESETS[name])
         # 检查是否为单个脚本
         elif name in ALL_SCRIPTS:
-            scripts.append(ALL_SCRIPTS[name]())
+            scripts.append(ALL_SCRIPTS[name])
         else:
             logger.warning(f"Unknown anti-detection script: {name}")
 

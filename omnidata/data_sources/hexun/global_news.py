@@ -63,71 +63,63 @@ class HexunGlobalNewsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("hexun") as page:
-                # 生成随机 callback 名称
-                callback_name = (
-                    f"ptemplate_jsonp_{random.randint(100000000000000000, 999999999999999999)}"
-                )
+        async with self.new_page("hexun") as page:
+            # 生成随机 callback 名称
+            callback_name = (
+                f"ptemplate_jsonp_{random.randint(100000000000000000, 999999999999999999)}"
+            )
 
-                # 构建请求参数
-                request_params = {
-                    "id": self.NEWS_ID,
-                    "s": params.page_size,
-                    "cp": params.page,
-                    "callback": callback_name,
-                }
+            # 构建请求参数
+            request_params = {
+                "id": self.NEWS_ID,
+                "s": params.page_size,
+                "cp": params.page,
+                "callback": callback_name,
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
 
-                # 获取响应文本（JSONP格式）
-                response_text = await response.text()
+            # 获取响应文本（JSONP格式）
+            response_text = await response.text()
 
-                # 解析JSONP响应
-                json_data = self._parse_jsonp(response_text)
-                if json_data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
+            # 解析JSONP响应
+            json_data = self._parse_jsonp(response_text)
+            if json_data is None:
+                return SpiderResult(success=False, message="解析响应数据失败")
 
-                # 解析新闻列表
-                news_list = json_data.get("result", [])
-                if not news_list:
-                    return SpiderResult(
-                        success=True,
-                        data={
-                            "page": params.page,
-                            "page_size": params.page_size,
-                            "total": 0,
-                            "total_page": json_data.get("totalPage", 0),
-                            "news_list": [],
-                        },
-                        message="暂无新闻数据",
-                    )
-
-                parsed_news = [self._parse_news_item(item) for item in news_list]
-
+            # 解析新闻列表
+            news_list = json_data.get("result", [])
+            if not news_list:
                 return SpiderResult(
                     success=True,
                     data={
                         "page": params.page,
                         "page_size": params.page_size,
-                        "total": len(parsed_news),
+                        "total": 0,
                         "total_page": json_data.get("totalPage", 0),
-                        "total_number": json_data.get("totalNumber", 0),
-                        "news_list": parsed_news,
+                        "news_list": [],
                     },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+                    message="暂无新闻数据",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            parsed_news = [self._parse_news_item(item) for item in news_list]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "page": params.page,
+                    "page_size": params.page_size,
+                    "total": len(parsed_news),
+                    "total_page": json_data.get("totalPage", 0),
+                    "total_number": json_data.get("totalNumber", 0),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+            )
 
     def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
         """

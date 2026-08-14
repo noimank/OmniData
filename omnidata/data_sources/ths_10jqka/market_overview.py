@@ -104,64 +104,59 @@ class MarketOverviewSpider(BaseWebSpider):
         3. 在同 context 内调用 api.php?t=indexflash 获取 JSON
         4. 解析并构建结构化结果
         """
-        try:
-            async with self.new_page("ths_10jqka") as page:
-                # 加载页面获取 cookie / session
-                logger.info("加载同花顺行情中心页面...")
-                await page.goto(self.PAGE_URL)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
-                await asyncio.sleep(3)  # 等待 Chameleon 反爬脚本和 JS 渲染
+        async with self.new_page("ths_10jqka") as page:
+            # 加载页面获取 cookie / session
+            logger.info("加载同花顺行情中心页面...")
+            await page.goto(self.PAGE_URL)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
+            await asyncio.sleep(3)  # 等待 Chameleon 反爬脚本和 JS 渲染
 
-                # 调用 indexflash JSON API
-                logger.info("请求 indexflash API...")
-                response = await page.request.get(self.INDEXFLASH_API, timeout=15000)
+            # 调用 indexflash JSON API
+            logger.info("请求 indexflash API...")
+            response = await page.request.get(self.INDEXFLASH_API, timeout=15000)
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"API 请求失败：HTTP {response.status}",
-                    )
-
-                body_text = await response.text()
-                if not body_text or len(body_text) < 10:
-                    return SpiderResult(
-                        success=False,
-                        message="API 返回空数据",
-                    )
-
-                try:
-                    data = json.loads(body_text)
-                except json.JSONDecodeError:
-                    return SpiderResult(
-                        success=False,
-                        message=f"API 返回非 JSON 数据: {body_text[:200]}",
-                    )
-
-                # 解析数据
-                result_data = self._parse(data)
-
-                overview = result_data["市场概况"]
+            if response.status != 200:
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=(
-                        f"A股市场概况：上涨{overview['上涨家数']}只 "
-                        f"({overview['上涨比例']}%)，"
-                        f"下跌{overview['下跌家数']}只 "
-                        f"({overview['下跌比例']}%)，"
-                        f"涨停{overview['涨停家数']}只，"
-                        f"跌停{overview['跌停家数']}只，"
-                        f"大盘评级{overview.get('大盘评级', 'N/A')}分"
-                    ),
+                    success=False,
+                    message=f"API 请求失败：HTTP {response.status}",
                 )
 
-        except Exception as e:
-            logger.exception(f"爬取失败：{e}")
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            body_text = await response.text()
+            if not body_text or len(body_text) < 10:
+                return SpiderResult(
+                    success=False,
+                    message="API 返回空数据",
+                )
+
+            try:
+                data = json.loads(body_text)
+            except json.JSONDecodeError:
+                return SpiderResult(
+                    success=False,
+                    message=f"API 返回非 JSON 数据: {body_text[:200]}",
+                )
+
+            # 解析数据
+            result_data = self._parse(data)
+
+            overview = result_data["市场概况"]
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=(
+                    f"A股市场概况：上涨{overview['上涨家数']}只 "
+                    f"({overview['上涨比例']}%)，"
+                    f"下跌{overview['下跌家数']}只 "
+                    f"({overview['下跌比例']}%)，"
+                    f"涨停{overview['涨停家数']}只，"
+                    f"跌停{overview['跌停家数']}只，"
+                    f"大盘评级{overview.get('大盘评级', 'N/A')}分"
+                ),
+            )
 
     # ------------------------------------------------------------------
     # 数据解析

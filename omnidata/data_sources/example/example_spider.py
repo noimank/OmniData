@@ -42,45 +42,35 @@ class ExampleSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        # 方式1: 使用 get_context() - 不需要手动释放，由 ContextPool 自动管理
-        context = await self.get_context()
-        page = await context.new_page()
+        # 使用 new_page() 自动管理 page 生命周期（异常时也会自动关闭）
+        async with self.new_page() as page:
+            # 访问目标 URL
+            await page.goto(str(params.url))
 
-        # 方式2: 使用 new_context() - 支持 async with，退出时自动释放
-        # async with self.new_context() as context:
-        #     page = await context.new_page()
+            # 等待指定选择器
+            await page.wait_for_selector(params.wait_for_selector)
 
-        # 方式3: 使用 new_page() - 最简洁，自动管理 page 和 context
-        # async with self.new_page() as page:
-        #     pass
+            # 提取页面信息
+            title = await page.title()
+            url = page.url
 
-        # 访问目标 URL
-        await page.goto(str(params.url))
+            # 可选：截图
+            screenshot_data = None
+            if params.screenshot:
+                screenshot_bytes = await page.screenshot(full_page=False)
+                import base64
 
-        # 等待指定选择器
-        await page.wait_for_selector(params.wait_for_selector)
+                screenshot_data = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-        # 提取页面信息
-        title = await page.title()
-        url = page.url
-
-        # 可选：截图
-        screenshot_data = None
-        if params.screenshot:
-            screenshot_bytes = await page.screenshot(full_page=False)
-            import base64
-
-            screenshot_data = base64.b64encode(screenshot_bytes).decode("utf-8")
-
-        return SpiderResult(
-            success=True,
-            data={
-                "title": title,
-                "url": url,
-                "screenshot": screenshot_data,
-                "timestamp": self._get_timestamp(),
-            },
-        )
+            return SpiderResult(
+                success=True,
+                data={
+                    "title": title,
+                    "url": url,
+                    "screenshot": screenshot_data,
+                    "timestamp": self._get_timestamp(),
+                },
+            )
 
     def _get_timestamp(self) -> str:
         """获取当前时间戳"""
@@ -123,7 +113,7 @@ class NewsSpider(BaseWebSpider):
             SpiderResult: 执行结果
         """
         # 这里是示例实现，实际需要根据目标网站结构调整
-        # async with self.get_page_context() as page:
+        # async with self.new_page() as page:
         #     await page.goto(f"https://example.com/news/{params.category}")
 
         # 示例：返回模拟数据

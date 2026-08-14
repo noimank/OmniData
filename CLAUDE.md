@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-OmniData 是一个基于 Playwright 和 FastAPI 的可扩展网页爬虫框架，采用 LRU 单例模式和浏览器上下文池化技术。
+OmniData 是一个基于 Playwright 和 FastAPI 的可扩展网页爬虫框架，采用单例核心组件与单浏览器多 Context 架构，内置 7×24 自愈机制。
 
 **作者**: noimank (noimank@163.com)
 
@@ -80,16 +80,18 @@ omnidata/
 
 ## 架构特点
 
-1. **LRU 单例模式**: 核心组件使用 `@lru_cache(maxsize=1)` 实现线程安全单例
+1. **单例模式**: 核心组件使用 `@lru_cache(maxsize=1)` 实现单例
    - `get_browser_context_pool()` - 浏览器上下文池
    - `get_spider_register()` - 爬虫注册器
    - `get_login_register()` - 登录器注册器
 
-2. **单 Browser + 多 Context**: 共享 Chromium 进程，Context 池化复用
+2. **单 Browser + 按命名空间缓存 Context**: 共享 Chromium 进程；每个数据源命名空间持有一个常驻 Context 复用，无容量限制（命名空间数量由数据源目录天然决定），空闲 10 分钟自动回收。
 
-3. **自动注册机制**: 扫描 `data_sources/` 目录自动发现爬虫和登录器
+3. **浏览器自愈回收（7×24 核心，对用户透明）**: 后台维护任务按 存活时间（8h）/ 累计建页数（5000）任一先到自动触发浏览器整体回收（关闭全部 context + browser 后重启），只在无活跃 Page 的空闲窗口执行，连续无空闲超过 16h 才强制执行；浏览器崩溃自动重启自愈；登录态从 Redis 自动恢复。策略为内核固定值（`BrowserContextPool` 类常量），不对外配置。
 
-4. **Redis 状态持久化**: cookies 和 localStorage 持久化到 Redis
+4. **自动注册机制**: 扫描 `data_sources/` 目录自动发现爬虫和登录器
+
+5. **Redis 状态持久化**: cookies 和 localStorage 持久化到 Redis
 
 ## 配置
 
@@ -104,6 +106,7 @@ omnidata/
 | `/api/v1/spiders/run` | POST | 运行爬虫 |
 | `/api/v1/spiders/run-batch` | POST | 批量运行 |
 | `/api/v1/mcp/services` | GET | 列出 MCP 服务 |
+| `/api/v1/monitor/system` | GET | 系统资源（内存/CPU/运行时间） |
 
 ## 爬虫开发规范
 

@@ -17,7 +17,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class RealtimeQuoteParams(BaseModel):
@@ -48,7 +48,7 @@ class RealtimeQuoteSpider(BaseWebSpider):
 
     name = "eastmoney_realtime_quote"
     description = "批量获取多只股票/指数/ETF实时行情报价，包括最新价、涨跌幅、成交量、成交额、振幅、换手率、量比、市盈率、市净率、总市值等完整行情数据，支持自动分批"
-    version = "1.0.0"
+    version = "1.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -75,99 +75,89 @@ class RealtimeQuoteSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            # 规范化证券标识为 secid（market.code），去重并保留顺序
-            identifiers = [s for s in params.secids.split(",") if s.strip()]
-            secids, skipped = self._normalize_secids(identifiers)
-            if not secids:
-                return SpiderResult(
-                    success=False,
-                    message=f"没有有效的证券标识，请检查参数格式（应为 6 位代码或 market.code）",
+        # 规范化证券标识为 secid（market.code），去重并保留顺序
+        identifiers = [s for s in params.secids.split(",") if s.strip()]
+        secids, skipped = self._normalize_secids(identifiers)
+        if not secids:
+            return SpiderResult(
+                success=False,
+                message=f"没有有效的证券标识，请检查参数格式（应为 6 位代码或 market.code）",
+            )
+
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+
+            # ── 动态提取 ut 令牌：拦截入口页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
+
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
+
+            await page.route("**push2.eastmoney.com**", capture_ut)
+
+            await page.goto("https://quote.eastmoney.com/center/gridlist.html")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程：ut 拿不到时会回退到 DEFAULT_UT
+                pass
+
+            ut = captured_ut.get("token") or self.DEFAULT_UT
+
+            # ── 分批请求并合并结果 ──
+            quotes: list[dict] = []
+            for i in range(0, len(secids), self.CHUNK_SIZE):
+                chunk = secids[i : i + self.CHUNK_SIZE]
+                result = await fetch_with_retry(
+                    page,
+                    self.API_URL,
+                    {
+                        "fltt": "2",
+                        "invt": "2",
+                        "fields": self.FIELDS,
+                        "secids": ",".join(chunk),
+                        "ut": ut,
+                        "_": str(random.randint(10**12, 10**13 - 1)),
+                    },
+                    response_type="json",
                 )
 
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-
-                # ── 动态提取 ut 令牌：拦截入口页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
-
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
-
-                await page.route("**push2.eastmoney.com**", capture_ut)
-
-                await page.goto("https://quote.eastmoney.com/center/gridlist.html")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程：ut 拿不到时会回退到 DEFAULT_UT
-                    pass
-
-                ut = captured_ut.get("token") or self.DEFAULT_UT
-
-                # 暖手 push2 域：建立 push2 接口所需的 cookies
-                await warmup_push2(
-                    page, fallback_url="https://quote.eastmoney.com/center/gridlist.html"
-                )
-
-                # ── 分批请求并合并结果 ──
-                quotes: list[dict] = []
-                for i in range(0, len(secids), self.CHUNK_SIZE):
-                    chunk = secids[i : i + self.CHUNK_SIZE]
-                    result = await fetch_with_retry(
-                        page,
-                        self.API_URL,
-                        {
-                            "fltt": "2",
-                            "invt": "2",
-                            "fields": self.FIELDS,
-                            "secids": ",".join(chunk),
-                            "ut": ut,
-                            "_": str(random.randint(10**12, 10**13 - 1)),
-                        },
-                        referer="https://quote.eastmoney.com/center/gridlist.html",
-                        response_type="json",
-                    )
-
-                    if result is None:
-                        return SpiderResult(
-                            success=False,
-                            message=f"请求失败（第{len(quotes) // self.CHUNK_SIZE + 1}批）",
-                        )
-
-                    if result.get("rc") != 0:
-                        return SpiderResult(
-                            success=False, message=f"获取数据失败：{result.get('msg', '未知错误')}"
-                        )
-
-                    diff = (result.get("data") or {}).get("diff") or []
-                    quotes.extend(self._parse_quote_item(item) for item in diff)
-
-                if not quotes:
+                if result is None:
                     return SpiderResult(
                         success=False,
-                        message="未匹配到任何证券数据，请检查证券标识是否正确",
+                        message=f"请求失败（第{len(quotes) // self.CHUNK_SIZE + 1}批）",
                     )
 
-                message = f"成功获取 {len(quotes)} 只证券的实时行情"
-                if skipped:
-                    message += f"（跳过 {len(skipped)} 个无效标识：{', '.join(skipped)}）"
+                if result.get("rc") != 0:
+                    return SpiderResult(
+                        success=False, message=f"获取数据失败：{result.get('msg', '未知错误')}"
+                    )
 
+                diff = (result.get("data") or {}).get("diff") or []
+                quotes.extend(self._parse_quote_item(item) for item in diff)
+
+            if not quotes:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(quotes),
-                        "quotes": quotes,
-                        "skipped": skipped,
-                    },
-                    message=message,
+                    success=False,
+                    message="未匹配到任何证券数据，请检查证券标识是否正确",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            message = f"成功获取 {len(quotes)} 只证券的实时行情"
+            if skipped:
+                message += f"（跳过 {len(skipped)} 个无效标识：{', '.join(skipped)}）"
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(quotes),
+                    "quotes": quotes,
+                    "skipped": skipped,
+                },
+                message=message,
+            )
 
     @staticmethod
     def _normalize_secids(identifiers: list[str]) -> tuple[list[str], list[str]]:

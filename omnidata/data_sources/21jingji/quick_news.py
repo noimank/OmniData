@@ -55,47 +55,39 @@ class JingjiQuickNewsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("21jingji") as page:
-                # 构建请求参数
-                request_params = {
+        async with self.new_page("21jingji") as page:
+            # 构建请求参数
+            request_params = {
+                "page": params.page,
+            }
+
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 获取响应文本（JSONP格式）
+            text_data = await response.text()
+
+            # 解析 JSONP 格式：提取 callback({...}) 中的 JSON
+            json_data = self._parse_jsonp(text_data)
+            if json_data is None:
+                return SpiderResult(success=False, message=f"响应数据格式异常，无法解析 JSONP")
+
+            # 解析新闻列表
+            news_list = json_data.get("list", [])
+            parsed_news = [self._parse_news_item(item) for item in news_list]
+
+            return SpiderResult(
+                success=True,
+                data={
                     "page": params.page,
-                }
-
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
-
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
-
-                # 获取响应文本（JSONP格式）
-                text_data = await response.text()
-
-                # 解析 JSONP 格式：提取 callback({...}) 中的 JSON
-                json_data = self._parse_jsonp(text_data)
-                if json_data is None:
-                    return SpiderResult(success=False, message=f"响应数据格式异常，无法解析 JSONP")
-
-                # 解析新闻列表
-                news_list = json_data.get("list", [])
-                parsed_news = [self._parse_news_item(item) for item in news_list]
-
-                return SpiderResult(
-                    success=True,
-                    data={
-                        "page": params.page,
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
-                )
-
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+            )
 
     def _parse_jsonp(self, text: str) -> dict | None:
         """

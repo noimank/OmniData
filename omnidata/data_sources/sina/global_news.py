@@ -81,70 +81,62 @@ class SinaFinanceNewsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("sina") as page:
-                # 生成时间戳
-                timestamp = int(datetime.now().timestamp() * 1000)
+        async with self.new_page("sina") as page:
+            # 生成时间戳
+            timestamp = int(datetime.now().timestamp() * 1000)
 
-                # 构建请求参数
-                request_params = {
+            # 构建请求参数
+            request_params = {
+                "page": params.page,
+                "page_size": params.page_size,
+                "zhibo_id": self.ZHIBO_ID,
+                "tag_id": params.tag_id,
+                "dire": "f",
+                "dpc": "1",
+                "_": timestamp + 1,
+            }
+
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 获取响应文本（JSONP格式）
+            response_text = await response.text()
+
+            # 解析JSONP响应
+            json_data = self._parse_jsonp(response_text)
+            if json_data is None:
+                return SpiderResult(success=False, message="解析响应数据失败")
+
+            # 检查返回状态
+            result_status = json_data.get("result", {}).get("status", {})
+            if result_status.get("code") != 0:
+                return SpiderResult(
+                    success=False,
+                    message=f"获取数据失败：{result_status.get('msg', '未知错误')}",
+                )
+
+            # 解析新闻列表
+            feed_data = json_data.get("result", {}).get("data", {}).get("feed", {})
+            news_list = feed_data.get("list", [])
+            parsed_news = [self._parse_news_item(item) for item in news_list]
+
+            tag_name = self.TAG_MAP.get(params.tag_id, "未知")
+
+            return SpiderResult(
+                success=True,
+                data={
                     "page": params.page,
                     "page_size": params.page_size,
-                    "zhibo_id": self.ZHIBO_ID,
                     "tag_id": params.tag_id,
-                    "dire": "f",
-                    "dpc": "1",
-                    "_": timestamp + 1,
-                }
-
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
-
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
-
-                # 获取响应文本（JSONP格式）
-                response_text = await response.text()
-
-                # 解析JSONP响应
-                json_data = self._parse_jsonp(response_text)
-                if json_data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
-
-                # 检查返回状态
-                result_status = json_data.get("result", {}).get("status", {})
-                if result_status.get("code") != 0:
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{result_status.get('msg', '未知错误')}",
-                    )
-
-                # 解析新闻列表
-                feed_data = json_data.get("result", {}).get("data", {}).get("feed", {})
-                news_list = feed_data.get("list", [])
-                parsed_news = [self._parse_news_item(item) for item in news_list]
-
-                tag_name = self.TAG_MAP.get(params.tag_id, "未知")
-
-                return SpiderResult(
-                    success=True,
-                    data={
-                        "page": params.page,
-                        "page_size": params.page_size,
-                        "tag_id": params.tag_id,
-                        "tag_name": tag_name,
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻（标签：{tag_name}）",
-                )
-
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+                    "tag_name": tag_name,
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻（标签：{tag_name}）",
+            )
 
     def _parse_jsonp(self, response_text: str) -> dict[str, Any] | None:
         """

@@ -70,90 +70,86 @@ class EastmoneyFastNewsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 拦截 getFastNewsList 请求 ──
-                # 服务端对 cookie / referer / sec-ch-ua 等浏览器指纹敏感，
-                # 通过 page.route 拦截后用 route.fetch(url=新URL) 改写参数再放行，
-                # Playwright 会自动带上原始请求的所有请求头，伪装度最高。
-                captured_body: dict[str, str | None] = {"body": None}
+            # ── 拦截 getFastNewsList 请求 ──
+            # 服务端对 cookie / referer / sec-ch-ua 等浏览器指纹敏感，
+            # 通过 page.route 拦截后用 route.fetch(url=新URL) 改写参数再放行，
+            # Playwright 会自动带上原始请求的所有请求头，伪装度最高。
+            captured_body: dict[str, str | None] = {"body": None}
 
-                async def handle_route(route):
-                    url = route.request.url
-                    if self.API_PATH in url and self.API_HOST in url:
-                        # 改写 fastColumn / pageSize，保留其它字段（特别是 sortEnd= 空值）
-                        new_url = self._rewrite_query(
-                            url,
-                            {
-                                "fastColumn": params.fast_column,
-                                "pageSize": str(params.page_size),
-                            },
-                        )
-                        try:
-                            response = await route.fetch(url=new_url)
-                            captured_body["body"] = await response.text()
-                            await route.fulfill(response=response)
-                            return
-                        except Exception:
-                            # 改写失败则放行原始请求
-                            await route.continue_()
-                            return
-                    await route.continue_()
-
-                await page.route("**/*", handle_route)
-
-                # 访问入口页，等待页面真正发起 getFastNewsList 请求
-                await page.goto(self.PAGE_URL, timeout=30000)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程：拦截逻辑自带超时回退
-                    pass
-
-                # 等待拦截到响应（最多 10 秒）
-                for _ in range(20):
-                    if captured_body["body"] is not None:
-                        break
-                    await page.wait_for_timeout(500)
-
-                if captured_body["body"] is None:
-                    return SpiderResult(
-                        success=False,
-                        message="拦截 getFastNewsList 响应超时，页面未发起该请求",
+            async def handle_route(route):
+                url = route.request.url
+                if self.API_PATH in url and self.API_HOST in url:
+                    # 改写 fastColumn / pageSize，保留其它字段（特别是 sortEnd= 空值）
+                    new_url = self._rewrite_query(
+                        url,
+                        {
+                            "fastColumn": params.fast_column,
+                            "pageSize": str(params.page_size),
+                        },
                     )
+                    try:
+                        response = await route.fetch(url=new_url)
+                        captured_body["body"] = await response.text()
+                        await route.fulfill(response=response)
+                        return
+                    except Exception:
+                        # 改写失败则放行原始请求
+                        await route.continue_()
+                        return
+                await route.continue_()
 
-                # 解析 JSONP 响应
-                json_data = self._parse_jsonp(captured_body["body"])
-                if json_data is None:
-                    return SpiderResult(
-                        success=False,
-                        message="解析响应数据失败：返回内容不是合法的 JSONP/JSON",
-                    )
+            await page.route("**/*", handle_route)
 
-                # 检查返回状态
-                if json_data.get("code") != "1":
-                    return SpiderResult(
-                        success=False,
-                        message=f"获取数据失败：{json_data.get('message', '未知错误')}",
-                    )
+            # 访问入口页，等待页面真正发起 getFastNewsList 请求
+            await page.goto(self.PAGE_URL, timeout=30000)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程：拦截逻辑自带超时回退
+                pass
 
-                # 解析新闻列表
-                news_list = json_data.get("data", {}).get("fastNewsList", [])
-                parsed_news = [self._parse_news_item(item) for item in news_list]
+            # 等待拦截到响应（最多 10 秒）
+            for _ in range(20):
+                if captured_body["body"] is not None:
+                    break
+                await page.wait_for_timeout(500)
 
+            if captured_body["body"] is None:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+                    success=False,
+                    message="拦截 getFastNewsList 响应超时，页面未发起该请求",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 解析 JSONP 响应
+            json_data = self._parse_jsonp(captured_body["body"])
+            if json_data is None:
+                return SpiderResult(
+                    success=False,
+                    message="解析响应数据失败：返回内容不是合法的 JSONP/JSON",
+                )
+
+            # 检查返回状态
+            if json_data.get("code") != "1":
+                return SpiderResult(
+                    success=False,
+                    message=f"获取数据失败：{json_data.get('message', '未知错误')}",
+                )
+
+            # 解析新闻列表
+            news_list = json_data.get("data", {}).get("fastNewsList", [])
+            parsed_news = [self._parse_news_item(item) for item in news_list]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+            )
 
     @staticmethod
     def _rewrite_query(url: str, overrides: dict[str, str]) -> str:

@@ -91,80 +91,76 @@ class RealtimeQuoteSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            # 规范化证券标识为新浪符号（sh600519），去重并保留顺序
-            identifiers = [s for s in params.symbols.split(",") if s.strip()]
-            symbols, skipped = self._normalize_symbols(identifiers)
-            if not symbols:
-                return SpiderResult(
-                    success=False,
-                    message="没有有效的证券标识，请检查参数格式（应为 sh600519/sz000001 或 6 位代码）",
-                )
-
-            quotes: list[dict] = []
-            no_data: list[str] = []
-            async with self.new_page("sina") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-
-                # 先访问新浪财经首页：拟人化访问链路（真实用户先浏览首页再拉行情）并累积
-                # sina 域 cookie 到上下文。注：page.request 走 Playwright HTTP 客户端（共享
-                # cookie/UA），不经浏览器 TLS 栈；接口门槛仅为 Referer，故加载失败不影响后续
-                try:
-                    await page.goto(
-                        self.ENTRY_URL,
-                        wait_until="domcontentloaded",
-                        timeout=self.PAGE_TIMEOUT_MS,
-                    )
-                except Exception:
-                    pass
-
-                for i in range(0, len(symbols), self.CHUNK_SIZE):
-                    chunk = symbols[i : i + self.CHUNK_SIZE]
-                    text = await self._fetch_text(page, ",".join(chunk))
-                    if text is None:
-                        return SpiderResult(
-                            success=False,
-                            message=f"请求失败（第{i // self.CHUNK_SIZE + 1}批）",
-                        )
-
-                    # 解析本批响应：有数据的解析入 quotes，空数据/畸形行记为 no_data
-                    found: set[str] = set()
-                    for symbol, fields in self._parse_lines(text):
-                        found.add(symbol)
-                        if fields is None or len(fields) < 32:
-                            no_data.append(symbol)
-                            continue
-                        quotes.append(self._parse_quote(symbol, fields))
-                    # 响应中缺失的请求符号（理论上不发生）也记为 no_data
-                    for symbol in chunk:
-                        if symbol not in found:
-                            no_data.append(symbol)
-
-            if not quotes:
-                return SpiderResult(
-                    success=False,
-                    message="未匹配到任何证券数据，请检查证券标识是否正确",
-                )
-
-            message = f"成功获取 {len(quotes)} 只证券的实时行情"
-            if no_data:
-                message += f"（{len(no_data)} 只无数据：{', '.join(no_data)}）"
-            if skipped:
-                message += f"（跳过 {len(skipped)} 个无效标识：{', '.join(skipped)}）"
-
+        # 规范化证券标识为新浪符号（sh600519），去重并保留顺序
+        identifiers = [s for s in params.symbols.split(",") if s.strip()]
+        symbols, skipped = self._normalize_symbols(identifiers)
+        if not symbols:
             return SpiderResult(
-                success=True,
-                data={
-                    "total": len(quotes),
-                    "quotes": quotes,
-                    "skipped": skipped,
-                    "no_data": no_data,
-                },
-                message=message,
+                success=False,
+                message="没有有效的证券标识，请检查参数格式（应为 sh600519/sz000001 或 6 位代码）",
             )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+        quotes: list[dict] = []
+        no_data: list[str] = []
+        async with self.new_page("sina") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+
+            # 先访问新浪财经首页：拟人化访问链路（真实用户先浏览首页再拉行情）并累积
+            # sina 域 cookie 到上下文。注：page.request 走 Playwright HTTP 客户端（共享
+            # cookie/UA），不经浏览器 TLS 栈；接口门槛仅为 Referer，故加载失败不影响后续
+            try:
+                await page.goto(
+                    self.ENTRY_URL,
+                    wait_until="domcontentloaded",
+                    timeout=self.PAGE_TIMEOUT_MS,
+                )
+            except Exception:
+                pass
+
+            for i in range(0, len(symbols), self.CHUNK_SIZE):
+                chunk = symbols[i : i + self.CHUNK_SIZE]
+                text = await self._fetch_text(page, ",".join(chunk))
+                if text is None:
+                    return SpiderResult(
+                        success=False,
+                        message=f"请求失败（第{i // self.CHUNK_SIZE + 1}批）",
+                    )
+
+                # 解析本批响应：有数据的解析入 quotes，空数据/畸形行记为 no_data
+                found: set[str] = set()
+                for symbol, fields in self._parse_lines(text):
+                    found.add(symbol)
+                    if fields is None or len(fields) < 32:
+                        no_data.append(symbol)
+                        continue
+                    quotes.append(self._parse_quote(symbol, fields))
+                # 响应中缺失的请求符号（理论上不发生）也记为 no_data
+                for symbol in chunk:
+                    if symbol not in found:
+                        no_data.append(symbol)
+
+        if not quotes:
+            return SpiderResult(
+                success=False,
+                message="未匹配到任何证券数据，请检查证券标识是否正确",
+            )
+
+        message = f"成功获取 {len(quotes)} 只证券的实时行情"
+        if no_data:
+            message += f"（{len(no_data)} 只无数据：{', '.join(no_data)}）"
+        if skipped:
+            message += f"（跳过 {len(skipped)} 个无效标识：{', '.join(skipped)}）"
+
+        return SpiderResult(
+            success=True,
+            data={
+                "total": len(quotes),
+                "quotes": quotes,
+                "skipped": skipped,
+                "no_data": no_data,
+            },
+            message=message,
+        )
 
     async def _fetch_text(self, page: Page, joined: str) -> str | None:
         """

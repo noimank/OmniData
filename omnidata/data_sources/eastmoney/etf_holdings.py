@@ -263,168 +263,164 @@ class ETFHoldingSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # 先访问基金档案主页建立 referrer 与浏览器指纹
-                referer = self.REFERRER_URL.format(code=params.fund_code)
-                await page.goto(referer)
+            # 先访问基金档案主页建立 referrer 与浏览器指纹
+            referer = self.REFERRER_URL.format(code=params.fund_code)
+            await page.goto(referer)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                pass
+
+            # 暖手：先访问 push2 域的页面，建立 push2 接口所需的 cookies
+            try:
+                await page.goto("https://quote.eastmoney.com/center/gridlist.html")
                 try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
                 except PlaywrightTimeoutError:
                     pass
+                # 暖手后再次回到 referer
+                await page.goto(referer)
+            except Exception:
+                pass
 
-                # 暖手：先访问 push2 域的页面，建立 push2 接口所需的 cookies
-                try:
-                    await page.goto("https://quote.eastmoney.com/center/gridlist.html")
-                    try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                    except PlaywrightTimeoutError:
-                        pass
-                    # 暖手后再次回到 referer
-                    await page.goto(referer)
-                except Exception:
-                    pass
+            # ── 1. 拉取持仓明细（FundArchivesDatas.aspx） ──
+            archive_response = await page.request.get(
+                self.ARCHIVE_URL,
+                params={
+                    "type": "jjcc",
+                    "code": params.fund_code,
+                    "topline": "200",
+                    "year": params.year or "",
+                    "month": "",
+                    "rt": f"0.{random.randint(100000, 999999)}",
+                },
+                headers={"Referer": referer},
+                timeout=30000,
+            )
+            if archive_response.status != 200:
+                return SpiderResult(
+                    success=False,
+                    message=f"请求持仓明细失败，状态码：{archive_response.status}",
+                )
 
-                # ── 1. 拉取持仓明细（FundArchivesDatas.aspx） ──
-                archive_response = await page.context.request.get(
-                    self.ARCHIVE_URL,
+            archive_text = await archive_response.text()
+            arryear = self._extract_archive_field(archive_text, "arryear") or []
+            content_html = self._extract_archive_field(archive_text, "content") or ""
+            if not content_html:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到基金代码 {params.fund_code} 的持仓数据，请检查基金代码是否正确",
+                )
+
+            # content 是多个 boxitem 的 HTML 片段
+            soup = BeautifulSoup(content_html, "lxml")
+            boxes = soup.find_all("div", class_="boxitem") or [soup]
+            if not boxes:
+                return SpiderResult(
+                    success=False,
+                    message=f"基金 {params.fund_code} 暂无持仓数据",
+                )
+
+            # ── 2. 汇总所有 box 的 secid 用于行情批量查询 ──
+            all_secids: list[str] = []
+            box_infos: list[tuple[list[dict[str, Any]], list[str], str]] = []
+            for box in boxes:
+                rows, secids, fund_name = self._parse_box(str(box))
+                if not rows:
+                    continue
+                box_infos.append((rows, secids, fund_name))
+                for sid in secids:
+                    if sid and sid not in all_secids:
+                        all_secids.append(sid)
+
+            if not box_infos:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到基金代码 {params.fund_code} 的持仓数据",
+                )
+
+            # ── 3. 批量查询行情（ulist.np/get） ──
+            quote_data: dict[str, dict] = {}
+            if all_secids:
+                quote_response = await page.request.get(
+                    self.QUOTE_URL,
                     params={
-                        "type": "jjcc",
-                        "code": params.fund_code,
-                        "topline": "200",
-                        "year": params.year or "",
-                        "month": "",
-                        "rt": f"0.{random.randint(100000, 999999)}",
+                        "fltt": "2",
+                        "invt": "2",
+                        "fields": self.ARCHIVE_FIELDS,
+                        "ut": "267f9ad526dbe6b0262ab19316f5a25b",
+                        "secids": ",".join(all_secids) + ",",
+                        "_": str(random.randint(10**12, 10**13 - 1)),
                     },
                     headers={"Referer": referer},
                     timeout=30000,
                 )
-                if archive_response.status != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"请求持仓明细失败，状态码：{archive_response.status}",
-                    )
+                if quote_response.status == 200:
+                    quote_payload = self._extract_jsonp(await quote_response.text())
+                    if quote_payload and quote_payload.get("rc") == 0:
+                        for item in (quote_payload.get("data") or {}).get("diff") or []:
+                            code = item.get("f12")
+                            market = item.get("f13")
+                            if code and market is not None:
+                                quote_data[f"{market}.{code}"] = item
 
-                archive_text = await archive_response.text()
-                arryear = self._extract_archive_field(archive_text, "arryear") or []
-                content_html = self._extract_archive_field(archive_text, "content") or ""
-                if not content_html:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到基金代码 {params.fund_code} 的持仓数据，请检查基金代码是否正确",
-                    )
-
-                # content 是多个 boxitem 的 HTML 片段
-                soup = BeautifulSoup(content_html, "lxml")
-                boxes = soup.find_all("div", class_="boxitem") or [soup]
-                if not boxes:
-                    return SpiderResult(
-                        success=False,
-                        message=f"基金 {params.fund_code} 暂无持仓数据",
-                    )
-
-                # ── 2. 汇总所有 box 的 secid 用于行情批量查询 ──
-                all_secids: list[str] = []
-                box_infos: list[tuple[list[dict[str, Any]], list[str], str]] = []
-                for box in boxes:
-                    rows, secids, fund_name = self._parse_box(str(box))
-                    if not rows:
-                        continue
-                    box_infos.append((rows, secids, fund_name))
-                    for sid in secids:
-                        if sid and sid not in all_secids:
-                            all_secids.append(sid)
-
-                if not box_infos:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到基金代码 {params.fund_code} 的持仓数据",
-                    )
-
-                # ── 3. 批量查询行情（ulist.np/get） ──
-                quote_data: dict[str, dict] = {}
-                if all_secids:
-                    quote_response = await page.context.request.get(
-                        self.QUOTE_URL,
-                        params={
-                            "fltt": "2",
-                            "invt": "2",
-                            "fields": self.ARCHIVE_FIELDS,
-                            "ut": "267f9ad526dbe6b0262ab19316f5a25b",
-                            "secids": ",".join(all_secids) + ",",
-                            "_": str(random.randint(10**12, 10**13 - 1)),
-                        },
-                        headers={"Referer": referer},
-                        timeout=30000,
-                    )
-                    if quote_response.status == 200:
-                        quote_payload = self._extract_jsonp(await quote_response.text())
-                        if quote_payload and quote_payload.get("rc") == 0:
-                            for item in (quote_payload.get("data") or {}).get("diff") or []:
-                                code = item.get("f12")
-                                market = item.get("f13")
-                                if code and market is not None:
-                                    quote_data[f"{market}.{code}"] = item
-
-                # ── 4. 构造按报告期组织的返回结果 ──
-                # 取最近一份报告期的基金名称作为主基金名
-                primary_fund_name = next((name for _, _, name in box_infos if name), "")
-                reports: list[dict[str, Any]] = []
-                for rows, secids, fund_name in box_infos:
-                    holdings = self._build_quote_map(rows, quote_data)
-                    reports.append(
-                        {
-                            "基金名称": fund_name or primary_fund_name,
-                            "持仓明细": holdings,
-                            "持仓总数": len(holdings),
-                        }
-                    )
-
-                message = (
-                    f"成功获取 {primary_fund_name or params.fund_code}({params.fund_code}) "
-                    f"持仓明细，共{len(reports)}个报告期"
+            # ── 4. 构造按报告期组织的返回结果 ──
+            # 取最近一份报告期的基金名称作为主基金名
+            primary_fund_name = next((name for _, _, name in box_infos if name), "")
+            reports: list[dict[str, Any]] = []
+            for rows, secids, fund_name in box_infos:
+                holdings = self._build_quote_map(rows, quote_data)
+                reports.append(
+                    {
+                        "基金名称": fund_name or primary_fund_name,
+                        "持仓明细": holdings,
+                        "持仓总数": len(holdings),
+                    }
                 )
 
-                result_data: Any = {
+            message = (
+                f"成功获取 {primary_fund_name or params.fund_code}({params.fund_code}) "
+                f"持仓明细，共{len(reports)}个报告期"
+            )
+
+            result_data: Any = {
+                "基金代码": params.fund_code,
+                "基金名称": primary_fund_name,
+                "可用年份": arryear,
+                "报告期列表": reports,
+            }
+            if len(reports) == 1:
+                # 单报告期时直接展开明细，便于直接消费
+                single = reports[0]
+                result_data = {
                     "基金代码": params.fund_code,
-                    "基金名称": primary_fund_name,
+                    "基金名称": single["基金名称"],
                     "可用年份": arryear,
-                    "报告期列表": reports,
+                    "持仓明细": single["持仓明细"],
+                    "持仓总数": single["持仓总数"],
                 }
-                if len(reports) == 1:
-                    # 单报告期时直接展开明细，便于直接消费
-                    single = reports[0]
-                    result_data = {
-                        "基金代码": params.fund_code,
-                        "基金名称": single["基金名称"],
-                        "可用年份": arryear,
-                        "持仓明细": single["持仓明细"],
-                        "持仓总数": single["持仓总数"],
-                    }
-                    message = (
-                        f"成功获取 {single['基金名称'] or params.fund_code}({params.fund_code}) "
-                        f"持仓明细，共{single['持仓总数']}条"
-                    )
+                message = (
+                    f"成功获取 {single['基金名称'] or params.fund_code}({params.fund_code}) "
+                    f"持仓明细，共{single['持仓总数']}条"
+                )
 
-                if params.data_format in ("markdown", "string"):
-                    # 单报告期直接使用持仓明细；多报告期展开为长表
-                    if "持仓明细" in result_data:
-                        rows_for_df = result_data["持仓明细"]
-                    else:
-                        rows_for_df = []
-                        for r in result_data.get("报告期列表", []):
-                            for h in r["持仓明细"]:
-                                rows_for_df.append({"报告期": r["基金名称"], **h})
-                    df = pd.DataFrame(rows_for_df)
-                    formatter = df.to_markdown if params.data_format == "markdown" else df.to_string
-                    return SpiderResult(
-                        success=True,
-                        data=formatter(index=False) if not df.empty else "无数据",
-                        message=message,
-                    )
-                return SpiderResult(success=True, data=result_data, message=message)
-
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            if params.data_format in ("markdown", "string"):
+                # 单报告期直接使用持仓明细；多报告期展开为长表
+                if "持仓明细" in result_data:
+                    rows_for_df = result_data["持仓明细"]
+                else:
+                    rows_for_df = []
+                    for r in result_data.get("报告期列表", []):
+                        for h in r["持仓明细"]:
+                            rows_for_df.append({"报告期": r["基金名称"], **h})
+                df = pd.DataFrame(rows_for_df)
+                formatter = df.to_markdown if params.data_format == "markdown" else df.to_string
+                return SpiderResult(
+                    success=True,
+                    data=formatter(index=False) if not df.empty else "无数据",
+                    message=message,
+                )
+            return SpiderResult(success=True, data=result_data, message=message)

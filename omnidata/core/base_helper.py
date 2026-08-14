@@ -134,17 +134,17 @@ class BaseHelper(ABC):
         **kwargs: Any,
     ) -> BrowserContext:
         """
-        获取浏览器上下文（由 ContextPool 自动管理生命周期）
+        获取浏览器上下文（按命名空间缓存复用，生命周期完全由内核管理）
 
-        Context 会被自动复用，ContextPool 会自动处理：
-        - LRU 淘汰（池满时）
-        - 健康检查（清理不健康的 context）
-        - 空闲超时（5分钟未使用自动关闭）
+        内核自动处理：
+        - 命名空间级复用（同一数据源共享一个 context）
+        - 空闲超时（10 分钟未使用自动回收）
         - 状态加载（从 Redis 自动加载已保存的 cookies）
+        - 浏览器整体回收与崩溃自愈（对上层无感）
 
         ⚠️ 重要：
         - 获取 context 时会自动加载 Redis 中的状态（如果存在）
-        - 释放 context 时不会自动保存状态
+        - 无需也不应手动关闭 context
         - 如需保存状态（如登录成功），请显式调用 save_context_state()
 
         Args:

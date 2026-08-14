@@ -182,72 +182,66 @@ class StockSelectionSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                # 先访问选股页面设置必要的 cookies
-                await page.goto("https://xuangu.eastmoney.com/", wait_until="networkidle")
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            # 先访问选股页面设置必要的 cookies
+            await page.goto("https://xuangu.eastmoney.com/", wait_until="networkidle")
 
-                # 构建请求体
-                timestamp = str(int(time.time() * 1000)) + "421"
-                request_body = {
-                    "needAmbiguousSuggest": True,
-                    "pageSize": params.page_size,
-                    "pageNo": params.page_num,
-                    "fingerprint": self._generate_fingerprint(),
-                    "matchWord": "",
-                    "shareToGuba": False,
-                    "timestamp": timestamp,
-                    "requestId": self._generate_request_id(),
-                    "removedConditionIdList": [],
-                    "ownSelectAll": False,
-                    "needCorrect": True,
-                    "client": "WEB",
-                    "product": "",
-                    "needShowStockNum": False,
-                    "biz": "web_ai_select_stocks",
-                    "gids": [],
-                    "dxInfoNew": [],
-                    "keyWordNew": params.query_text,
-                    "customDataNew": f'[{{"type":"text","value":"{params.query_text}","extra":""}}]',
-                }
+            # 构建请求体
+            timestamp = str(int(time.time() * 1000)) + "421"
+            request_body = {
+                "needAmbiguousSuggest": True,
+                "pageSize": params.page_size,
+                "pageNo": params.page_num,
+                "fingerprint": self._generate_fingerprint(),
+                "matchWord": "",
+                "shareToGuba": False,
+                "timestamp": timestamp,
+                "requestId": self._generate_request_id(),
+                "removedConditionIdList": [],
+                "ownSelectAll": False,
+                "needCorrect": True,
+                "client": "WEB",
+                "product": "",
+                "needShowStockNum": False,
+                "biz": "web_ai_select_stocks",
+                "gids": [],
+                "dxInfoNew": [],
+                "keyWordNew": params.query_text,
+                "customDataNew": f'[{{"type":"text","value":"{params.query_text}","extra":""}}]',
+            }
 
-                # 设置请求头
-                headers = {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/plain, */*",
-                    "curPage": "stockResult",
-                    "jumpSource": "api",
-                }
+            # 设置请求头
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/plain, */*",
+                "curPage": "stockResult",
+                "jumpSource": "api",
+            }
 
-                # 发送 POST 请求
-                response = await page.request.post(
-                    self.API_URL, data=request_body, headers=headers, timeout=30000
-                )
+            # 发送 POST 请求
+            response = await page.request.post(
+                self.API_URL, data=request_body, headers=headers, timeout=30000
+            )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
 
-                # 解析响应
-                data = await response.json()
+            # 解析响应
+            data = await response.json()
 
-                # 检查返回状态
-                if data.get("code") != "100":
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                    )
-
-                # 解析数据
-                result_data = self._parse_response(data, params.query_text)
-
+            # 检查返回状态
+            if data.get("code") != "100":
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取选股结果，共 {result_data['total_count']} 条，"
-                    f"当前第 {params.page_num} 页，返回 {len(result_data['stocks'])} 条",
+                    success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 解析数据
+            result_data = self._parse_response(data, params.query_text)
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=f"成功获取选股结果，共 {result_data['total_count']} 条，"
+                f"当前第 {params.page_num} 页，返回 {len(result_data['stocks'])} 条",
+            )

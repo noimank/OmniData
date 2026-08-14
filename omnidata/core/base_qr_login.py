@@ -2,6 +2,7 @@
 二维码登录基类模块
 """
 
+import asyncio
 import base64
 import logging
 from abc import abstractmethod
@@ -62,7 +63,7 @@ class BaseQRLogin(BaseHelper):
 
             async def is_login(self) -> bool:
                 # 使用独立的 page/context 验证是否已登录
-                async with self.get_page_context() as page:
+                async with self.new_page(namespace="eastmoney") as page:
                     await page.goto("https://example.com")
                     return await page.query_selector(".user-avatar") is not None
         ```
@@ -75,18 +76,17 @@ class BaseQRLogin(BaseHelper):
     author: str = ""
     platform: str = ""
 
-    # 二维码登录专用的 context 和 page（由 get_qrcode 和 verify_login_state 共用）
-    _qr_context: Any = None
-    _qr_page: Page | None = None
-
-    # 登录状态缓存（实例变量，在 __init__ 中初始化）
-    _login_status: QRLoginState
-
     def __init__(
         self, browser_context_pool: BrowserContextPool | None = None, config: Any | None = None
     ):
         super().__init__(browser_context_pool, config)
-        # 初始化实例变量，避免类变量共享
+        # 二维码登录专用的 context 和 page（由 get_qrcode 和 verify_login_state 共用）
+        # 实例变量，避免类变量共享
+        self._qr_context: Any = None
+        self._qr_page: Page | None = None
+        # 保护 _qr_page 生命周期，防止并发 get_qrcode 产生孤儿 page
+        self._lock = asyncio.Lock()
+        # 登录状态缓存
         self._login_status = QRLoginState(status="not_logged_in", message="默认未登录状态")
 
     @abstractmethod
@@ -148,7 +148,7 @@ class BaseQRLogin(BaseHelper):
 
         注意:
             使用独立的 page/context，与 get_qrcode 和 verify_login_state 分离
-            可通过 self.get_page_context() 获取独立的页面上下文
+            可通过 self.new_page(namespace) 获取独立的页面上下文
         """
         raise NotImplementedError
 
@@ -166,20 +166,32 @@ class BaseQRLogin(BaseHelper):
         获取缓存的登录状态
 
         Returns:
-            缓存的登录状态，如果没有缓存则返回 None
+            缓存的登录状态（实例创建后默认为 not_logged_in）
         """
         return self._login_status
 
+    def _qr_page_alive(self) -> bool:
+        """
+        二维码会话页面是否仍然可用。
+
+        处理浏览器池回收后残留的悬空引用（page 已被池关闭但引用未清空）。
+        """
+        return self._qr_page is not None and not self._qr_page.is_closed()
+
+    def has_active_qr_session(self) -> bool:
+        """是否存在进行中的二维码登录会话（供刷新任务判断是否可安全清理）"""
+        return self._qr_page_alive()
+
     async def close(self) -> None:
-        """清理资源"""
+        """清理资源（幂等，可安全重复调用；对已被池关闭的 page 同样安全）"""
 
         # 关闭 page
-        if self._qr_page:
+        if self._qr_page is not None:
             try:
                 if not self._qr_page.is_closed():
                     await self._qr_page.close()
             except Exception:
-                pass  # page 可能已经被关闭
+                pass  # page 可能已经被关闭（如浏览器池回收）
 
         self._qr_page = None
         # 不再引用context，但是不关闭

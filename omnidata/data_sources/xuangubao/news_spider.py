@@ -43,57 +43,53 @@ class XuanguBaoFlashNewsSpider(BaseWebSpider):
     params_model = XuanguBaoFlashNewsParams
 
     async def crawl(self, params: XuanguBaoFlashNewsParams) -> SpiderResult:
-        try:
-            async with self.new_page("xuangubao") as page:
-                # 先访问页面建立上下文
-                await page.goto("https://xuangutong.com.cn/live")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+        async with self.new_page("xuangubao") as page:
+            # 先访问页面建立上下文
+            await page.goto("https://xuangutong.com.cn/live")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                headers = {
-                    "x-appgo-platform": "device=pc",
-                    "x-track-info": '{"AppId":"com.xuangutong.web","AppVersion":"1.0.0"}',
-                    "Referer": "https://xuangutong.com.cn/live",
-                }
+            headers = {
+                "x-appgo-platform": "device=pc",
+                "x-track-info": '{"AppId":"com.xuangutong.web","AppVersion":"1.0.0"}',
+                "Referer": "https://xuangutong.com.cn/live",
+            }
 
-                # 尝试 newsflash 接口
-                response = await page.request.get(
-                    "https://baoer-api.xuangubao.com.cn/api/v6/message/newsflash",
-                    params={
-                        "limit": params.limit,
-                        "subj_ids": "9,10,723,35,469",
-                        "platform": "pcweb",
-                    },
-                    headers=headers,
-                    timeout=15000,
-                )
+            # 尝试 newsflash 接口
+            response = await page.request.get(
+                "https://baoer-api.xuangubao.com.cn/api/v6/message/newsflash",
+                params={
+                    "limit": params.limit,
+                    "subj_ids": "9,10,723,35,469",
+                    "platform": "pcweb",
+                },
+                headers=headers,
+                timeout=15000,
+            )
 
-                json_data = await response.json()
+            json_data = await response.json()
 
-                # newsflash 需要登录，回退使用研报快讯接口
-                if json_data.get("code") != 20000:
-                    return await self._fetch_reports(page, params, headers)
+            # newsflash 需要登录，回退使用研报快讯接口
+            if json_data.get("code") != 20000:
+                return await self._fetch_reports(page, params, headers)
 
-                messages = json_data.get("data", {}).get("messages", [])
-                if not messages:
-                    return await self._fetch_reports(page, params, headers)
+            messages = json_data.get("data", {}).get("messages", [])
+            if not messages:
+                return await self._fetch_reports(page, params, headers)
 
-                news_list = [self._parse_news_item(item) for item in messages]
+            news_list = [self._parse_news_item(item) for item in messages]
 
-                return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(news_list),
-                        "news_list": news_list,
-                    },
-                    message=f"成功获取 {len(news_list)} 条快讯",
-                )
-
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(news_list),
+                    "news_list": news_list,
+                },
+                message=f"成功获取 {len(news_list)} 条快讯",
+            )
 
     async def _fetch_reports(self, page, params, headers):
         """使用公开的研报快讯接口作为数据源"""

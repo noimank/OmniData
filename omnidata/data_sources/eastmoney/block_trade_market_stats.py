@@ -57,96 +57,88 @@ class BlockTradeMarketStatsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://data.eastmoney.com/dzjy/dzjy_sctj.html")
-                # 构建请求参数
-                request_params = {
-                    "reportName": "PRT_BLOCKTRADE_MARKET_STA",
-                    "columns": "TRADE_DATE,SZ_INDEX,SZ_CHANGE_RATE,BLOCKTRADE_DEAL_AMT,PREMIUM_DEAL_AMT,PREMIUM_RATIO,DISCOUNT_DEAL_AMT,DISCOUNT_RATIO",
-                    "sortColumns": "TRADE_DATE",
-                    "sortTypes": "-1",
-                    "pageNumber": "1",
-                    "pageSize": str(params.limit),
-                    "source": "WEB",
-                    "client": "WEB",
-                }
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://data.eastmoney.com/dzjy/dzjy_sctj.html")
+            # 构建请求参数
+            request_params = {
+                "reportName": "PRT_BLOCKTRADE_MARKET_STA",
+                "columns": "TRADE_DATE,SZ_INDEX,SZ_CHANGE_RATE,BLOCKTRADE_DEAL_AMT,PREMIUM_DEAL_AMT,PREMIUM_RATIO,DISCOUNT_DEAL_AMT,DISCOUNT_RATIO",
+                "sortColumns": "TRADE_DATE",
+                "sortTypes": "-1",
+                "pageNumber": "1",
+                "pageSize": str(params.limit),
+                "source": "WEB",
+                "client": "WEB",
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 获取响应文本（JSONP 格式）
+            response_text = await response.text()
+
+            # 解析 JSONP 响应：jQuery1123...({...})
+            json_match = re.search(r"jQuery\d+\((.*)\);?", response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # 兜底：尝试从第一个 '(' 和最后一个 ')' 之间提取
+                start_idx = response_text.find("(")
+                end_idx = response_text.rfind(")")
+                if start_idx != -1 and end_idx != -1:
+                    json_str = response_text[start_idx + 1 : end_idx]
+                else:
+                    json_str = response_text
+
+            import json
+
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
+
+            # 检查返回状态
+            # API返回格式: {"version": "...", "result": {"pages": N, "data": [...]}}
+            result = data.get("result", {})
+            if not result or not result.get("data"):
+                return SpiderResult(
+                    success=False, message=f"获取数据失败：{data.get('message', '未知错误')}"
                 )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            # 解析数据
+            result_data = self._parse_block_trade_data(result["data"])
 
-                # 获取响应文本（JSONP 格式）
-                response_text = await response.text()
+            if not result_data:
+                return SpiderResult(success=False, message="未获取到大宗交易统计数据")
 
-                # 解析 JSONP 响应：jQuery1123...({...})
-                json_match = re.search(r"jQuery\d+\((.*)\);?", response_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(1)
-                else:
-                    # 兜底：尝试从第一个 '(' 和最后一个 ')' 之间提取
-                    start_idx = response_text.find("(")
-                    end_idx = response_text.rfind(")")
-                    if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1 : end_idx]
-                    else:
-                        json_str = response_text
+            # 按日期降序排列（最新的在前）
+            df = pd.DataFrame(result_data)
+            df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
 
-                import json
-
-                try:
-                    data = json.loads(json_str)
-                except json.JSONDecodeError as e:
-                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
-
-                # 检查返回状态
-                # API返回格式: {"version": "...", "result": {"pages": N, "data": [...]}}
-                result = data.get("result", {})
-                if not result or not result.get("data"):
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('message', '未知错误')}"
-                    )
-
-                # 解析数据
-                result_data = self._parse_block_trade_data(result["data"])
-
-                if not result_data:
-                    return SpiderResult(success=False, message="未获取到大宗交易统计数据")
-
-                # 按日期降序排列（最新的在前）
-                df = pd.DataFrame(result_data)
-                df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
-
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=f"成功获取大宗交易市场统计 {len(result_data)} 条数据",
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=f"成功获取大宗交易市场统计 {len(result_data)} 条数据",
-                    )
-
-                # 默认返回 dict 格式
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data=df.to_dict(orient="records"),
+                    data=df.to_markdown(),
+                    message=f"成功获取大宗交易市场统计 {len(result_data)} 条数据",
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=f"成功获取大宗交易市场统计 {len(result_data)} 条数据",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data=df.to_dict(orient="records"),
+                message=f"成功获取大宗交易市场统计 {len(result_data)} 条数据",
+            )
 
     def _parse_block_trade_data(self, data: list) -> list[dict]:
         """

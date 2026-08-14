@@ -2,8 +2,7 @@
 东方财富网行业板块资金流 Spider
 获取行业板块资金流向排行数据
 
-通过直接调用 push2.eastmoney.com JSONP 接口获取数据（参考 etf_holdings.py），
-避免在浏览器 evaluate(fetch()) 中因 CORS/网络抖动偶发 Failed to fetch。
+通过统一客户端 _push2_client 在东财页面内 fetch push2 JSONP 接口获取数据。
 """
 
 import random
@@ -36,7 +35,7 @@ class IndustrySectorFlowSpider(BaseWebSpider):
 
     name = "eastmoney_industry_sector_flow"
     description = "获取行业板块最新资金流向排行数据"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
     params_model = IndustrySectorFlowParams
@@ -62,98 +61,84 @@ class IndustrySectorFlowSpider(BaseWebSpider):
     }
 
     async def crawl(self, params: IndustrySectorFlowParams) -> SpiderResult:
-        try:
-            config = self.RANK_CONFIG[params.rank_type]
+        config = self.RANK_CONFIG[params.rank_type]
 
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                captured_ut = {}
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto(self.PAGE_URL)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto(self.PAGE_URL)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # ── 暖手 push2 域：建立 push2 接口所需的 cookies（参考 etf_holdings.py） ──
-                try:
-                    await page.goto("https://quote.eastmoney.com/center/gridlist.html")
-                    try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                    except PlaywrightTimeoutError:
-                        pass
-                    await page.goto(self.PAGE_URL)
-                except Exception:
-                    pass
+            base_api_params = {
+                "fid": config["fid"],
+                "po": "1",
+                "pz": "50",
+                "pn": "1",
+                "np": "1",
+                "fltt": "2",
+                "invt": "2",
+                "ut": ut,
+                "fs": "m:90+s:4",
+                "fields": config["fields"],
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                base_api_params = {
-                    "fid": config["fid"],
-                    "po": "1",
-                    "pz": "50",
-                    "pn": "1",
-                    "np": "1",
-                    "fltt": "2",
-                    "invt": "2",
-                    "ut": ut,
-                    "fs": "m:90+s:4",
-                    "fields": config["fields"],
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            all_items: list[dict] = []
+            page_num = 1
 
-                all_items: list[dict] = []
-                page_num = 1
-
-                while True:
-                    api_params = {**base_api_params, "pn": str(page_num)}
-                    result = await fetch_with_retry(
-                        page, self.API_URL, api_params, referer=self.PAGE_URL, response_type="json"
-                    )
-
-                    if result is None or result.get("rc") != 0:
-                        break
-
-                    diff = result.get("data", {}).get("diff", [])
-                    if not diff:
-                        break
-
-                    all_items.extend(diff)
-                    if len(diff) < 50:
-                        break
-
-                    page_num += 1
-                    if page_num > 3 or len(all_items) >= params.limit:
-                        break
-
-                    await page.wait_for_timeout(random.randint(500, 1500))
-
-                data_list = [
-                    self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
-                ]
-                df = pd.DataFrame(data_list)
-
-                result_data = df.to_dict(orient="records")
-                if params.data_format == "markdown":
-                    result_data = df.to_markdown()
-                elif params.data_format == "string":
-                    result_data = df.to_string()
-
-                return SpiderResult(
-                    success=True, data=result_data, message=f"成功获取 {len(data_list)} 条数据"
+            while True:
+                api_params = {**base_api_params, "pn": str(page_num)}
+                result = await fetch_with_retry(
+                    page, self.API_URL, api_params, response_type="json"
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"数据爬取失败：{str(e)}")
+
+                if result is None or result.get("rc") != 0:
+                    break
+
+                diff = result.get("data", {}).get("diff", [])
+                if not diff:
+                    break
+
+                all_items.extend(diff)
+                if len(diff) < 50:
+                    break
+
+                page_num += 1
+                if page_num > 3 or len(all_items) >= params.limit:
+                    break
+
+                await page.wait_for_timeout(random.randint(500, 1500))
+
+            data_list = [
+                self._parse_item(item, params.rank_type) for item in all_items[: params.limit]
+            ]
+            df = pd.DataFrame(data_list)
+
+            result_data = df.to_dict(orient="records")
+            if params.data_format == "markdown":
+                result_data = df.to_markdown()
+            elif params.data_format == "string":
+                result_data = df.to_string()
+
+            return SpiderResult(
+                success=True, data=result_data, message=f"成功获取 {len(data_list)} 条数据"
+            )
 
     def _parse_item(self, item: dict, rank_type: str) -> dict:
         """解析数据项"""

@@ -78,44 +78,43 @@ class FundIndustryAllocationSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # 先访问基金档案主页建立 referrer，避免反爬
-                await page.goto(self.REFERRER_URL)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            # 先访问基金档案主页建立 referrer，避免反爬
+            await page.goto(self.REFERRER_URL)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                # 导航到行业配置页面
-                page_url = self.PAGE_URL.format(code=params.fund_code)
-                await page.goto(page_url)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=20000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            # 导航到行业配置页面
+            page_url = self.PAGE_URL.format(code=params.fund_code)
+            await page.goto(page_url)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                # 等待 #hypztable 容器渲染完毕
-                await page.wait_for_selector(
-                    "#hypztable table",
-                    state="attached",
-                    timeout=10000,
-                )
+            # 等待 #hypztable 容器渲染完毕
+            await page.wait_for_selector(
+                "#hypztable table",
+                state="attached",
+                timeout=10000,
+            )
 
-                # 等待年份下拉框渲染完毕
-                await page.wait_for_selector(
-                    "select#hypz option",
-                    state="attached",
-                    timeout=10000,
-                )
+            # 等待年份下拉框渲染完毕
+            await page.wait_for_selector(
+                "select#hypz option",
+                state="attached",
+                timeout=10000,
+            )
 
-                # 提取基金名称
-                fund_name = await page.evaluate(
-                    """
+            # 提取基金名称
+            fund_name = await page.evaluate(
+                """
                     () => {
                         const h4 = document.querySelector('h4');
                         if (!h4) return '';
@@ -123,41 +122,41 @@ class FundIndustryAllocationSpider(BaseWebSpider):
                         return h4.childNodes[0]?.textContent?.trim() || h4.textContent.trim();
                     }
                     """
-                )
+            )
 
-                # 提取可用年份
-                arryear = await page.evaluate(
-                    """
+            # 提取可用年份
+            arryear = await page.evaluate(
+                """
                     () => {
                         const opts = document.querySelectorAll('select#hypz option');
                         return Array.from(opts).map(o => o.value);
                     }
                     """
-                )
+            )
 
-                # 如果指定了年份，切换年度下拉框
-                if params.year:
-                    if params.year not in arryear:
-                        return SpiderResult(
-                            success=False,
-                            message=f"年份 {params.year} 不可用，可用年份：{arryear}",
-                        )
-                    if arryear[0] != params.year:
-                        await page.select_option("select#hypz", params.year)
-                        # 等待下拉框值已切换
-                        await page.wait_for_function(
-                            """
+            # 如果指定了年份，切换年度下拉框
+            if params.year:
+                if params.year not in arryear:
+                    return SpiderResult(
+                        success=False,
+                        message=f"年份 {params.year} 不可用，可用年份：{arryear}",
+                    )
+                if arryear[0] != params.year:
+                    await page.select_option("select#hypz", params.year)
+                    # 等待下拉框值已切换
+                    await page.wait_for_function(
+                        """
                             (year) => {
                                 const sel = document.querySelector('select#hypz');
                                 return sel && sel.value === year;
                             }
                             """,
-                            arg=params.year,
-                            timeout=5000,
-                        )
-                        # 等待 #hypztable 内容重新渲染（DOM变化）
-                        await page.wait_for_function(
-                            """
+                        arg=params.year,
+                        timeout=5000,
+                    )
+                    # 等待 #hypztable 内容重新渲染（DOM变化）
+                    await page.wait_for_function(
+                        """
                             () => {
                                 const container = document.querySelector('#hypztable');
                                 if (!container) return false;
@@ -169,103 +168,97 @@ class FundIndustryAllocationSpider(BaseWebSpider):
                                 );
                             }
                             """,
-                            timeout=10000,
-                        )
+                        timeout=10000,
+                    )
 
-                # 获取 #hypztable 容器的完整渲染后 HTML
-                html_content = await page.evaluate(
-                    """
+            # 获取 #hypztable 容器的完整渲染后 HTML
+            html_content = await page.evaluate(
+                """
                     () => {
                         const container = document.querySelector('#hypztable');
                         return container ? container.innerHTML : '';
                     }
                     """
-                )
+            )
 
-                # 当前选中的年份
-                current_year = await page.evaluate(
-                    """
+            # 当前选中的年份
+            current_year = await page.evaluate(
+                """
                     () => {
                         const sel = document.querySelector('select#hypz');
                         return sel ? sel.value : '';
                     }
                     """
+            )
+
+            # 解析表格
+            report_groups = self._parse_allocation_html(html_content)
+            if not report_groups:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到基金代码 {params.fund_code} 的行业配置数据",
                 )
 
-                # 解析表格
-                report_groups = self._parse_allocation_html(html_content)
-                if not report_groups:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到基金代码 {params.fund_code} 的行业配置数据",
+            # 展平所有报告期的数据，每条记录附带报告期描述与截止日期
+            allocations_list = []
+            for group in report_groups:
+                for item in group["items"]:
+                    allocations_list.append(
+                        {
+                            "报告期": group["report_label"],
+                            "截止日期": group["report_date"],
+                            "序号": item["seq"],
+                            "行业类别": item["industry_name"],
+                            "占净值比例": item["nav_ratio"],
+                            "市值_万元": item["market_value_wan"],
+                            # 仅最新报告期（含"行业变动详情"列）才有值
+                            "行业变动详情链接": item.get("change_detail_url", ""),
+                        }
                     )
 
-                # 展平所有报告期的数据，每条记录附带报告期描述与截止日期
-                allocations_list = []
-                for group in report_groups:
-                    for item in group["items"]:
-                        allocations_list.append(
-                            {
-                                "报告期": group["report_label"],
-                                "截止日期": group["report_date"],
-                                "序号": item["seq"],
-                                "行业类别": item["industry_name"],
-                                "占净值比例": item["nav_ratio"],
-                                "市值_万元": item["market_value_wan"],
-                                # 仅最新报告期（含"行业变动详情"列）才有值
-                                "行业变动详情链接": item.get("change_detail_url", ""),
-                            }
-                        )
+            result_data = {
+                "基金代码": params.fund_code,
+                "基金名称": fund_name,
+                "当前年份": current_year,
+                "可用年份": arryear,
+                "行业配置": allocations_list,
+                "配置记录数": len(allocations_list),
+                "报告期数": len(report_groups),
+            }
 
-                result_data = {
-                    "基金代码": params.fund_code,
-                    "基金名称": fund_name,
-                    "当前年份": current_year,
-                    "可用年份": arryear,
-                    "行业配置": allocations_list,
-                    "配置记录数": len(allocations_list),
-                    "报告期数": len(report_groups),
-                }
+            # 格式化输出
+            year_label = f"({current_year}年)" if current_year else ""
+            if len(report_groups) == 1:
+                message = (
+                    f"成功获取 {fund_name}({params.fund_code}) {year_label} 行业配置，"
+                    f"共{len(allocations_list)}个行业"
+                )
+            else:
+                message = (
+                    f"成功获取 {fund_name}({params.fund_code}) {year_label} 行业配置，"
+                    f"共{len(report_groups)}个报告期，{len(allocations_list)}条记录"
+                )
 
-                # 格式化输出
-                year_label = f"({current_year}年)" if current_year else ""
-                if len(report_groups) == 1:
-                    message = (
-                        f"成功获取 {fund_name}({params.fund_code}) {year_label} 行业配置，"
-                        f"共{len(allocations_list)}个行业"
-                    )
-                else:
-                    message = (
-                        f"成功获取 {fund_name}({params.fund_code}) {year_label} 行业配置，"
-                        f"共{len(report_groups)}个报告期，{len(allocations_list)}条记录"
-                    )
-
-                if params.data_format == "markdown":
-                    df = pd.DataFrame(allocations_list)
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(index=False),
-                        message=message,
-                    )
-                elif params.data_format == "string":
-                    df = pd.DataFrame(allocations_list)
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(index=False),
-                        message=message,
-                    )
-                else:
-                    return SpiderResult(
-                        success=True,
-                        data=result_data,
-                        message=message,
-                    )
-
-        except Exception as e:
-            return SpiderResult(
-                success=False,
-                message=f"爬取失败：{str(e)}",
-            )
+            if params.data_format == "markdown":
+                df = pd.DataFrame(allocations_list)
+                return SpiderResult(
+                    success=True,
+                    data=df.to_markdown(index=False),
+                    message=message,
+                )
+            elif params.data_format == "string":
+                df = pd.DataFrame(allocations_list)
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(index=False),
+                    message=message,
+                )
+            else:
+                return SpiderResult(
+                    success=True,
+                    data=result_data,
+                    message=message,
+                )
 
     def _parse_allocation_html(self, html_content: str) -> list[dict[str, Any]]:
         """

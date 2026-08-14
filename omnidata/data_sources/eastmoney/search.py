@@ -56,104 +56,101 @@ class EastMoneySearchSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                # 用于存储拦截到的数据
-                captured_response = None
+        async with self.new_page("eastmoney") as page:
+            # 用于存储拦截到的数据
+            captured_response = None
 
-                # 拦截 API 请求
-                async def handle_route(route):
-                    """拦截并处理 API 请求"""
-                    nonlocal captured_response
-                    try:
-                        url = route.request.url
-                        # 拦截搜索 API,可能会有多个，但只要有title字段就是有效的
-                        if "search-api-web.eastmoney.com/search/jsonp" in url:
-                            response = await route.fetch()
-                            body = await response.body()
-                            # 检查是否为 JSONP 响应，是包含title的通用搜索类型
-                            api_data_temp = self._parse_jsonp(body)
-                            results_t = api_data_temp.get("result", {})
-                            data_valid = False
-                            for k, v in results_t.items():
-                                if isinstance(v, list):
-                                    if len(v) > 0:
-                                        item = v[0]
-                                        if isinstance(item, dict):
-                                            if item.get("title"):
-                                                data_valid = True
-                                                break
-
-                            if data_valid:
-                                captured_response = body
-                            # 中断请求，避免页面继续加载
-                            # await route.abort()
-                            await route.continue_()
-                        else:
-                            await route.continue_()
-                    except Exception:
-                        await route.continue_()
-
-                # 设置路由拦截
-                await page.route("**/*", handle_route)
-
-                # 获取搜索类型配置（智能解析无需手动指定 result_field）
-                _, search_url = self.SEARCH_TYPE_MAP.get(
-                    params.search_type, self.SEARCH_TYPE_MAP["news"]
-                )
-
-                # 构建搜索 URL
-                url = f"{search_url}?keyword={params.keyword}"
-                await page.goto(url)
-
-                # 等待 API 响应被拦截（最多等待 10 秒）
+            # 拦截 API 请求
+            async def handle_route(route):
+                """拦截并处理 API 请求"""
+                nonlocal captured_response
                 try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+                    url = route.request.url
+                    # 拦截搜索 API,可能会有多个，但只要有title字段就是有效的
+                    if "search-api-web.eastmoney.com/search/jsonp" in url:
+                        response = await route.fetch()
+                        body = await response.body()
+                        # 检查是否为 JSONP 响应，是包含title的通用搜索类型
+                        api_data_temp = self._parse_jsonp(body)
+                        results_t = api_data_temp.get("result", {})
+                        data_valid = False
+                        for k, v in results_t.items():
+                            if isinstance(v, list):
+                                if len(v) > 0:
+                                    item = v[0]
+                                    if isinstance(item, dict):
+                                        if item.get("title"):
+                                            data_valid = True
+                                            break
 
-                # 检查是否成功获取数据
-                if captured_response is None:
-                    return SpiderResult(success=False, message="获取数据失败，该查询条件下无结果")
+                        if data_valid:
+                            captured_response = body
+                        # 中断请求，避免页面继续加载
+                        # await route.abort()
+                        await route.continue_()
+                    else:
+                        await route.continue_()
+                except Exception:
+                    await route.continue_()
 
-                # 解析 JSONP 响应
-                api_data = self._parse_jsonp(captured_response)
-                if api_data is None:
-                    return SpiderResult(success=False, message="解析数据失败：无法解析 JSONP 响应")
+            # 设置路由拦截
+            await page.route("**/*", handle_route)
 
-                # 检查响应状态
-                if api_data.get("code") != 0:
-                    return SpiderResult(
-                        success=False,
-                        message=f"API 返回错误: {api_data.get('msg', 'Unknown error')}",
-                    )
+            # 获取搜索类型配置（智能解析无需手动指定 result_field）
+            _, search_url = self.SEARCH_TYPE_MAP.get(
+                params.search_type, self.SEARCH_TYPE_MAP["news"]
+            )
 
-                # 提取搜索结果（智能递归解析，无需手动指定 result_field）
-                results_list = self._find_result_items(api_data)
+            # 构建搜索 URL
+            url = f"{search_url}?keyword={params.keyword}"
+            await page.goto(url)
 
-                if not results_list:
-                    return SpiderResult(
-                        success=True, data=[], message=f"未找到关键词 '{params.keyword}' 的搜索结果"
-                    )
+            # 等待 API 响应被拦截（最多等待 10 秒）
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                # 转换为统一格式（只保留序号、标题、内容、时间）
-                results = []
-                for index, item in enumerate(results_list, 1):
-                    results.append(
-                        {
-                            "序号": index,
-                            "标题": self._clean_html(item.get("title", "")),
-                            "内容": self._clean_html(item.get("content", "")),
-                            "时间": item.get("date", ""),
-                        }
-                    )
+            # 检查是否成功获取数据
+            if captured_response is None:
+                return SpiderResult(success=False, message="获取数据失败，该查询条件下无结果")
 
+            # 解析 JSONP 响应
+            api_data = self._parse_jsonp(captured_response)
+            if api_data is None:
+                return SpiderResult(success=False, message="解析数据失败：无法解析 JSONP 响应")
+
+            # 检查响应状态
+            if api_data.get("code") != 0:
                 return SpiderResult(
-                    success=True, data=results, message=f"成功获取 {len(results)} 条搜索结果"
+                    success=False,
+                    message=f"API 返回错误: {api_data.get('msg', 'Unknown error')}",
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"搜索失败: {str(e)}")
+
+            # 提取搜索结果（智能递归解析，无需手动指定 result_field）
+            results_list = self._find_result_items(api_data)
+
+            if not results_list:
+                return SpiderResult(
+                    success=True, data=[], message=f"未找到关键词 '{params.keyword}' 的搜索结果"
+                )
+
+            # 转换为统一格式（只保留序号、标题、内容、时间）
+            results = []
+            for index, item in enumerate(results_list, 1):
+                results.append(
+                    {
+                        "序号": index,
+                        "标题": self._clean_html(item.get("title", "")),
+                        "内容": self._clean_html(item.get("content", "")),
+                        "时间": item.get("date", ""),
+                    }
+                )
+
+            return SpiderResult(
+                success=True, data=results, message=f"成功获取 {len(results)} 条搜索结果"
+            )
 
     @staticmethod
     def _parse_jsonp(body: bytes) -> dict | None:

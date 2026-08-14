@@ -90,83 +90,73 @@ class MarginTradingSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://data.eastmoney.com/")
-                # 获取市场配置
-                market_config = self.MARKET_CONFIG[params.market]
-                # 构建请求参数
-                request_params = {
-                    "reportName": market_config["reportName"],
-                    "columns": "ALL",
-                    "source": "WEB",
-                    "sortColumns": "DIM_DATE",
-                    "sortTypes": "-1",
-                    "pageNumber": "1",
-                    "pageSize": str(params.limit),
-                    "filter": market_config["filter"],
-                }
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://data.eastmoney.com/")
+            # 获取市场配置
+            market_config = self.MARKET_CONFIG[params.market]
+            # 构建请求参数
+            request_params = {
+                "reportName": market_config["reportName"],
+                "columns": "ALL",
+                "source": "WEB",
+                "sortColumns": "DIM_DATE",
+                "sortTypes": "-1",
+                "pageNumber": "1",
+                "pageSize": str(params.limit),
+                "filter": market_config["filter"],
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 解析响应
+            data = await response.json()
+
+            if data is None:
+                return SpiderResult(success=False, message="解析响应数据失败")
+
+            # 检查返回状态
+            # API返回格式: {"version": "...", "result": {"data": [...]}}
+            result = data.get("result", {})
+            if not result or not result.get("data"):
+                return SpiderResult(
+                    success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                 )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            # 解析数据，传入统计周期和市场参数
+            result_data = self._parse_margin_data(result["data"], params.statistics, params.market)
 
-                # 解析响应
-                data = await response.json()
+            # 按日期降序排列（最新的在前）
+            df = pd.DataFrame(result_data)
+            df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
 
-                if data is None:
-                    return SpiderResult(success=False, message="解析响应数据失败")
+            # 构建统计周期显示名称
+            statistics_name = self._get_statistics_name(params.statistics)
 
-                # 检查返回状态
-                # API返回格式: {"version": "...", "result": {"data": [...]}}
-                result = data.get("result", {})
-                if not result or not result.get("data"):
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                    )
-
-                # 解析数据，传入统计周期和市场参数
-                result_data = self._parse_margin_data(
-                    result["data"], params.statistics, params.market
-                )
-
-                # 按日期降序排列（最新的在前）
-                df = pd.DataFrame(result_data)
-                df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
-
-                # 构建统计周期显示名称
-                statistics_name = self._get_statistics_name(params.statistics)
-
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
-                    )
-
-                # 默认返回 dict 格式
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data=df.to_dict(orient="records"),
+                    data=df.to_markdown(),
+                    message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data=df.to_dict(orient="records"),
+                message=f"成功获取{market_config['name']}融资融券{statistics_name}数据",
+            )
 
     def _get_statistics_name(self, statistics: str) -> str:
         """获取统计周期显示名称"""

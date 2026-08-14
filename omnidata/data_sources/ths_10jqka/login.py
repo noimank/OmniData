@@ -35,11 +35,8 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
                 await page.wait_for_load_state("domcontentloaded", timeout=5000)
                 # 保存登录状态实现刷新
                 await self.save_context_state(context, "ths_10jqka")
-        except Exception as e:
-            logger.error(f"Failed to refresh login state: {e}")
         finally:
             await page.close()
-            context = None
 
     async def get_qrcode_types(self) -> list:
         """返回支持的二维码类型"""
@@ -49,33 +46,35 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         """
         获取指定类型的二维码
 
+        持有实例锁保护 _qr_page 生命周期，防止并发调用产生孤儿 page
+
         Args:
             qr_type: 二维码类型
 
         Returns:
             包含二维码信息的字典
         """
+        async with self._lock:
+            # 确保资源关闭，每次调用该函数都是新的操作
+            await self.close()
+            try:
 
-        # 确保资源关闭，每次调用该函数都是新的操作
-        await self.close()
-        try:
+                if qr_type == "微信":
+                    qr_code = await self.get_weixin_qrcode()
+                    return qr_code
+                elif qr_type == "同花顺APP":
+                    qr_code = await self.get_ths_qrcode()
+                    return qr_code
 
-            if qr_type == "微信":
-                qr_code = await self.get_weixin_qrcode()
-                return qr_code
-            elif qr_type == "同花顺APP":
-                qr_code = await self.get_ths_qrcode()
-                return qr_code
+                else:
+                    return QRCode(
+                        success=False,
+                        message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
+                    )
 
-            else:
-                return QRCode(
-                    success=False,
-                    message=f"不支持的二维码类型：{qr_type}， 可选值：{await self.get_qrcode_types()}",
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to get eastmoney qrcode: {e}")
-            return QRCode(success=False, message=f"获取二维码失败: {e}")
+            except Exception as e:
+                logger.error(f"Failed to get ths_10jqka qrcode: {e}")
+                return QRCode(success=False, message=f"获取二维码失败: {e}")
 
     async def get_weixin_qrcode(self, qr_type: str = "微信") -> QRCode:
         """
@@ -197,31 +196,32 @@ class ThsTenJQKaQRLogin(BaseQRLogin):
         if self._login_status.status == "success":
             return self._login_status
 
-        if not self._qr_page:
-            return QRLoginState(
-                status="failed",
-                message="QR code page not initialized, please call get_qrcode first",
-            )
+        async with self._lock:
+            if not self._qr_page_alive():
+                return QRLoginState(
+                    status="failed",
+                    message="QR code page not initialized, please call get_qrcode first",
+                )
 
-        try:
-            # 检查是否登录成功 - 通过url变化判断
-            await self._qr_page.wait_for_timeout(500)
-            current_url = self._qr_page.url
-            if "open.weixin.qq" in current_url:
+            try:
+                # 检查是否登录成功 - 通过url变化判断
+                await self._qr_page.wait_for_timeout(500)
+                current_url = self._qr_page.url
+                if "open.weixin.qq" in current_url:
+                    return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
+
+                # 如果页面不再是登录页面，说明登录成功
+                if "login" not in current_url and "10jqka.com" in current_url:
+                    # 保存登录状态
+                    await self.save_context_state(self._qr_context, "ths_10jqka")
+                    await self.close()
+                    return QRLoginState(status="success", message="登录成功，且保存登录状态")
+                else:
+                    return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
+
+            except Exception as e:
+                logger.error(f"Error verifying login state: {e}")
                 return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
-
-            # 如果页面不再是登录页面，说明登录成功
-            if "login" not in current_url and "10jqka.com" in current_url:
-                # 保存登录状态
-                await self.save_context_state(self._qr_context, "ths_10jqka")
-                await self.close()
-                return QRLoginState(status="success", message="登录成功，且保存登录状态")
-            else:
-                return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
-
-        except Exception as e:
-            logger.error(f"Error verifying login state: {e}")
-            return QRLoginState(status="waiting", message=f"等待验证登录状态中...")
 
     async def is_login(self) -> QRLoginState:
         """

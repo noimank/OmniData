@@ -4,7 +4,7 @@
 
 from dataclasses import dataclass, field
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 @dataclass
@@ -69,9 +69,8 @@ class BrowserConfig:
         default_factory=lambda: ["--enable-automation", "--enable-blink-features=IdleDetection"]
     )
 
-    # Context Pool 配置
-    context_pool_max_size: int = 10  # 最多缓存 context 数
-    context_idle_timeout: int = 300  # Context 空闲超时（秒）
+    # 注：Context 池容量/空闲回收/浏览器整体回收等内部稳定机制为固定策略
+    # （见 BrowserContextPool 类常量），对用户透明，不对外配置
 
 
 @dataclass
@@ -106,9 +105,7 @@ class Settings(BaseSettings):
     redis: RedisConfig = field(default_factory=RedisConfig)
     login: LoginConfig = field(default_factory=LoginConfig)
 
-    class Config:
-        env_prefix = "OMNIDATA_"
-        env_nested_delimiter = "__"
+    model_config = SettingsConfigDict(env_prefix="OMNIDATA_", env_nested_delimiter="__")
 
 
 # 全局配置实例

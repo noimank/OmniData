@@ -9,18 +9,18 @@ export interface ApiResponse<T = any> {
 }
 
 // ============== 监控相关 ==============
-// Browser Context Pool 统计（单 Browser + 多 Context 架构）
+// Browser Context Pool 统计（单 Browser + 按命名空间缓存 Context 架构）
 export interface BrowserContextPoolStats {
   browser_count: number
   context_count: number
-  checked_out_contexts: number
+  active_pages: number
   total_contexts_created: number
   total_contexts_reused: number
   reuse_rate: number
-  total_contexts_evicted: number
   total_contexts_closed: number
+  total_browser_recycles: number
+  total_browser_recoveries: number
   config: {
-    max_pool_size: number
     idle_timeout: number
     headless: boolean
   }

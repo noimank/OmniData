@@ -74,16 +74,19 @@ async def get_performance_metrics():
         performance = {
             "browser": {
                 "browser_count": stats.get("browser_count", 0),
+                "total_browser_recycles": stats.get("total_browser_recycles", 0),
+                "last_recycle_at": stats.get("last_recycle_at"),
+                "pages_since_recycle": stats.get("pages_since_recycle", 0),
             },
             "context": {
                 "total_contexts": stats.get("context_count", 0),
                 "reuse_rate": stats.get("reuse_rate", 0),
                 "total_contexts_created": stats.get("total_contexts_created", 0),
                 "total_contexts_reused": stats.get("total_contexts_reused", 0),
-                "total_contexts_evicted": stats.get("total_contexts_evicted", 0),
             },
             "health": {
                 "total_contexts_closed": stats.get("total_contexts_closed", 0),
+                "active_pages": stats.get("active_pages", 0),
             },
         }
 

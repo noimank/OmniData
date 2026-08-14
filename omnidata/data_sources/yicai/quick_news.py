@@ -60,49 +60,41 @@ class YicaiQuickNewsSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("yicai") as page:
-                # 构建请求参数
-                request_params = {
+        async with self.new_page("yicai") as page:
+            # 构建请求参数
+            request_params = {
+                "page": params.page,
+                "pagesize": params.page_size,
+                "type": "0",
+                "id": "0",
+            }
+
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 获取响应JSON
+            json_data = await response.json()
+
+            # 第一财经直接返回数组，无需检查code
+            if not isinstance(json_data, list):
+                return SpiderResult(success=False, message=f"响应数据格式异常")
+
+            # 解析新闻列表
+            parsed_news = [self._parse_news_item(item) for item in json_data]
+
+            return SpiderResult(
+                success=True,
+                data={
                     "page": params.page,
-                    "pagesize": params.page_size,
-                    "type": "0",
-                    "id": "0",
-                }
-
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
-
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
-
-                # 获取响应JSON
-                json_data = await response.json()
-
-                # 第一财经直接返回数组，无需检查code
-                if not isinstance(json_data, list):
-                    return SpiderResult(success=False, message=f"响应数据格式异常")
-
-                # 解析新闻列表
-                parsed_news = [self._parse_news_item(item) for item in json_data]
-
-                return SpiderResult(
-                    success=True,
-                    data={
-                        "page": params.page,
-                        "page_size": params.page_size,
-                        "total": len(parsed_news),
-                        "news_list": parsed_news,
-                    },
-                    message=f"成功获取 {len(parsed_news)} 条快讯新闻",
-                )
-
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+                    "page_size": params.page_size,
+                    "total": len(parsed_news),
+                    "news_list": parsed_news,
+                },
+                message=f"成功获取 {len(parsed_news)} 条快讯新闻",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """

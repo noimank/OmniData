@@ -2,8 +2,7 @@
 东方财富网个股行情报价 Spider
 获取个股或指数的实时行情报价数据
 
-通过直接调用 push2.eastmoney.com JSONP 接口获取数据（参考 etf_holdings.py），
-避免在浏览器 evaluate(fetch()) 中因 CORS/网络抖动偶发 Failed to fetch。
+通过统一客户端 _push2_client 在东财页面内 fetch push2 JSONP 接口获取数据。
 """
 
 import random
@@ -14,7 +13,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class StockQuoteParams(BaseModel):
@@ -39,7 +38,7 @@ class StockQuoteSpider(BaseWebSpider):
 
     name = "eastmoney_stock_quote"
     description = "获取A股/ETF基金实时行情报价数据，包括最新价、涨跌幅、成交量、成交额、买卖五价、市值、市盈率等完整行情数据"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -61,94 +60,86 @@ class StockQuoteSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # 根据股票代码自动判断市场ID
-                # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
-                stock_code = params.stock_code
-                if stock_code.startswith("6") or stock_code.startswith("5"):
-                    market_id = "1"  # 上海
-                # elif stock_code.startswith("8") or stock_code.startswith("9"):
-                #     market_id = "2"  # 北交所
-                else:
-                    market_id = "0"  # 深圳
+            # 根据股票代码自动判断市场ID
+            # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
+            stock_code = params.stock_code
+            if stock_code.startswith("6") or stock_code.startswith("5"):
+                market_id = "1"  # 上海
+            # elif stock_code.startswith("8") or stock_code.startswith("9"):
+            #     market_id = "2"  # 北交所
+            else:
+                market_id = "0"  # 深圳
 
-                secid = f"{market_id}.{stock_code}"
+            secid = f"{market_id}.{stock_code}"
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto("https://quote.eastmoney.com/")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程：ut 拿不到时会回退到 DEFAULT_UT
-                    pass
+            await page.goto("https://quote.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程：ut 拿不到时会回退到 DEFAULT_UT
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 暖手 push2 域：建立 push2 接口所需的 cookies
-                await warmup_push2(page, fallback_url="https://quote.eastmoney.com/")
+            # 构建请求参数
+            request_params = {
+                "fltt": "2",
+                "invt": "2",
+                "fields": self.FIELDS,
+                "secid": secid,
+                "ut": ut,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                # 构建请求参数
-                request_params = {
-                    "fltt": "2",
-                    "invt": "2",
-                    "fields": self.FIELDS,
-                    "secid": secid,
-                    "ut": ut,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            result = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="json",
+            )
 
-                result = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://quote.eastmoney.com/",
-                    response_type="json",
-                )
+            if result is None:
+                return SpiderResult(success=False, message="请求失败")
 
-                if result is None:
-                    return SpiderResult(success=False, message="请求失败")
+            # 解析响应
+            data = result
 
-                # 解析响应
-                data = result
-
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                    )
-
-                # 检查是否有数据 (新API直接返回data对象)
-                quote_data = data.get("data", {})
-                if not quote_data or not isinstance(quote_data, dict):
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确",
-                    )
-
-                # 解析数据
-                result_data = self._parse_quote(quote_data)
-
+            # 检查返回状态
+            if data.get("rc") != 0:
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取 {params.stock_code} 的行情报价数据",
+                    success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 检查是否有数据 (新API直接返回data对象)
+            quote_data = data.get("data", {})
+            if not quote_data or not isinstance(quote_data, dict):
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到股票代码 {params.stock_code} 的数据，请检查股票代码是否正确",
+                )
+
+            # 解析数据
+            result_data = self._parse_quote(quote_data)
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=f"成功获取 {params.stock_code} 的行情报价数据",
+            )
 
     def _parse_quote(self, item: dict) -> dict:
         """

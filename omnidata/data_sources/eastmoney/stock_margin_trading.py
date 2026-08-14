@@ -58,114 +58,106 @@ class StockMarginTradingSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
-                await page.goto("https://data.eastmoney.com/")
-                # 构建过滤条件
-                filter_str = f'(scode="{params.stock_code}")'
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+            await page.goto("https://data.eastmoney.com/")
+            # 构建过滤条件
+            filter_str = f'(scode="{params.stock_code}")'
 
-                # 构建请求参数
-                request_params = {
-                    "callback": "datatable1238300",
-                    "reportName": "RPTA_WEB_RZRQ_GGMX",
-                    "columns": "ALL",
-                    "source": "WEB",
-                    "sortColumns": "date",
-                    "sortTypes": "-1",
-                    "pageNumber": "1",
-                    "pageSize": str(params.limit),
-                    "filter": filter_str,
-                    "pageNo": "1",
-                }
+            # 构建请求参数
+            request_params = {
+                "callback": "datatable1238300",
+                "reportName": "RPTA_WEB_RZRQ_GGMX",
+                "columns": "ALL",
+                "source": "WEB",
+                "sortColumns": "date",
+                "sortTypes": "-1",
+                "pageNumber": "1",
+                "pageSize": str(params.limit),
+                "filter": filter_str,
+                "pageNo": "1",
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
-                )
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
 
-                # 获取响应文本
-                response_text = await response.text()
+            # 获取响应文本
+            response_text = await response.text()
 
-                # 移除 JSONP 回调函数
-                # 响应格式可能是：datatable1238300({...});
-                import re
+            # 移除 JSONP 回调函数
+            # 响应格式可能是：datatable1238300({...});
+            import re
 
-                json_match = re.search(r"datatable\d+\((.*)\);?", response_text)
-                if json_match:
-                    json_str = json_match.group(1)
-                elif response_text.startswith("datatable"):
-                    # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find("(")
-                    end_idx = response_text.rfind(")")
-                    if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1 : end_idx]
-                    else:
-                        json_str = response_text
+            json_match = re.search(r"datatable\d+\((.*)\);?", response_text)
+            if json_match:
+                json_str = json_match.group(1)
+            elif response_text.startswith("datatable"):
+                # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
+                start_idx = response_text.find("(")
+                end_idx = response_text.rfind(")")
+                if start_idx != -1 and end_idx != -1:
+                    json_str = response_text[start_idx + 1 : end_idx]
                 else:
                     json_str = response_text
+            else:
+                json_str = response_text
 
-                # 解析 JSON
-                import json
+            # 解析 JSON
+            import json
 
-                try:
-                    data = json.loads(json_str)
-                except json.JSONDecodeError as e:
-                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
-                # 检查返回状态
-                # API返回格式: {"version": "...", "result": {"data": [...]}}
-                result = data.get("result", {})
-                if not result or not result.get("data"):
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败或股票代码不存在：{params.stock_code}"
-                    )
-
-                # 解析数据
-                result_data = self._parse_margin_data(result["data"], params.statistics)
-
-                # 按日期降序排列（最新的在前）
-                df = pd.DataFrame(result_data)
-                df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
-
-                # 获取股票名称
-                stock_name = (
-                    result_data[0].get("股票名称", params.stock_code)
-                    if result_data
-                    else params.stock_code
+            # 检查返回状态
+            # API返回格式: {"version": "...", "result": {"data": [...]}}
+            result = data.get("result", {})
+            if not result or not result.get("data"):
+                return SpiderResult(
+                    success=False, message=f"获取数据失败或股票代码不存在：{params.stock_code}"
                 )
 
-                # 构建统计周期显示名称
-                statistics_name = self._get_statistics_name(params.statistics)
+            # 解析数据
+            result_data = self._parse_margin_data(result["data"], params.statistics)
 
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
-                    )
+            # 按日期降序排列（最新的在前）
+            df = pd.DataFrame(result_data)
+            df = df.sort_values("交易日期", ascending=False).reset_index(drop=True)
 
-                # 默认返回 dict 格式
+            # 获取股票名称
+            stock_name = (
+                result_data[0].get("股票名称", params.stock_code)
+                if result_data
+                else params.stock_code
+            )
+
+            # 构建统计周期显示名称
+            statistics_name = self._get_statistics_name(params.statistics)
+
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data=df.to_dict(orient="records"),
+                    data=df.to_markdown(),
+                    message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data=df.to_dict(orient="records"),
+                message=f"成功获取{stock_name}({params.stock_code})融资融券{statistics_name}数据",
+            )
 
     def _get_statistics_name(self, statistics: str) -> str:
         """获取统计周期显示名称"""

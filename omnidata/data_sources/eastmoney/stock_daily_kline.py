@@ -17,10 +17,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import (
-    fetch_with_retry,
-    warmup_push2,
-)
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class StockDailyKlineParams(BaseModel):
@@ -62,7 +59,7 @@ class StockDailyKlineSpider(BaseWebSpider):
 
     name = "eastmoney_stock_daily_kline"
     description = "获取A股/ETF基金历史日线K线数据，包括开高低收、成交量成交额、涨跌幅等完整K线数据，支持前复权/后复权/不复权，支持日期范围查询"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -102,143 +99,135 @@ class StockDailyKlineSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # 根据股票代码自动判断市场ID
-                # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
-                stock_code = params.stock_code
-                if stock_code.startswith("6") or stock_code.startswith("5"):
-                    market_id = "1"  # 上海
-                # elif stock_code.startswith("8"):
-                #     market_id = "2"  # 北交所
-                else:
-                    market_id = "0"  # 深圳
+            # 根据股票代码自动判断市场ID
+            # 6开头 = 上海市场(1), 0/3开头 = 深圳市场(0), 8开头 = 北交所(2)
+            stock_code = params.stock_code
+            if stock_code.startswith("6") or stock_code.startswith("5"):
+                market_id = "1"  # 上海
+            # elif stock_code.startswith("8"):
+            #     market_id = "2"  # 北交所
+            else:
+                market_id = "0"  # 深圳
 
-                secid = f"{market_id}.{stock_code}"
+            secid = f"{market_id}.{stock_code}"
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2his API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2his API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2his.eastmoney.com**", capture_ut)
+            await page.route("**push2his.eastmoney.com**", capture_ut)
 
-                await page.goto("https://data.eastmoney.com/")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto("https://data.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 暖手 quote 域（push2his 走 push2his，跳过 quote 暖手）
-                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+            # 构建请求参数
+            request_params = {
+                "cb": self._generate_jsonp_callback(),  # 动态生成 JSONP 回调函数名
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                "ut": ut,
+                "klt": "101",  # 101表示日线
+                "fqt": self.ADJUST_TYPE_MAP[params.adjust_type],
+                "secid": secid,
+                "beg": params.start_date,
+                "end": params.end_date,
+                "_": str(int(time.time() * 1000)),  # 添加时间戳参数
+            }
 
-                # 构建请求参数
-                request_params = {
-                    "cb": self._generate_jsonp_callback(),  # 动态生成 JSONP 回调函数名
-                    "fields1": "f1,f2,f3,f4,f5,f6",
-                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-                    "ut": ut,
-                    "klt": "101",  # 101表示日线
-                    "fqt": self.ADJUST_TYPE_MAP[params.adjust_type],
-                    "secid": secid,
-                    "beg": params.start_date,
-                    "end": params.end_date,
-                    "_": str(int(time.time() * 1000)),  # 添加时间戳参数
-                }
+            response_text = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="text",
+            )
 
-                response_text = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://data.eastmoney.com/",
-                    response_type="text",
-                )
+            if response_text is None:
+                return SpiderResult(success=False, message="请求失败")
 
-                if response_text is None:
-                    return SpiderResult(success=False, message="请求失败")
-
-                # 移除 JSONP 回调函数
-                # 响应格式：jQuery{random}_{timestamp}({...});
-                # 例如：jQuery112304786753408034462_1768642295465({...});
-                json_match = re.search(r"jQuery[\d_]+\((.*)\);?", response_text)
-                if json_match:
-                    json_str = json_match.group(1)
-                elif response_text.startswith("jQuery"):
-                    # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
-                    start_idx = response_text.find("(")
-                    end_idx = response_text.rfind(")")
-                    if start_idx != -1 and end_idx != -1:
-                        json_str = response_text[start_idx + 1 : end_idx]
-                    else:
-                        json_str = response_text
+            # 移除 JSONP 回调函数
+            # 响应格式：jQuery{random}_{timestamp}({...});
+            # 例如：jQuery112304786753408034462_1768642295465({...});
+            json_match = re.search(r"jQuery[\d_]+\((.*)\);?", response_text)
+            if json_match:
+                json_str = json_match.group(1)
+            elif response_text.startswith("jQuery"):
+                # 尝试从第一个 '(' 和最后一个 ')' 之间提取 JSON
+                start_idx = response_text.find("(")
+                end_idx = response_text.rfind(")")
+                if start_idx != -1 and end_idx != -1:
+                    json_str = response_text[start_idx + 1 : end_idx]
                 else:
                     json_str = response_text
+            else:
+                json_str = response_text
 
-                # 解析 JSON
-                try:
-                    data = json.loads(json_str)
-                except json.JSONDecodeError as e:
-                    return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
+            # 解析 JSON
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                return SpiderResult(success=False, message=f"解析响应数据失败：{str(e)}")
 
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('rt', '未知错误')}"
-                    )
+            # 检查返回状态
+            if data.get("rc") != 0:
+                return SpiderResult(
+                    success=False, message=f"获取数据失败：{data.get('rt', '未知错误')}"
+                )
 
-                # 检查是否有数据
-                kline_data = data.get("data", {})
-                if not kline_data or not kline_data.get("klines"):
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确",
-                    )
+            # 检查是否有数据
+            kline_data = data.get("data", {})
+            if not kline_data or not kline_data.get("klines"):
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到股票代码 {params.stock_code} 的K线数据，请检查股票代码是否正确",
+                )
 
-                # 解析数据
-                result_data = self._parse_klines(kline_data)
+            # 解析数据
+            result_data = self._parse_klines(kline_data)
 
-                # 转换为 DataFrame 并按日期升序排列（最早的在前）
-                df = pd.DataFrame(result_data)
-                df = df.sort_values("日期", ascending=True).reset_index(drop=True)
+            # 转换为 DataFrame 并按日期升序排列（最早的在前）
+            df = pd.DataFrame(result_data)
+            df = df.sort_values("日期", ascending=True).reset_index(drop=True)
 
-                # 获取股票名称
-                stock_name = kline_data.get("name", params.stock_code)
+            # 获取股票名称
+            stock_name = kline_data.get("name", params.stock_code)
 
-                # 获取复权类型名称
-                adjust_name = self._get_adjust_name(params.adjust_type)
+            # 获取复权类型名称
+            adjust_name = self._get_adjust_name(params.adjust_type)
 
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
-                    )
-
-                # 默认返回 dict 格式
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data=df.to_dict(orient="records"),
+                    data=df.to_markdown(),
+                    message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data=df.to_dict(orient="records"),
+                message=f"成功获取 {stock_name}({params.stock_code}) {adjust_name}日线K线数据，共{len(result_data)}条",
+            )
 
     def _get_adjust_name(self, adjust_type: str) -> str:
         """获取复权类型显示名称"""

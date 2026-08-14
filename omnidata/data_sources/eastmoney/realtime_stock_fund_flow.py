@@ -14,7 +14,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class RealtimeStockFundFlowParams(BaseModel):
@@ -37,7 +37,7 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
 
     name = "eastmoney_realtime_stock_fund_flow"
     description = "获取个股、指数、ETF基金的实时资金流向数据，包括主力、超大单、大单、中单、小单的净流入及占比，以及5日、10日累计资金流向"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -59,80 +59,73 @@ class RealtimeStockFundFlowSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto("https://data.eastmoney.com/")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto("https://data.eastmoney.com/")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 构建请求参数
-                request_params = {
-                    "fltt": "2",
-                    "secids": params.secid,
-                    "fields": self.FIELDS,
-                    "ut": ut,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            # 构建请求参数
+            request_params = {
+                "fltt": "2",
+                "secids": params.secid,
+                "fields": self.FIELDS,
+                "ut": ut,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                # 暖手 push2 域：先访问 quote 域建立 cookies
-                await warmup_push2(page, fallback_url="https://data.eastmoney.com/")
+            result = await fetch_with_retry(
+                page,
+                self.API_URL,
+                request_params,
+                response_type="json",
+            )
 
-                result = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    request_params,
-                    referer="https://data.eastmoney.com/",
-                    response_type="json",
-                )
+            if result is None:
+                return SpiderResult(success=False, message="请求失败")
 
-                if result is None:
-                    return SpiderResult(success=False, message="请求失败")
+            # 解析响应
+            data = result
 
-                # 解析响应
-                data = result
-
-                # 检查返回状态
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
-                    )
-
-                # 检查是否有数据
-                diff_data = data.get("data", {}).get("diff", [])
-                if not diff_data:
-                    return SpiderResult(
-                        success=False,
-                        message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确",
-                    )
-
-                # 解析数据
-                result_data = self._parse_fund_flow(diff_data[0], params)
-
+            # 检查返回状态
+            if data.get("rc") != 0:
                 return SpiderResult(
-                    success=True,
-                    data=result_data,
-                    message=f"成功获取 {params.secid} 的资金流向数据",
+                    success=False, message=f"获取数据失败：{data.get('msg', '未知错误')}"
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+
+            # 检查是否有数据
+            diff_data = data.get("data", {}).get("diff", [])
+            if not diff_data:
+                return SpiderResult(
+                    success=False,
+                    message=f"未找到证券ID {params.secid} 的数据，请检查证券ID是否正确",
+                )
+
+            # 解析数据
+            result_data = self._parse_fund_flow(diff_data[0], params)
+
+            return SpiderResult(
+                success=True,
+                data=result_data,
+                message=f"成功获取 {params.secid} 的资金流向数据",
+            )
 
     def _parse_fund_flow(self, item: dict, params: RealtimeStockFundFlowParams) -> dict:
         """

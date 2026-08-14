@@ -58,17 +58,17 @@ async def lifespan(app: FastAPI):
 
         await init_redis()
 
-        # 阶段 2: 初始化浏览器上下文池（LRU 单例模式）
+        # 阶段 2: 初始化浏览器上下文池（单例）
         browser_context_pool = get_browser_context_pool()
         await browser_context_pool.initialize()
         logger.info("Browser context pool initialized")
 
-        # 阶段 3: 初始化爬虫注册器（LRU 单例模式）
+        # 阶段 3: 初始化爬虫注册器（单例）
         spider_reg = get_spider_register()
         await spider_reg.initialize()
         logger.info(f"Spider register initialized with {spider_reg.spider_count} spiders")
 
-        # 阶段 4: 初始化登录注册器（LRU 单例模式）
+        # 阶段 4: 初始化登录注册器（单例）
         login_reg = get_login_register()
         await login_reg.initialize()
         logger.info(f"Login register initialized with {login_reg.login_count} logins")

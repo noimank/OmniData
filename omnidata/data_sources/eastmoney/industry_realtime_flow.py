@@ -21,7 +21,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, Field
 
 from omnidata.core import BaseWebSpider, SpiderResult
-from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry, warmup_push2
+from omnidata.data_sources.eastmoney._push2_client import fetch_with_retry
 
 
 class IndustryRealtimeFlowParams(BaseModel):
@@ -48,7 +48,7 @@ class IndustryRealtimeFlowSpider(BaseWebSpider):
 
     name = "eastmoney_industry_realtime_flow"
     description = "获取指定行业板块的实时资金流向数据（分钟级）"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "noimank"
     platform = "东方财富"
     params_model = IndustryRealtimeFlowParams
@@ -58,96 +58,91 @@ class IndustryRealtimeFlowSpider(BaseWebSpider):
     DEFAULT_UT = "b2884a393a59ad64002292a3e90d46a5"
 
     async def crawl(self, params: IndustryRealtimeFlowParams) -> SpiderResult:
-        try:
-            # 构建完整的 secid（市场代码90 + 板块代码）
-            secid = f"90.{params.sector_code}"
+        # 构建完整的 secid（市场代码90 + 板块代码）
+        secid = f"90.{params.sector_code}"
 
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
-                captured_ut = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2 API 请求 ──
+            captured_ut = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2.eastmoney.com**", capture_ut)
+            await page.route("**push2.eastmoney.com**", capture_ut)
 
-                await page.goto(self.PAGE_URL)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.goto(self.PAGE_URL)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
-                await warmup_push2(page, fallback_url=self.PAGE_URL)
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 请求实时资金流数据（klt=1表示分钟级）
-                api_params = {
-                    "lmt": str(params.limit),
-                    "klt": "1",  # 1=分钟级实时数据
-                    "fields1": "f1,f2,f3,f7",
-                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
-                    "ut": ut,
-                    "secid": secid,
-                    "_": str(random.randint(10**12, 10**13 - 1)),
-                }
+            # 请求实时资金流数据（klt=1表示分钟级）
+            api_params = {
+                "lmt": str(params.limit),
+                "klt": "1",  # 1=分钟级实时数据
+                "fields1": "f1,f2,f3,f7",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65",
+                "ut": ut,
+                "secid": secid,
+                "_": str(random.randint(10**12, 10**13 - 1)),
+            }
 
-                result = await fetch_with_retry(
-                    page,
-                    self.API_URL,
-                    api_params,
-                    referer=self.PAGE_URL,
-                    response_type="json",
-                )
+            result = await fetch_with_retry(
+                page,
+                self.API_URL,
+                api_params,
+                response_type="json",
+            )
 
-                if result is None:
-                    return SpiderResult(success=False, message="API请求失败")
+            if result is None:
+                return SpiderResult(success=False, message="API请求失败")
 
-                data = result
+            data = result
 
-                if data.get("rc") != 0:
-                    return SpiderResult(
-                        success=False, message=f"API返回错误：{data.get('message', '未知错误')}"
-                    )
-
-                # 解析数据
-                result_data = data.get("data", {})
-                klines = result_data.get("klines", [])
-
-                if not klines:
-                    return SpiderResult(success=True, data=[], message="未获取到实时数据")
-
-                # 解析K线数据
-                data_list = [self._parse_kline(kline) for kline in klines]
-                df = pd.DataFrame(data_list)
-
-                # 添加板块信息
-                metadata = {
-                    "板块代码": result_data.get("code", ""),
-                    "板块名称": result_data.get("name", ""),
-                    "市场代码": result_data.get("market", ""),
-                    "数据类型": "分钟级实时数据",
-                    "数据条数": len(data_list),
-                }
-
-                result_output = df.to_dict(orient="records")
-                if params.data_format == "markdown":
-                    result_output = df.to_markdown()
-                elif params.data_format == "string":
-                    result_output = df.to_string()
-
+            if data.get("rc") != 0:
                 return SpiderResult(
-                    success=True,
-                    data={"metadata": metadata, "klines": result_output},
-                    message=f"成功获取 {len(data_list)} 条实时数据",
+                    success=False, message=f"API返回错误：{data.get('message', '未知错误')}"
                 )
-        except Exception as e:
-            return SpiderResult(success=False, message=f"数据爬取失败：{str(e)}")
+
+            # 解析数据
+            result_data = data.get("data", {})
+            klines = result_data.get("klines", [])
+
+            if not klines:
+                return SpiderResult(success=True, data=[], message="未获取到实时数据")
+
+            # 解析K线数据
+            data_list = [self._parse_kline(kline) for kline in klines]
+            df = pd.DataFrame(data_list)
+
+            # 添加板块信息
+            metadata = {
+                "板块代码": result_data.get("code", ""),
+                "板块名称": result_data.get("name", ""),
+                "市场代码": result_data.get("market", ""),
+                "数据类型": "分钟级实时数据",
+                "数据条数": len(data_list),
+            }
+
+            result_output = df.to_dict(orient="records")
+            if params.data_format == "markdown":
+                result_output = df.to_markdown()
+            elif params.data_format == "string":
+                result_output = df.to_string()
+
+            return SpiderResult(
+                success=True,
+                data={"metadata": metadata, "klines": result_output},
+                message=f"成功获取 {len(data_list)} 条实时数据",
+            )
 
     def _parse_kline(self, kline: str) -> dict:
         """解析K线数据字符串

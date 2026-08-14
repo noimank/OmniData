@@ -92,162 +92,133 @@ class BoardChangesListSpider(BaseWebSpider):
         Returns:
             SpiderResult: 执行结果
         """
-        try:
-            async with self.new_page("eastmoney") as page:
-                await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
+        async with self.new_page("eastmoney") as page:
+            await self.filter_file_load(page, ["image", "stylesheet", "font", "media"])
 
-                # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2ex API 请求 ──
-                captured_ut: dict[str, str] = {}
+            # ── 动态提取 ut 令牌：拦截页面加载时自身发起的 push2ex API 请求 ──
+            captured_ut: dict[str, str] = {}
 
-                async def capture_ut(route):
-                    m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
-                    if m:
-                        captured_ut["token"] = m.group(1)
-                    await route.continue_()
+            async def capture_ut(route):
+                m = re.search(r"[?&]ut=([a-f0-9]{32})", route.request.url)
+                if m:
+                    captured_ut["token"] = m.group(1)
+                await route.continue_()
 
-                await page.route("**push2ex.eastmoney.com**", capture_ut)
-                await page.goto(self.PAGE_URL)
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+            await page.route("**push2ex.eastmoney.com**", capture_ut)
+            await page.goto(self.PAGE_URL)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                ut = captured_ut.get("token") or self.DEFAULT_UT
+            ut = captured_ut.get("token") or self.DEFAULT_UT
 
-                # 构建请求参数
-                # 东方财富该接口的 pageindex 从 0 开始
-                request_params = {
-                    "ut": ut,
-                    "dpt": "wzchanges",
-                    "pageindex": params.page - 1,
-                    "pagesize": params.page_size,
-                }
+            # 构建请求参数
+            # 东方财富该接口的 pageindex 从 0 开始
+            request_params = {
+                "ut": ut,
+                "dpt": "wzchanges",
+                "pageindex": params.page - 1,
+                "pagesize": params.page_size,
+            }
 
-                # 发送请求
-                response = await page.request.get(
-                    self.API_URL, params=request_params, timeout=30000
+            # 发送请求
+            response = await page.request.get(self.API_URL, params=request_params, timeout=30000)
+
+            if response.status != 200:
+                return SpiderResult(success=False, message=f"请求失败，状态码：{response.status}")
+
+            # 解析 JSONP 响应
+            raw_text = await response.text()
+            payload = self._parse_jsonp(raw_text)
+
+            if payload is None:
+                return SpiderResult(
+                    success=False, message="解析响应数据失败：返回内容不是合法的 JSONP"
                 )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False, message=f"请求失败，状态码：{response.status}"
-                    )
+            rc = payload.get("rc", 0)
+            if rc != 0:
+                return SpiderResult(success=False, message=f"接口返回错误码：{rc}")
 
-                # 解析 JSONP 响应
-                raw_text = await response.text()
-                payload = self._parse_jsonp(raw_text)
-
-                if payload is None:
-                    return SpiderResult(
-                        success=False, message="解析响应数据失败：返回内容不是合法的 JSONP"
-                    )
-
-                rc = payload.get("rc", 0)
-                if rc != 0:
-                    return SpiderResult(success=False, message=f"接口返回错误码：{rc}")
-
-                data = payload.get("data") or {}
-                change_items = data.get("allbk") or []
-                if not change_items:
-                    return SpiderResult(
-                        success=False,
-                        message="当日无板块异动数据",
-                    )
-
-                # 解析板块异动数据
-                parsed = self._parse_board_items(change_items)
-
-                # 过滤：按最小异动次数
-                if params.min_change_count > 0:
-                    parsed = [b for b in parsed if b["当日异动总次数"] >= params.min_change_count]
-
-                # 过滤：按指定异动类型
-                if params.change_type is not None:
-                    change_type = params.change_type
-                    change_name = CHANGE_TYPE_MAP.get(change_type, f"未知({change_type})")
-                    parsed = [
-                        b
-                        for b in parsed
-                        if any(y["异动类型编号"] == change_type for y in b["异动类型明细"])
-                    ]
-                else:
-                    change_name = None
-
-                # 排序
-                sort_key_map = {
-                    "ct": "当日异动总次数",
-                    "u": "涨跌幅(%)",
-                    "zjl": "主力资金流(元)",
-                }
-                sort_key = sort_key_map[params.sort_field]
-                reverse = params.sort_dir == "desc"
-                parsed.sort(
-                    key=lambda x: (
-                        x[sort_key] is None,
-                        x[sort_key] if x[sort_key] is not None else 0,
-                    ),
-                    reverse=reverse,
+            data = payload.get("data") or {}
+            change_items = data.get("allbk") or []
+            if not change_items:
+                return SpiderResult(
+                    success=False,
+                    message="当日无板块异动数据",
                 )
 
-                df = pd.DataFrame(parsed)
+            # 解析板块异动数据
+            parsed = self._parse_board_items(change_items)
 
-                # 数据日期
-                dt = data.get("dt", 0)
-                data_date = (
-                    f"{dt // 10000000000:04d}-{(dt // 100000000) % 100:02d}-{(dt // 1000000) % 100:02d}"
-                    if dt
-                    else ""
-                )
+            # 过滤：按最小异动次数
+            if params.min_change_count > 0:
+                parsed = [b for b in parsed if b["当日异动总次数"] >= params.min_change_count]
 
-                total_count = data.get("tc", len(parsed))
+            # 过滤：按指定异动类型
+            if params.change_type is not None:
+                change_type = params.change_type
+                change_name = CHANGE_TYPE_MAP.get(change_type, f"未知({change_type})")
+                parsed = [
+                    b
+                    for b in parsed
+                    if any(y["异动类型编号"] == change_type for y in b["异动类型明细"])
+                ]
+            else:
+                change_name = None
 
-                # 构建消息
-                filter_msg = ""
-                if params.min_change_count > 0:
-                    filter_msg += f"，异动次数>={params.min_change_count}"
-                if change_name:
-                    filter_msg += f"，含[{change_name}]"
+            # 排序
+            sort_key_map = {
+                "ct": "当日异动总次数",
+                "u": "涨跌幅(%)",
+                "zjl": "主力资金流(元)",
+            }
+            sort_key = sort_key_map[params.sort_field]
+            reverse = params.sort_dir == "desc"
+            parsed.sort(
+                key=lambda x: (
+                    x[sort_key] is None,
+                    x[sort_key] if x[sort_key] is not None else 0,
+                ),
+                reverse=reverse,
+            )
 
-                # 格式化输出
-                if params.data_format == "markdown":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_markdown(),
-                        message=(
-                            f"成功获取{data_date}当日板块异动详情，"
-                            f"共{total_count}个板块，本页{len(parsed)}个"
-                            f"{filter_msg}"
-                        ),
-                    )
-                if params.data_format == "string":
-                    return SpiderResult(
-                        success=True,
-                        data=df.to_string(),
-                        message=(
-                            f"成功获取{data_date}当日板块异动详情，"
-                            f"共{total_count}个板块，本页{len(parsed)}个"
-                            f"{filter_msg}"
-                        ),
-                    )
+            df = pd.DataFrame(parsed)
 
-                # 默认返回 dict 格式
+            # 数据日期
+            dt = data.get("dt", 0)
+            data_date = (
+                f"{dt // 10000000000:04d}-{(dt // 100000000) % 100:02d}-{(dt // 1000000) % 100:02d}"
+                if dt
+                else ""
+            )
+
+            total_count = data.get("tc", len(parsed))
+
+            # 构建消息
+            filter_msg = ""
+            if params.min_change_count > 0:
+                filter_msg += f"，异动次数>={params.min_change_count}"
+            if change_name:
+                filter_msg += f"，含[{change_name}]"
+
+            # 格式化输出
+            if params.data_format == "markdown":
                 return SpiderResult(
                     success=True,
-                    data={
-                        "数据日期": data_date,
-                        "板块总数": total_count,
-                        "当前页": params.page,
-                        "每页数量": params.page_size,
-                        "排序字段": params.sort_field,
-                        "排序方向": params.sort_dir,
-                        "过滤条件": {
-                            "最小异动次数": params.min_change_count,
-                            "指定异动类型": change_name,
-                        },
-                        "板块数量": len(parsed),
-                        "板块列表": df.to_dict(orient="records"),
-                    },
+                    data=df.to_markdown(),
+                    message=(
+                        f"成功获取{data_date}当日板块异动详情，"
+                        f"共{total_count}个板块，本页{len(parsed)}个"
+                        f"{filter_msg}"
+                    ),
+                )
+            if params.data_format == "string":
+                return SpiderResult(
+                    success=True,
+                    data=df.to_string(),
                     message=(
                         f"成功获取{data_date}当日板块异动详情，"
                         f"共{total_count}个板块，本页{len(parsed)}个"
@@ -255,8 +226,29 @@ class BoardChangesListSpider(BaseWebSpider):
                     ),
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            # 默认返回 dict 格式
+            return SpiderResult(
+                success=True,
+                data={
+                    "数据日期": data_date,
+                    "板块总数": total_count,
+                    "当前页": params.page,
+                    "每页数量": params.page_size,
+                    "排序字段": params.sort_field,
+                    "排序方向": params.sort_dir,
+                    "过滤条件": {
+                        "最小异动次数": params.min_change_count,
+                        "指定异动类型": change_name,
+                    },
+                    "板块数量": len(parsed),
+                    "板块列表": df.to_dict(orient="records"),
+                },
+                message=(
+                    f"成功获取{data_date}当日板块异动详情，"
+                    f"共{total_count}个板块，本页{len(parsed)}个"
+                    f"{filter_msg}"
+                ),
+            )
 
     def _parse_jsonp(self, raw_text: str) -> dict | None:
         """

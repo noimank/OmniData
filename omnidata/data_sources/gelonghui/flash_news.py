@@ -53,55 +53,51 @@ class GelonghuiFlashNewsSpider(BaseWebSpider):
     API_URL = "https://www.gelonghui.com/api/live-channels/{channel}/lives/v4"
 
     async def crawl(self, params: GelonghuiFlashNewsParams) -> SpiderResult:
-        try:
-            async with self.new_page("gelonghui") as page:
-                # 先访问快讯页面获取 Cookie
-                await page.goto("https://www.gelonghui.com/live")
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
-                except PlaywrightTimeoutError:
-                    # DOMContentLoaded 超时不影响后续流程
-                    pass
+        async with self.new_page("gelonghui") as page:
+            # 先访问快讯页面获取 Cookie
+            await page.goto("https://www.gelonghui.com/live")
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=15000)
+            except PlaywrightTimeoutError:
+                # DOMContentLoaded 超时不影响后续流程
+                pass
 
-                api_url = self.API_URL.format(channel=params.channel)
-                response = await page.request.get(
-                    api_url,
-                    params={
-                        "category": "all",
-                        "limit": str(params.limit),
-                        "timestamp": str(int(time.time() * 1000)),
-                    },
-                    timeout=15000,
-                )
+            api_url = self.API_URL.format(channel=params.channel)
+            response = await page.request.get(
+                api_url,
+                params={
+                    "category": "all",
+                    "limit": str(params.limit),
+                    "timestamp": str(int(time.time() * 1000)),
+                },
+                timeout=15000,
+            )
 
-                if response.status != 200:
-                    return SpiderResult(
-                        success=False,
-                        message=f"请求失败，状态码：{response.status}",
-                    )
-
-                json_data = await response.json()
-
-                items = json_data.get("result", [])
-                if not items:
-                    return SpiderResult(
-                        success=False,
-                        message="未获取到快讯数据",
-                    )
-
-                news_list = [self._parse_news_item(item) for item in items]
-
+            if response.status != 200:
                 return SpiderResult(
-                    success=True,
-                    data={
-                        "total": len(news_list),
-                        "news_list": news_list,
-                    },
-                    message=f"成功获取 {len(news_list)} 条快讯",
+                    success=False,
+                    message=f"请求失败，状态码：{response.status}",
                 )
 
-        except Exception as e:
-            return SpiderResult(success=False, message=f"爬取失败：{str(e)}")
+            json_data = await response.json()
+
+            items = json_data.get("result", [])
+            if not items:
+                return SpiderResult(
+                    success=False,
+                    message="未获取到快讯数据",
+                )
+
+            news_list = [self._parse_news_item(item) for item in items]
+
+            return SpiderResult(
+                success=True,
+                data={
+                    "total": len(news_list),
+                    "news_list": news_list,
+                },
+                message=f"成功获取 {len(news_list)} 条快讯",
+            )
 
     def _parse_news_item(self, item: dict) -> dict[str, Any]:
         """解析单条快讯数据"""
