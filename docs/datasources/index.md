@@ -4,8 +4,8 @@
 
 | 统计项 | 数值 |
 | :--- | :--- |
-| **支持平台数** | 19 |
-| **总接口数** | 58 |
+| **支持平台数** | 20 |
+| **总接口数** | 59 |
 
 ## 平台列表
 
@@ -24,6 +24,7 @@
 | [界面新闻](jiemian/index.md) | 1 | `jiemian` |
 | [金十数据](jin10/index.md) | 1 | `jin10` |
 | [金融界](jrj/index.md) | 1 | `jrj` |
+| [市场观察](marketwatch/index.md) | 1 | `marketwatch` |
 | [新浪财经](sina/index.md) | 3 | `sina` |
 | [同花顺10jqka](ths_10jqka/index.md) | 2 | `ths_10jqka` |
 | [华尔街见闻](wallstreetcn/index.md) | 1 | `wallstreetcn` |

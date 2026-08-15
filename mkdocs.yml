@@ -129,6 +129,7 @@ nav:
       - 界面新闻: datasources/jiemian/index.md
       - 金十数据: datasources/jin10/index.md
       - 金融界: datasources/jrj/index.md
+      - 市场观察: datasources/marketwatch/index.md
       - 新浪财经: datasources/sina/index.md
       - 同花顺10jqka: datasources/ths_10jqka/index.md
       - 华尔街见闻: datasources/wallstreetcn/index.md
