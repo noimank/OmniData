@@ -121,6 +121,7 @@ nav:
       - 东方财富: datasources/eastmoney/index.md
       - 测试平台: datasources/example/index.md
       - 福布斯: datasources/forbes/index.md
+      - 财富: datasources/fortune/index.md
       - 富途牛牛: datasources/futunn/index.md
       - 格隆汇: datasources/gelonghui/index.md
       - 和讯网: datasources/hexun/index.md

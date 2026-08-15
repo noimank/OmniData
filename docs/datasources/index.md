@@ -4,8 +4,8 @@
 
 | 统计项 | 数值 |
 | :--- | :--- |
-| **支持平台数** | 18 |
-| **总接口数** | 57 |
+| **支持平台数** | 19 |
+| **总接口数** | 58 |
 
 ## 平台列表
 
@@ -16,6 +16,7 @@
 | [东方财富](eastmoney/index.md) | 37 | `eastmoney` |
 | [测试平台](example/index.md) | 1 | `example` |
 | [福布斯](forbes/index.md) | 1 | `forbes` |
+| [财富](fortune/index.md) | 1 | `fortune` |
 | [富途牛牛](futunn/index.md) | 1 | `futunn` |
 | [格隆汇](gelonghui/index.md) | 1 | `gelonghui` |
 | [和讯网](hexun/index.md) | 1 | `hexun` |
