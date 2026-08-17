@@ -97,3 +97,19 @@ class TestSinaSpider:
         print(res)
         assert not res.success
         assert "无分时数据" in res.message
+
+    async def test_stock_minline_realtime(self, browser_pool):
+        spider_name = "sina_stock_minline_realtime"
+        register = spider_register()
+        instance = register.get_spider_instance(spider_name)
+        # 当日实时分时（盘中返回已产生分钟线，收盘后返回当日完整分时）
+        res = await instance.run({"symbol": "600519"})
+        print(res)
+        assert res.success
+        data = res.data
+        assert data["证券代码"] == "600519"
+        assert data["证券名称"] == "贵州茅台"
+        assert data["分钟数"] > 0
+        assert len(data["分时"]) == data["分钟数"]
+        first = data["分时"][0]
+        assert set(first) == {"时间", "开盘", "最高", "最低", "收盘", "成交量", "成交额"}
