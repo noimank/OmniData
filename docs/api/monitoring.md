@@ -39,14 +39,6 @@ GET /api/v1/monitor/browser-pool
 }
 ```
 
-### 获取 Context Pool 状态
-
-与浏览器池状态相同：
-
-```http
-GET /api/v1/monitor/context-pool
-```
-
 ### 获取当前 Context 列表
 
 ```http
@@ -67,37 +59,6 @@ GET /api/v1/monitor/contexts
       "pages_count": 0
     }
   ]
-}
-```
-
-### 获取性能指标
-
-```http
-GET /api/v1/monitor/performance
-```
-
-```json
-{
-  "success": true,
-  "message": "获取性能指标成功",
-  "data": {
-    "browser": {
-      "browser_count": 1,
-      "total_browser_recycles": 3,
-      "last_recycle_at": 1752552000.0,
-      "pages_since_recycle": 1234
-    },
-    "context": {
-      "total_contexts": 5,
-      "reuse_rate": 0.8,
-      "total_contexts_created": 120,
-      "total_contexts_reused": 480
-    },
-    "health": {
-      "total_contexts_closed": 100,
-      "active_pages": 2
-    }
-  }
 }
 ```
 

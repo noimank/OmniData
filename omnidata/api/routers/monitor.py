@@ -40,62 +40,6 @@ async def get_browser_pool_stats():
         return error_response(f"获取浏览器池状态失败: {str(e)}")
 
 
-@router.get("/context-pool")
-async def get_context_pool_stats():
-    """
-    获取 Context Pool 状态
-
-    Returns:
-        Context Pool 统计信息
-    """
-    try:
-        pool = get_browser_context_pool()
-        stats = pool.get_stats()
-
-        return success_response(stats, "获取 Context Pool 状态成功")
-    except Exception as e:
-        logger.error(f"Error getting context pool stats: {e}")
-        return error_response(f"获取 Context Pool 状态失败: {str(e)}")
-
-
-@router.get("/performance")
-async def get_performance_metrics():
-    """
-    获取性能指标
-
-    Returns:
-        性能指标信息
-    """
-    try:
-        pool = get_browser_context_pool()
-        stats = pool.get_stats()
-
-        # 提取关键性能指标
-        performance = {
-            "browser": {
-                "browser_count": stats.get("browser_count", 0),
-                "total_browser_recycles": stats.get("total_browser_recycles", 0),
-                "last_recycle_at": stats.get("last_recycle_at"),
-                "pages_since_recycle": stats.get("pages_since_recycle", 0),
-            },
-            "context": {
-                "total_contexts": stats.get("context_count", 0),
-                "reuse_rate": stats.get("reuse_rate", 0),
-                "total_contexts_created": stats.get("total_contexts_created", 0),
-                "total_contexts_reused": stats.get("total_contexts_reused", 0),
-            },
-            "health": {
-                "total_contexts_closed": stats.get("total_contexts_closed", 0),
-                "active_pages": stats.get("active_pages", 0),
-            },
-        }
-
-        return success_response(performance, "获取性能指标成功")
-    except Exception as e:
-        logger.error(f"Error getting performance metrics: {e}")
-        return error_response(f"获取性能指标失败: {str(e)}")
-
-
 @router.get("/system")
 async def get_system_stats():
     """
