@@ -270,12 +270,14 @@ class TestIdleTrackingAndRecycle:
         """浏览器崩溃（断连）后应自动重启并继续服务"""
         await browser_pool.get_context(namespace="pre_crash")
         dead_browser = browser_pool._browser
+        driver = browser_pool._playwright
         await dead_browser.close()  # 模拟崩溃
 
         context = await browser_pool.get_context(namespace="post_crash")
 
         assert context is not None
         assert browser_pool._browser is not dead_browser
+        assert browser_pool._playwright is driver  # 崩溃自愈走快路径，不重建驱动
         assert browser_pool.get_stats()["total_browser_recoveries"] == 1
         # 崩溃前的旧 context 随旧 browser 一并清理
         assert browser_pool.get_stats()["context_count"] == 1
@@ -299,15 +301,17 @@ class TestIdleTrackingAndRecycle:
 
     @pytest.mark.asyncio
     async def test_recycle_replaces_browser(self, browser_pool):
-        """回收应替换 browser 实例、清空 context 并更新统计"""
+        """回收应替换 browser 与 playwright 驱动实例、清空 context 并更新统计"""
         await browser_pool.get_context(namespace="pre_recycle")
         old_browser = browser_pool._browser
+        old_playwright = browser_pool._playwright
         browser_pool._pages_since_recycle = 123
 
         await browser_pool._do_recycle()
         stats = browser_pool.get_stats()
 
         assert browser_pool._browser is not old_browser
+        assert browser_pool._playwright is not old_playwright  # 驱动 Node 进程一并换新
         assert browser_pool.context_count == 0
         assert browser_pool._pages_since_recycle == 0
         assert stats["total_browser_recycles"] == 1

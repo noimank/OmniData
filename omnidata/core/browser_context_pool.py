@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import gc
 import json
 import logging
 import time
@@ -60,8 +61,9 @@ class BrowserContextPool:
       数据源目录天然决定，无需容量限制
     - Context 空闲 10 分钟自动回收，内存不累积
     - 浏览器整体回收：存活满 8 小时或累计建页满 5000 次（任一先到）时，
-      在空闲窗口（无在途请求）关闭全部 context + browser 并重启，根治长跑内存增长；
-      连续 16 小时无空闲窗口才强制执行
+      在空闲窗口（无在途请求）关闭全部 context + browser + playwright 驱动并
+      整体换新（驱动 Node 进程内存只涨不落，须连进程一起回收），根治长跑
+      内存增长；连续 16 小时无空闲窗口才强制执行
     - 自愈覆盖两层：浏览器崩溃（断连）重启 browser；launch 失败视为 playwright
       驱动死亡，整体重建驱动后重试。锁外创建的 context 若遇回收/自愈会被
       丢弃重建，死 context 绝不进入缓存
@@ -168,7 +170,7 @@ class BrowserContextPool:
 
         await self._close_resource(self._browser, "Browser", "close")
         self._browser = None
-        await self._close_resource(self._playwright, "Playwright", "stop")
+        await self._close_resource(self._playwright, "Playwright driver", "stop")
         self._playwright = None
 
         logger.info("Browser context pool shut down")
@@ -525,24 +527,39 @@ class BrowserContextPool:
             await self._close_context(metadata.context)
         self._contexts.clear()
 
-    async def _relaunch_browser(self) -> None:
+    async def _rebuild_driver(self) -> None:
+        """整体重建 playwright 驱动，换新 Node 进程（调用方需持有 _lock）"""
+        await self._close_resource(self._playwright, "Playwright driver", "stop")
+        self._playwright = await async_playwright().start()
+
+    async def _relaunch_browser(self, rebuild_driver: bool = False) -> None:
         """
         关闭现有 browser 并重新 launch，重置回收计数（调用方需持有 _lock）。
 
         全部 context 随旧 browser 一起关闭；登录态会在后续 get_context 时
         从 Redis 自动恢复。
-        launch 失败视为 playwright 驱动可能已死亡（长跑进程 OOM/被杀），
-        整体重建驱动后重试一次，堵住"驱动死亡后永远无法自愈"的缺口。
+        - rebuild_driver=True：连 playwright 驱动一起换新。Node 驱动长跑后
+          内存只涨不落（V8 不向 OS 归还内存），定期回收必须连驱动进程一起
+          重建才能根治；此时 launch 仍失败则直接上抛，交由 _ensure_browser
+          自愈兜底
+        - rebuild_driver=False（崩溃自愈快路径）：launch 失败视为 playwright
+          驱动已死亡（长跑进程 OOM/被杀），整体重建驱动后重试一次，堵住
+          "驱动死亡后永远无法自愈"的缺口
         """
         await self._close_all_contexts()
         await self._close_resource(self._browser, "Browser", "close")
         self._browser = None
+
+        if rebuild_driver:
+            await self._rebuild_driver()
+
         try:
             await self._launch_browser()
         except Exception as e:
+            if rebuild_driver:
+                raise  # 驱动刚换新仍失败，交给自愈路径（_ensure_browser）兜底
             logger.warning(f"Browser relaunch failed ({e}), rebuilding playwright driver")
-            await self._close_resource(self._playwright, "Playwright", "stop")
-            self._playwright = await async_playwright().start()
+            await self._rebuild_driver()
             await self._launch_browser()
         self._last_recycle_at = time.time()
         self._pages_since_recycle = 0
@@ -599,21 +616,24 @@ class BrowserContextPool:
 
     async def _do_recycle(self) -> None:
         """
-        执行浏览器整体回收。
+        执行浏览器与 playwright 驱动的整体回收。
 
         全程持锁（关闭 + 重启通常仅数秒，每数小时一次），确保回收期间
-        get_context 阻塞等待而非拿到即将失效的 browser。
+        get_context 阻塞等待而非拿到即将失效的 browser。锁外补一次
+        gc.collect()，及时回收旧 browser/驱动在 Python 侧留下的对象图。
         """
         async with self._lock:
             age = time.time() - self._last_recycle_at
             logger.info(
-                f"Recycling browser (pages_since_recycle={self._pages_since_recycle}, "
+                f"Recycling browser and playwright driver "
+                f"(pages_since_recycle={self._pages_since_recycle}, "
                 f"age={age:.0f}s, active_pages={self._active_pages})"
             )
 
-            await self._relaunch_browser()
+            await self._relaunch_browser(rebuild_driver=True)
             self._stats["total_browser_recycles"] += 1
-            logger.info("Browser recycled successfully")
+            logger.info("Browser and playwright driver recycled successfully")
+        gc.collect()
 
 
 @lru_cache(maxsize=1)
