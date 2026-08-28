@@ -5,7 +5,7 @@
 从东方财富网API直接获取数据
 接口地址：https://push2.eastmoney.com/api/qt/stock/trends2/get
 
-字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,最新价
+字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,均价
 """
 
 import json
@@ -45,8 +45,8 @@ class IndexIntradaySpider(BaseWebSpider):
     """
 
     name = "eastmoney_index_intraday"
-    description = "获取指数最新分时数据（分钟级别），包括开高低收、成交量、成交额"
-    version = "2.1.0"
+    description = "获取指数最新分时数据（分钟级别），包括开高低收、成交量、成交额、均价"
+    version = "2.2.0"
     author = "noimank"
     platform = "东方财富"
 
@@ -148,7 +148,7 @@ class IndexIntradaySpider(BaseWebSpider):
                 )
 
             # 解析分时数据
-            # 字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,最新价
+            # 字段顺序：时间,开盘,收盘,最高,最低,成交量,成交额,均价
             data_list = []
             for row in trends:
                 cols = row.split(",")
@@ -164,7 +164,7 @@ class IndexIntradaySpider(BaseWebSpider):
                         "成交量": self._safe_int(cols[5]),
                         # "成交额": self._safe_float(cols[6]),
                         "成交额(亿元)": round(self._safe_float(cols[6]) / 1e8, 4),
-                        "最新价": self._safe_float(cols[7]),
+                        "均价": self._safe_float(cols[7]),
                     }
                 )
 
